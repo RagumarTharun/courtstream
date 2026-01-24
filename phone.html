@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Phone Camera</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: white;
+      font-family: Arial;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    #video-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: black;
+      border: 4px solid transparent;
+      transition: border 0.2s;
+    }
+
+    #video-wrap.live {
+      border-color: red;
+    }
+
+    video {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: cover;
+      transition: transform 0.25s ease;
+    }
+
+    #controls {
+      padding: 10px;
+      background: #222;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    input[type=range] {
+      flex: 1;
+    }
+
+    button {
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: #444;
+      color: white;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="video-wrap">
+  <video id="local" autoplay playsinline muted></video>
+</div>
+
+<div id="controls">
+  <div class="row">
+    <input type="range" id="zoom" min="1" max="3" step="0.1" value="1">
+  </div>
+
+  <div class="row">
+    <button onclick="setZoom(1)">1×</button>
+    <button onclick="setZoom(1.5)">1.5×</button>
+    <button onclick="setZoom(2)">2×</button>
+    <button id="reset">Reset</button>
+    <button id="flip">Flip</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  const room = "room1";
+
+  let pc, stream;
+  let facing = "environment";
+  let currentZoom = 1;
+
+  const video = document.getElementById("local");
+  const wrap = document.getElementById("video-wrap");
+  const zoomSlider = document.getElementById("zoom");
+
+  async function startCamera() {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing },
+      audio: false
+    });
+
+    video.srcObject = stream;
+
+    if (pc) {
+      const sender = pc.getSenders().find(s => s.track.kind === "video");
+      sender.replaceTrack(stream.getVideoTracks()[0]);
+    }
+
+    applyZoom(currentZoom);
+  }
+
+  async function applyZoom(level) {
+    currentZoom = level;
+    const track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities?.();
+
+    if (caps?.zoom) {
+      await track.applyConstraints({ advanced: [{ zoom: level }] });
+    } else {
+      video.style.transform = `scale(${level})`;
+    }
+  }
+
+  function setZoom(z) {
+    zoomSlider.value = z;
+    applyZoom(z);
+  }
+
+  socket.on("signal", async ({ from, data }) => {
+    if (data.type === "offer") {
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+      pc.onicecandidate = e =>
+        e.candidate && socket.emit("signal", { to: from, data: e.candidate });
+
+      await pc.setRemoteDescription(data);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("signal", { to: from, data: answer });
+    }
+
+    if (data.candidate && pc) await pc.addIceCandidate(data);
+  });
+
+  socket.on("control", async ({ type, value }) => {
+    if (type === "zoom") setZoom(value);
+    if (type === "flip") {
+      facing = facing === "environment" ? "user" : "environment";
+      await startCamera();
+    }
+    if (type === "reset") {
+      facing = "environment";
+      setZoom(1);
+      await startCamera();
+    }
+  });
+
+  socket.on("program", ({ cameraId }) => {
+    wrap.classList.toggle("live", cameraId === socket.id);
+  });
+
+  zoomSlider.oninput = () => applyZoom(Number(zoomSlider.value));
+  document.getElementById("flip").onclick = async () => {
+    facing = facing === "environment" ? "user" : "environment";
+    await startCamera();
+  };
+  document.getElementById("reset").onclick = async () => {
+    facing = "environment";
+    setZoom(1);
+    await startCamera();
+  };
+
+  async function start() {
+    await startCamera();
+    socket.emit("join", room);
+  }
+
+  start();
+</script>
+
+</body>
+</html>
