@@ -8,7 +8,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 /* ================================
-   STATIC FILES (ROOT DIRECTORY)
+   STATIC FILES (REPO ROOT)
    ================================ */
 app.use(express.static(__dirname));
 
@@ -69,7 +69,7 @@ io.on("connection", socket => {
 });
 
 /* ================================
-   SERVER LISTEN
+   SERVER LISTEN (CLOUDFLARE SAFE)
    ================================ */
 server.listen(3000, "0.0.0.0", () => {
   console.log("CourtStream running on 0.0.0.0:3000");
