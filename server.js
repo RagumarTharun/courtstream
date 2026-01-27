@@ -8,16 +8,15 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 /* ================================
-   STATIC FILES (IMPORTANT)
+   STATIC FILES (ROOT DIRECTORY)
    ================================ */
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(__dirname));
 
 /* ================================
    ROOT ROUTE
-   Loads laptop dashboard
    ================================ */
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "laptop.html"));
+  res.sendFile(path.join(__dirname, "laptop.html"));
 });
 
 /* ================================
@@ -70,7 +69,7 @@ io.on("connection", socket => {
 });
 
 /* ================================
-   SERVER LISTEN (CRITICAL CHANGE)
+   SERVER LISTEN
    ================================ */
 server.listen(3000, "0.0.0.0", () => {
   console.log("CourtStream running on 0.0.0.0:3000");
