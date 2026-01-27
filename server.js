@@ -7,17 +7,18 @@ const app = express();
 const server = http.createServer(app);
 
 /* =========================
-   STATIC FILES
+   STATIC FILES (REPO ROOT)
+   (FIX: removed non-existent /public)
 ========================= */
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(__dirname));
 
-/* ROOT → laptop */
+/* ROOT → laptop (FIX: correct path) */
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "laptop.html"));
+  res.sendFile(path.join(__dirname, "laptop.html"));
 });
 
 /* =========================
-   SOCKET.IO
+   SOCKET.IO (UNCHANGED)
 ========================= */
 const io = new Server(server, {
   cors: { origin: "*" }
@@ -47,12 +48,14 @@ io.on("connection", socket => {
     socket.broadcast.emit("program", msg);
   });
 
-  /* 🔥 CAMERA DISCONNECT */
   socket.on("disconnect", () => {
     socket.broadcast.emit("camera-left", { id: socket.id });
   });
 });
 
-server.listen(3000, () => {
-  console.log("✅ Server running on http://localhost:3000");
+/* =========================
+   LISTEN (FIX: production safe)
+========================= */
+server.listen(3000, "0.0.0.0", () => {
+  console.log("✅ Server running on port 3000");
 });
