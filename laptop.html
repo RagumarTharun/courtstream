@@ -1,12 +1,28 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>MultiCam Director</title>
+  <title>🎬 MultiCam Director</title>
 
   <style>
-    body { font-family: Arial; background:#f3f3f3; padding:12px; }
-    #top { display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
-    #videos { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+    body {
+      font-family: Arial;
+      background:#f3f3f3;
+      padding:12px;
+    }
+
+    #top {
+      display:flex;
+      gap:10px;
+      align-items:center;
+      margin-bottom:10px;
+      flex-wrap:wrap;
+    }
+
+    #videos {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+      gap:14px;
+    }
 
     .camera-box {
       background:white;
@@ -15,11 +31,29 @@
       box-shadow:0 4px 10px rgba(0,0,0,.15);
     }
 
-    video { width:100%; border-radius:6px; background:black; }
-    .controls { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
-    .row { display:flex; gap:6px; align-items:center; }
+    video {
+      width:100%;
+      border-radius:6px;
+      background:black;
+    }
 
-    input { padding:4px; font-size:12px; }
+    .controls {
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin-top:6px;
+    }
+
+    .row {
+      display:flex;
+      gap:6px;
+      align-items:center;
+    }
+
+    input {
+      padding:4px;
+      font-size:12px;
+    }
 
     button {
       padding:6px 10px;
@@ -35,7 +69,7 @@
       position:fixed;
       top:12px;
       right:12px;
-      width:300px;
+      width:320px;
       border:3px solid red;
       background:black;
       padding:4px;
@@ -64,12 +98,11 @@
 <div id="top">
   <button id="recordBtn">▶ Start Recording</button>
   <span id="timer">00:00</span>
-  <button id="qrBtn">📱 Scan QR to Connect</button>
-  <button onclick="location.href='playback.html'">▶ Playback</button>
+  <button id="qrBtn">📱 Scan QR</button>
 </div>
 
 <div id="qrBox">
-  <b>Scan this QR with your phone to join as a camera</b><br><br>
+  <b>Scan with phone to join as camera</b><br><br>
   <canvas id="qrCanvas"></canvas>
 </div>
 
@@ -83,9 +116,9 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
 <script>
-/* =======================
+/* =====================
    CORE STATE
-======================= */
+===================== */
 const socket = io();
 const room = "room1";
 
@@ -95,53 +128,50 @@ const recorders = {};
 const chunks = {};
 const cameraNames = {};
 
+let activeProgramVideo = null;
 let isRecording = false;
 let seconds = 0;
 let timerInt;
 
-/* =======================
+/* =====================
    PROGRAM COMPOSITOR
-======================= */
+===================== */
 const programCanvas = document.createElement("canvas");
 programCanvas.width = 1280;
 programCanvas.height = 720;
 const programCtx = programCanvas.getContext("2d");
 
-let activeProgramVideo = null;
-let programStream = programCanvas.captureStream(30);
-let programRecorder = null;
-let programChunks = [];
-
-/* =======================
-   UI REFS
-======================= */
-const recordBtn = document.getElementById("recordBtn");
-const timer = document.getElementById("timer");
+const programStream = programCanvas.captureStream(30);
 const programVideo = document.getElementById("programVideo");
-
 programVideo.srcObject = programStream;
 
-/* =======================
-   QR
-======================= */
+let programRecorder;
+let programChunks = [];
+
+/* =====================
+   QR CODE (🔥 Cloudflare-safe)
+===================== */
 const qrBtn = document.getElementById("qrBtn");
 const qrBox = document.getElementById("qrBox");
 const qrCanvas = document.getElementById("qrCanvas");
-const cameraURL = `${location.origin}/phone.html?room=${room}`;
 
 qrBtn.onclick = () => {
   qrBox.style.display = qrBox.style.display === "none" ? "block" : "none";
-  QRCode.toCanvas(qrCanvas, cameraURL, { width:220, margin:1 });
+  const url = `${location.origin}/phone.html?room=${room}`;
+  QRCode.toCanvas(qrCanvas, url, { width:220, margin:1 });
 };
 
-/* =======================
-   SOCKET SETUP
-======================= */
+/* =====================
+   SOCKET JOIN
+===================== */
 socket.emit("join", room);
 
 socket.on("existing-peers", list => list.forEach(p => createPeer(p.id)));
 socket.on("peer-joined", p => createPeer(p.id));
 
+/* =====================
+   PEER CONNECTION
+===================== */
 async function createPeer(id){
   if (peers[id]) return;
 
@@ -151,7 +181,9 @@ async function createPeer(id){
 
   peers[id] = pc;
   pc.addTransceiver("video",{direction:"recvonly"});
-  pc.ontrack = e => addCamera(id, e.streams[0]);
+
+  pc.ontrack = e => addOrUpdateCamera(id, e.streams[0]);
+
   pc.onicecandidate = e =>
     e.candidate && socket.emit("signal",{to:id,data:e.candidate});
 
@@ -167,16 +199,25 @@ socket.on("signal", async ({from,data})=>{
   if (data.candidate) await pc.addIceCandidate(data);
 });
 
-/* =======================
-   CAMERA UI
-======================= */
-function addCamera(id, stream){
-  if (document.getElementById(id)) return;
+/* =====================
+   CAMERA UI (🔥 FLIP-SAFE)
+===================== */
+function addOrUpdateCamera(id, stream) {
+  let box = document.getElementById(id);
+
+  if (box) {
+    const video = box.querySelector("video");
+    video.srcObject = null;
+    video.srcObject = stream;
+    video.play();
+    streams[id] = stream;
+    return;
+  }
 
   streams[id] = stream;
   cameraNames[id] = `Camera_${id.slice(0,4)}`;
 
-  const box = document.createElement("div");
+  box = document.createElement("div");
   box.className = "camera-box";
   box.id = id;
 
@@ -192,134 +233,131 @@ function addCamera(id, stream){
   nameInput.value = cameraNames[id];
   nameInput.oninput = e => cameraNames[id] = e.target.value;
 
-  const row1 = document.createElement("div");
-  row1.className = "row";
+  const liveBtn = document.createElement("button");
+  liveBtn.innerText = "GO LIVE";
+  liveBtn.onclick = () => activeProgramVideo = video;
 
-  const live = document.createElement("button");
-  live.innerText = "GO LIVE";
-  live.onclick = ()=>{
-    activeProgramVideo = video;
-    socket.emit("program",{cameraId:id});
-  };
-  row1.append(live);
+  const row = document.createElement("div");
+  row.className = "row";
+  row.append(liveBtn);
 
-  const row2 = document.createElement("div");
-  row2.className = "row";
-
-  [1,1.5,2].forEach(z=>{
-    const b=document.createElement("button");
-    b.innerText=z+"×";
-    b.onclick=()=>socket.emit("control",{to:id,type:"zoom",value:z});
-    row2.append(b);
-  });
-
-  const reset=document.createElement("button");
-  reset.innerText="Reset";
-  reset.onclick=()=>socket.emit("control",{to:id,type:"reset"});
-
-  const flip=document.createElement("button");
-  flip.innerText="Flip";
-  flip.onclick=()=>socket.emit("control",{to:id,type:"flip"});
-
-  row2.append(reset,flip);
-
-  controls.append(nameInput,row1,row2);
-  box.append(video,controls);
+  controls.append(nameInput, row);
+  box.append(video, controls);
   document.getElementById("videos").appendChild(box);
 
+  /* Per-camera recorder */
   const rec = new MediaRecorder(stream);
   recorders[id] = rec;
   chunks[id] = [];
 
   rec.ondataavailable = e => e.data.size && chunks[id].push(e.data);
-
-  rec.onstop = ()=>{
+  rec.onstop = () => {
     const blob = new Blob(chunks[id],{type:"video/webm"});
-    chunks[id]=[];
+    chunks[id] = [];
     const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
-
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download=`${cameraNames[id]}_${ts}.webm`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${cameraNames[id]}_${ts}.webm`;
     a.click();
   };
 }
 
-/* =======================
+/* =====================
+   CAMERA REMOVAL (🔥 EXIT-SAFE)
+===================== */
+socket.on("camera-left", ({ id }) => {
+  if (streams[id]) {
+    streams[id].getTracks().forEach(t => t.stop());
+    delete streams[id];
+  }
+
+  if (recorders[id]) {
+    try {
+      if (recorders[id].state !== "inactive") recorders[id].stop();
+    } catch {}
+    delete recorders[id];
+    delete chunks[id];
+  }
+
+  const el = document.getElementById(id);
+  if (el) el.remove();
+
+  if (activeProgramVideo && !document.body.contains(activeProgramVideo)) {
+    activeProgramVideo = null;
+  }
+});
+
+/* =====================
    PROGRAM RENDER LOOP
-   (aspect-ratio correct)
-======================= */
+===================== */
 function renderProgram(){
   programCtx.fillStyle = "black";
-  programCtx.fillRect(0, 0, programCanvas.width, programCanvas.height);
+  programCtx.fillRect(0,0,programCanvas.width,programCanvas.height);
 
-  if (activeProgramVideo && activeProgramVideo.videoWidth) {
+  if (
+    activeProgramVideo &&
+    activeProgramVideo.readyState >= 2 &&
+    activeProgramVideo.videoWidth > 0
+  ) {
     const vw = activeProgramVideo.videoWidth;
     const vh = activeProgramVideo.videoHeight;
+    const cw = programCanvas.width;
+    const ch = programCanvas.height;
 
-    const canvasAR = programCanvas.width / programCanvas.height;
-    const videoAR = vw / vh;
-
-    let drawW, drawH, x, y;
-
-    if (videoAR > canvasAR) {
-      drawW = programCanvas.width;
-      drawH = drawW / videoAR;
-      x = 0;
-      y = (programCanvas.height - drawH) / 2;
-    } else {
-      drawH = programCanvas.height;
-      drawW = drawH * videoAR;
-      y = 0;
-      x = (programCanvas.width - drawW) / 2;
+    const ar = vw / vh;
+    let dw = cw;
+    let dh = cw / ar;
+    if (dh > ch) {
+      dh = ch;
+      dw = ch * ar;
     }
 
-    programCtx.drawImage(activeProgramVideo, x, y, drawW, drawH);
+    const x = (cw - dw) / 2;
+    const y = (ch - dh) / 2;
+    programCtx.drawImage(activeProgramVideo, x, y, dw, dh);
   }
 
   requestAnimationFrame(renderProgram);
 }
 renderProgram();
 
-/* =======================
-   RECORD BUTTON
-======================= */
-recordBtn.onclick = ()=>{
+/* =====================
+   RECORDING
+===================== */
+const recordBtn = document.getElementById("recordBtn");
+const timer = document.getElementById("timer");
+
+recordBtn.onclick = () => {
   isRecording = !isRecording;
-  recordBtn.classList.toggle("recording",isRecording);
+  recordBtn.classList.toggle("recording", isRecording);
   recordBtn.innerText = isRecording ? "⏹ Stop Recording" : "▶ Start Recording";
 
-  if (isRecording){
-    seconds=0;
-    timerInt=setInterval(()=>{
+  if (isRecording) {
+    seconds = 0;
+    timerInt = setInterval(() => {
       seconds++;
       timer.innerText =
         `${String(seconds/60|0).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;
-    },1000);
+    }, 1000);
 
-    Object.values(recorders).forEach(r=>r.start());
+    Object.values(recorders).forEach(r => r.start());
 
     programRecorder = new MediaRecorder(programStream);
     programChunks = [];
-
-    programRecorder.ondataavailable = e =>
-      e.data.size && programChunks.push(e.data);
-
-    programRecorder.onstop = ()=>{
+    programRecorder.ondataavailable = e => e.data.size && programChunks.push(e.data);
+    programRecorder.onstop = () => {
       const blob = new Blob(programChunks,{type:"video/webm"});
       const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
-
-      const a=document.createElement("a");
-      a.href=URL.createObjectURL(blob);
-      a.download=`PROGRAM_FINAL_${ts}.webm`;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `PROGRAM_FINAL_${ts}.webm`;
       a.click();
     };
-
     programRecorder.start();
 
   } else {
     clearInterval(timerInt);
-    Object.values(recorders).forEach(r=>r.stop());
+    Object.values(recorders).forEach(r => r.stop());
     programRecorder.stop();
   }
 };

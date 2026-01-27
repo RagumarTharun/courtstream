@@ -1,137 +1,212 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Phone Camera</title>
+  <title>Live Camera</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <style>
     body {
       margin: 0;
-      background: #111;
+      background: #0f0f0f;
       color: white;
-      font-family: Arial;
+      font-family: system-ui, Arial;
+      height: 100vh;
       display: flex;
       flex-direction: column;
-      height: 100vh;
     }
 
-    #video-wrap {
+    /* TOP BAR */
+    #topBar {
+      padding: 10px 12px;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #222;
+    }
+
+    #startBtn {
+      background: #e62117;
+      border: none;
+      border-radius: 20px;
+      padding: 10px 18px;
+      font-size: 14px;
+      color: white;
+      font-weight: bold;
+    }
+
+    #liveBadge {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #ff3b3b;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      background: #ff3b3b;
+      border-radius: 50%;
+      animation: pulse 1.2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1 }
+      50% { opacity: .4 }
+      100% { opacity: 1 }
+    }
+
+    /* MAIN */
+    #main {
+      flex: 1;
+      display: flex;
+      background: black;
+    }
+
+    #videoWrap {
       flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: black;
-      border: 4px solid transparent;
-      transition: border 0.2s;
-    }
-
-    #video-wrap.live {
-      border-color: red;
+      position: relative;
     }
 
     video {
       max-width: 100%;
       max-height: 100%;
       object-fit: cover;
-      transition: transform 0.25s ease;
     }
 
-    #controls {
-      padding: 10px;
-      background: #222;
-      display: flex;
+    /* SIDE CONTROLS */
+    #sidePanel {
+      width: 70px;
+      background: rgba(0,0,0,.7);
+      display: none;
       flex-direction: column;
-      gap: 8px;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 6px;
     }
 
-    .row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
+    .ctrlBtn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: none;
+      background: #222;
+      color: white;
+      font-size: 16px;
     }
 
     input[type=range] {
-      flex: 1;
-    }
-
-    button {
-      padding: 10px;
-      border-radius: 8px;
-      border: none;
-      background: #444;
-      color: white;
-      font-size: 14px;
+      writing-mode: bt-lr;
+      transform: rotate(-90deg);
+      width: 80px;
     }
   </style>
 </head>
 
 <body>
 
-<div id="video-wrap">
-  <video id="local" autoplay playsinline muted></video>
+<!-- TOP BAR -->
+<div id="topBar">
+  <button id="startBtn">🎥 Start Camera</button>
+
+  <div id="liveBadge">
+    <div class="dot"></div>
+    LIVE
+  </div>
 </div>
 
-<div id="controls">
-  <div class="row">
-    <input type="range" id="zoom" min="1" max="3" step="0.1" value="1">
+<!-- MAIN AREA -->
+<div id="main">
+  <div id="videoWrap">
+    <video id="local" autoplay playsinline muted></video>
   </div>
 
-  <div class="row">
-    <button onclick="setZoom(1)">1×</button>
-    <button onclick="setZoom(1.5)">1.5×</button>
-    <button onclick="setZoom(2)">2×</button>
-    <button id="reset">Reset</button>
-    <button id="flip">Flip</button>
+  <div id="sidePanel">
+    <button class="ctrlBtn" id="flipBtn">🔄</button>
+    <button class="ctrlBtn" onclick="setZoom(1)">1×</button>
+    <button class="ctrlBtn" onclick="setZoom(1.5)">1.5×</button>
+    <button class="ctrlBtn" onclick="setZoom(2)">2×</button>
+    <input type="range" min="1" max="3" step="0.1" value="1" id="zoomSlider">
   </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+  if (location.protocol !== "https:") {
+    document.body.innerHTML =
+      "<h2 style='padding:20px'>❌ Open using HTTPS</h2>";
+    throw new Error("HTTPS required");
+  }
+
   const socket = io();
-  const room = "room1";
+  const room = new URLSearchParams(location.search).get("room") || "room1";
 
   let pc, stream;
   let facing = "environment";
   let currentZoom = 1;
 
   const video = document.getElementById("local");
-  const wrap = document.getElementById("video-wrap");
-  const zoomSlider = document.getElementById("zoom");
+  const startBtn = document.getElementById("startBtn");
+  const flipBtn = document.getElementById("flipBtn");
+  const sidePanel = document.getElementById("sidePanel");
+  const liveBadge = document.getElementById("liveBadge");
+  const zoomSlider = document.getElementById("zoomSlider");
 
   async function startCamera() {
     if (stream) stream.getTracks().forEach(t => t.stop());
 
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: facing },
+      video: {
+        facingMode: facing,
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 }
+      },
       audio: false
     });
 
     video.srcObject = stream;
 
-    if (pc) {
-      const sender = pc.getSenders().find(s => s.track.kind === "video");
-      sender.replaceTrack(stream.getVideoTracks()[0]);
-    }
+    startBtn.style.display = "none";
+    sidePanel.style.display = "flex";
+    liveBadge.style.display = "flex";
 
-    applyZoom(currentZoom);
+    socket.emit("join", room);
   }
 
-  async function applyZoom(level) {
-    currentZoom = level;
+  startBtn.onclick = startCamera;
+
+  flipBtn.onclick = async () => {
+    facing = facing === "environment" ? "user" : "environment";
+    await startCamera();
+  };
+
+  async function setZoom(z) {
+    currentZoom = z;
+    zoomSlider.value = z;
+    applyZoom();
+  }
+
+  async function applyZoom() {
+    if (!stream) return;
     const track = stream.getVideoTracks()[0];
     const caps = track.getCapabilities?.();
 
     if (caps?.zoom) {
-      await track.applyConstraints({ advanced: [{ zoom: level }] });
+      await track.applyConstraints({ advanced: [{ zoom: currentZoom }] });
     } else {
-      video.style.transform = `scale(${level})`;
+      video.style.transform = `scale(${currentZoom})`;
     }
   }
 
-  function setZoom(z) {
-    zoomSlider.value = z;
-    applyZoom(z);
-  }
+  zoomSlider.oninput = e => {
+    currentZoom = Number(e.target.value);
+    applyZoom();
+  };
 
   socket.on("signal", async ({ from, data }) => {
     if (data.type === "offer") {
@@ -153,40 +228,15 @@
     if (data.candidate && pc) await pc.addIceCandidate(data);
   });
 
-  socket.on("control", async ({ type, value }) => {
-    if (type === "zoom") setZoom(value);
-    if (type === "flip") {
-      facing = facing === "environment" ? "user" : "environment";
-      await startCamera();
-    }
-    if (type === "reset") {
-      facing = "environment";
-      setZoom(1);
-      await startCamera();
-    }
-  });
-
   socket.on("program", ({ cameraId }) => {
-    wrap.classList.toggle("live", cameraId === socket.id);
+    // Live indicator is already shown, but you could
+    // add extra effects here if this cam goes live
   });
 
-  zoomSlider.oninput = () => applyZoom(Number(zoomSlider.value));
-  document.getElementById("flip").onclick = async () => {
-    facing = facing === "environment" ? "user" : "environment";
-    await startCamera();
-  };
-  document.getElementById("reset").onclick = async () => {
-    facing = "environment";
-    setZoom(1);
-    await startCamera();
-  };
-
-  async function start() {
-    await startCamera();
-    socket.emit("join", room);
-  }
-
-  start();
+  window.addEventListener("beforeunload", () => {
+    socket.disconnect();
+    if (stream) stream.getTracks().forEach(t => t.stop());
+  });
 </script>
 
 </body>
