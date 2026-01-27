@@ -1,12 +1,28 @@
 const express = require("express");
 const http = require("http");
+const path = require("path");
 const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static("public"));
+/* ================================
+   STATIC FILES (IMPORTANT)
+   ================================ */
+app.use(express.static(path.join(__dirname, "public")));
+
+/* ================================
+   ROOT ROUTE
+   Loads laptop dashboard
+   ================================ */
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "laptop.html"));
+});
+
+/* ================================
+   SOCKET.IO LOGIC (UNCHANGED)
+   ================================ */
 
 let liveCameraId = null;
 
@@ -53,6 +69,9 @@ io.on("connection", socket => {
   });
 });
 
-server.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+/* ================================
+   SERVER LISTEN (CRITICAL CHANGE)
+   ================================ */
+server.listen(3000, "0.0.0.0", () => {
+  console.log("CourtStream running on 0.0.0.0:3000");
 });
