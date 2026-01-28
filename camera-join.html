@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Join as Camera</title>
+
 <style>
 body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui;
 display:flex;align-items:center;justify-content:center;height:100vh}
@@ -40,30 +41,42 @@ const ROOM=params.get("stream");
 if(!ROOM){alert("Invalid stream");location.href="/"}
 
 const socket=io();
-const pc=new RTCPeerConnection();
-let localStream;
+const ICE={
+  iceServers:[
+    {urls:"stun:stun.l.google.com:19302"},
+    {urls:"stun:stun1.l.google.com:19302"}
+  ]
+};
+const pc=new RTCPeerConnection(ICE);
+let directorId=null;
+
+socket.on("peer-joined",({id,role})=>{
+  if(role==="director") directorId=id;
+});
 
 document.getElementById("join").onclick=async()=>{
-  localStream=await navigator.mediaDevices.getUserMedia({
+  const stream=await navigator.mediaDevices.getUserMedia({
     video:{facingMode:"environment",width:1280,height:720},
     audio:true
   });
-  document.getElementById("local").srcObject=localStream;
-  localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+  local.srcObject=stream;
+  stream.getTracks().forEach(t=>pc.addTrack(t,stream));
   socket.emit("join",{room:ROOM,role:"camera",position:pos.value});
 };
 
 pc.onicecandidate=e=>{
-  if(e.candidate) socket.emit("signal",{data:{candidate:e.candidate}});
+  if(e.candidate&&directorId){
+    socket.emit("signal",{to:directorId,data:{candidate:e.candidate}});
+  }
 };
 
-socket.on("signal",async({data})=>{
+socket.on("signal",async({from,data})=>{
   if(data.sdp){
     await pc.setRemoteDescription(data.sdp);
     if(data.sdp.type==="offer"){
       const ans=await pc.createAnswer();
       await pc.setLocalDescription(ans);
-      socket.emit("signal",{data:{sdp:ans}});
+      socket.emit("signal",{to:from,data:{sdp:ans}});
     }
   }
   if(data.candidate) await pc.addIceCandidate(data.candidate);
