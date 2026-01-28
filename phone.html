@@ -1,1 +1,53 @@
-<!DOCTYPE html><html><head><title>Camera</title><link rel='stylesheet' href='theme.css'></head><body><video autoplay playsinline style='width:100%;height:100%;background:black'></video></body></html>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Camera</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body style="margin:0;
+             height:100vh;
+             display:flex;
+             flex-direction:column">
+
+<div style="flex:1;background:black">
+  <video id="cam" autoplay playsinline muted></video>
+</div>
+
+<div style="padding:12px;display:flex;gap:8px">
+  <button onclick="setZoom(1)">1×</button>
+  <button onclick="setZoom(1.5)">1.5×</button>
+  <button onclick="setZoom(2)">2×</button>
+  <button onclick="flip()">Flip</button>
+</div>
+
+<script>
+let stream;
+let facing = "environment";
+
+async function start() {
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: facing },
+    audio: false
+  });
+  cam.srcObject = stream;
+}
+
+function flip() {
+  facing = facing === "environment" ? "user" : "environment";
+  start();
+}
+
+function setZoom(z) {
+  const track = stream.getVideoTracks()[0];
+  if (track.getCapabilities?.().zoom) {
+    track.applyConstraints({ advanced: [{ zoom: z }] });
+  } else {
+    cam.style.transform = `scale(${z})`;
+  }
+}
+
+start();
+</script>
+
+</body>
+</html>
