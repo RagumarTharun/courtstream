@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8" />
-<title>Camera Preview</title>
+<meta charset="UTF-8">
+<title>Camera Join</title>
 <style>
 body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
 .page{min-height:100vh;display:flex;align-items:center;justify-content:center}
@@ -11,17 +11,15 @@ body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
 .controls{display:flex;justify-content:space-between;margin-top:14px}
 select,button{padding:10px 14px;border-radius:999px;border:1px solid #262b3d;background:#161922;color:#e6e6eb}
 .primary{background:#3b82f6;border:none}
-.warning{margin-top:10px;font-size:13px;color:#9aa0b4}
 </style>
 </head>
-
 <body>
 <div class="page">
   <div class="wrap">
     <div class="preview"></div>
 
     <div class="controls">
-      <select>
+      <select id="pos">
         <option>Center</option>
         <option>Left</option>
         <option>Right</option>
@@ -30,11 +28,17 @@ select,button{padding:10px 14px;border-radius:999px;border:1px solid #262b3d;bac
         <option>Moving</option>
       </select>
 
-      <button class="primary" onclick="location.href='director.html'">Join as Camera</button>
+      <button class="primary" onclick="join()">Join</button>
     </div>
-
-    <div class="warning">Keep camera in landscape mode for best results</div>
   </div>
 </div>
+
+<script>
+const params=new URLSearchParams(location.search);
+function join(){
+  localStorage.setItem('cameraPosition',pos.value);
+  location.href=`director.html?stream=${params.get('stream')}`;
+}
+</script>
 </body>
 </html>
