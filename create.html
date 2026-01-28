@@ -1,197 +1,41 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <title>Create CourtStream</title>
-
 <style>
-  body {
-    margin: 0;
-    background: #0f1115;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    color: #e6e6eb;
-  }
-
-  .page {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .card {
-    width: 440px;
-    background: #161922;
-    border-radius: 16px;
-    padding: 28px;
-    box-shadow: 0 0 0 1px #262b3d;
-  }
-
-  h2 {
-    margin: 0 0 20px;
-    font-size: 20px;
-  }
-
-  label {
-    font-size: 13px;
-    color: #9aa0b4;
-    display: block;
-    margin-top: 14px;
-  }
-
-  input, select {
-    width: 100%;
-    margin-top: 6px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: #0f1115;
-    border: 1px solid #262b3d;
-    color: #e6e6eb;
-    outline: none;
-  }
-
-  .row {
-    display: flex;
-    gap: 12px;
-  }
-
-  .row > div {
-    flex: 1;
-  }
-
-  .hint {
-    font-size: 12px;
-    color: #6b7280;
-    margin-top: 4px;
-  }
-
-  .actions {
-    margin-top: 26px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-  }
-
-  button {
-    padding: 10px 18px;
-    border-radius: 999px;
-    cursor: pointer;
-    font-size: 14px;
-  }
-
-  .secondary {
-    background: transparent;
-    border: 1px solid #262b3d;
-    color: #e6e6eb;
-  }
-
-  .primary {
-    background: #3b82f6;
-    border: none;
-    color: #fff;
-  }
-
-  .hidden {
-    display: none;
-  }
+body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
+.wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{width:440px;background:#161922;border:1px solid #262b3d;border-radius:16px;padding:28px}
+input,select,button{width:100%;margin-top:12px;padding:10px;border-radius:10px;background:#0f1115;border:1px solid #262b3d;color:#e6e6eb}
+.primary{background:#3b82f6;border:none;border-radius:999px}
 </style>
 </head>
-
 <body>
-<div class="page">
+<div class="wrap">
   <div class="card">
     <h2>Create CourtStream</h2>
-
-    <label>Stream name</label>
-    <input id="name" placeholder="JBA Court – Evening Practice">
-
-    <div class="row">
-      <div>
-        <label>Max cameras</label>
-        <select id="maxCameras">
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="6">6</option>
-        </select>
-      </div>
-
-      <div>
-        <label>Recording resolution</label>
-        <select id="resolution">
-          <option value="720p">720p</option>
-          <option value="1080p">1080p</option>
-        </select>
-      </div>
-    </div>
-
-    <label>Who can join as camera</label>
-    <select id="cameraAccess">
-      <option value="open">Anyone</option>
-      <option value="locked">Passcode required</option>
+    <input id="name" placeholder="Stream name">
+    <select id="resolution">
+      <option>720p</option>
+      <option>1080p</option>
     </select>
-
-    <div id="cameraPassWrap" class="hidden">
-      <label>Camera passcode</label>
-      <input id="cameraPass" type="password" placeholder="Strong camera passcode">
-      <div class="hint">At least 8 characters, letters and numbers</div>
-    </div>
-
-    <label>Who can view</label>
-    <select id="viewerAccess">
-      <option value="open">Anyone</option>
-      <option value="locked">Passcode required</option>
-    </select>
-
-    <div id="viewerPassWrap" class="hidden">
-      <label>Viewer passcode</label>
-      <input id="viewerPass" type="password" placeholder="Strong viewer passcode">
-      <div class="hint">Share only with trusted viewers</div>
-    </div>
-
-    <div class="actions">
-      <button class="secondary" onclick="location.href='index.html'">Cancel</button>
-      <button class="primary" onclick="createStream()">Create Stream</button>
-    </div>
+    <button class="primary" onclick="create()">Create</button>
   </div>
 </div>
 
 <script>
-  const cameraAccess = document.getElementById("cameraAccess");
-  const viewerAccess = document.getElementById("viewerAccess");
-  const cameraPassWrap = document.getElementById("cameraPassWrap");
-  const viewerPassWrap = document.getElementById("viewerPassWrap");
-
-  cameraAccess.onchange = () => {
-    cameraPassWrap.classList.toggle("hidden", cameraAccess.value !== "locked");
-  };
-
-  viewerAccess.onchange = () => {
-    viewerPassWrap.classList.toggle("hidden", viewerAccess.value !== "locked");
-  };
-
-  async function createStream() {
-    const res = await fetch("/api/streams", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name.value,
-        maxCameras: maxCameras.value,
-        resolution: resolution.value,
-        cameraAccess: cameraAccess.value,
-        cameraPass: cameraAccess.value === "locked" ? cameraPass.value : null,
-        viewerAccess: viewerAccess.value,
-        viewerPass: viewerAccess.value === "locked" ? viewerPass.value : null
-      })
-    });
-
-    if (!res.ok) {
-      alert("You must be logged in to create a stream");
-      return;
-    }
-
-    const data = await res.json();
-    location.href = `director.html?stream=${data.id}`;
-  }
+async function create(){
+  const res = await fetch("/api/streams",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ name:name.value })
+  });
+  if(res.status===401) return alert("Login required");
+  if(res.status===409) return alert("Stream name already exists");
+  const data = await res.json();
+  location.href = `director.html?stream=${data.id}`;
+}
 </script>
 </body>
 </html>
