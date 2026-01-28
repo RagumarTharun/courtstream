@@ -4,97 +4,64 @@
   <title>Director</title>
   <link rel="stylesheet" href="theme.css">
 </head>
-<body style="display:flex;flex-direction:column;height:100vh">
+<body>
 
-<div style="height:56px;display:flex;align-items:center;
-            justify-content:space-between;padding:0 16px;
-            border-bottom:1px solid var(--border)">
-  <strong>CourtStream – Director</strong>
-  <div>
-    <button id="recordBtn" class="danger">● Record</button>
-    <span id="timer">00:00</span>
+<header>
+  <strong>Director</strong>
+  <button id="qr">QR</button>
+  <button id="rec" class="danger">● Record</button>
+  <span id="time">00:00</span>
+</header>
+
+<main>
+  <div id="program"></div>
+
+  <div id="grid">
+    <div data-pos="left"></div>
+    <div data-pos="center"></div>
+    <div data-pos="right"></div>
+    <div data-pos="benchA"></div>
+    <div data-pos="benchB"></div>
+    <div data-pos="moving"></div>
   </div>
-</div>
+</main>
 
-<div style="flex:1;display:flex;gap:12px;padding:12px">
-
-  <div id="mainFeed"
-       style="flex:3;background:black;border-radius:12px"></div>
-
-  <div id="tiles"
-       style="flex:1;display:grid;
-              grid-template-columns:repeat(2,1fr);
-              gap:8px"></div>
-</div>
+<canvas id="canvas" hidden></canvas>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script>
 const socket = io();
-const params = new URLSearchParams(location.search);
-const room = params.get("room") || "courtstream-demo";
+const room = new URLSearchParams(location.search).get("room");
+const peers={};
+const streams={};
 
-const peers = {};
-let activeVideo = null;
+socket.emit("join",{room,role:"director"});
 
-socket.emit("join", room, { role: "director" });
-
-socket.on("peer-joined", ({ id }) => createPeer(id));
-socket.on("existing-peers", list =>
-  list.forEach(p => createPeer(p.id))
-);
-
-async function createPeer(id) {
-  if (peers[id]) return;
-
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+socket.on("peer-joined", ({id,position})=>{
+  const pc=new RTCPeerConnection();
+  peers[id]=pc;
+  pc.addTransceiver("video",{direction:"recvonly"});
+  pc.ontrack=e=>{
+    const v=document.createElement("video");
+    v.srcObject=e.streams[0];
+    v.autoplay=true;
+    streams[id]=v;
+    document.querySelector(`[data-pos=${position}]`).appendChild(v);
+  };
+  pc.onicecandidate=e=>e.candidate &&
+    socket.emit("signal",{to:id,data:e.candidate});
+  pc.createOffer().then(o=>{
+    pc.setLocalDescription(o);
+    socket.emit("signal",{to:id,data:o});
   });
-
-  peers[id] = pc;
-  pc.addTransceiver("video", { direction: "recvonly" });
-
-  pc.ontrack = e => addCameraFeed(e.streams[0]);
-
-  pc.onicecandidate = e =>
-    e.candidate && socket.emit("signal", { to: id, data: e.candidate });
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  socket.emit("signal", { to: id, data: offer });
-}
-
-socket.on("signal", async ({ from, data }) => {
-  const pc = peers[from];
-  if (!pc) return;
-  if (data.type === "answer") await pc.setRemoteDescription(data);
-  if (data.candidate) await pc.addIceCandidate(data);
 });
 
-function addCameraFeed(stream) {
-  const box = document.createElement("div");
-  box.style.background = "black";
-  box.style.borderRadius = "10px";
-
-  const v = document.createElement("video");
-  v.srcObject = stream;
-  v.autoplay = true;
-  v.playsInline = true;
-
-  v.onclick = () => {
-    mainFeed.innerHTML = "";
-    mainFeed.appendChild(v);
-    activeVideo = v;
-  };
-
-  box.appendChild(v);
-  tiles.appendChild(box);
-
-  if (!activeVideo) {
-    mainFeed.appendChild(v);
-    activeVideo = v;
-  }
-}
+socket.on("signal",async({from,data})=>{
+  const pc=peers[from];
+  if(data.type==="answer") await pc.setRemoteDescription(data);
+  if(data.candidate) await pc.addIceCandidate(data);
+});
 </script>
-
 </body>
 </html>
