@@ -8,6 +8,12 @@ const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
 
+// 🔹 ADDED (SAFE)
+const sqlite3 = require("sqlite3").verbose();
+const bcrypt = require("bcrypt");
+const cookieParser = require("cookie-parser");
+const crypto = require("crypto");
+
 const app = express();
 const server = http.createServer(app);
 
@@ -21,6 +27,7 @@ const PORT = process.env.PORT || 3000;
 ========================= */
 app.use(express.static(__dirname));
 app.use(express.json());
+app.use(cookieParser());
 
 /* ROOT */
 app.get("/", (req, res) => {
@@ -28,7 +35,101 @@ app.get("/", (req, res) => {
 });
 
 /* =========================
-   SOCKET.IO
+   DATABASE (SAFE, FILE-BASED)
+========================= */
+const db = new sqlite3.Database(
+  path.join(__dirname, "db.sqlite")
+);
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE,
+      password TEXT
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS streams (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      creator INTEGER,
+      max_cameras INTEGER,
+      resolution TEXT,
+      camera_access TEXT,
+      camera_pass TEXT,
+      viewer_access TEXT,
+      viewer_pass TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+});
+
+/* =========================
+   AUTH API (MINIMAL)
+========================= */
+app.post("/api/register", async (req, res) => {
+  const hash = await bcrypt.hash(req.body.password, 10);
+  db.run(
+    "INSERT INTO users (email, password) VALUES (?,?)",
+    [req.body.email, hash],
+    err => err ? res.sendStatus(400) : res.sendStatus(200)
+  );
+});
+
+app.post("/api/login", (req, res) => {
+  db.get(
+    "SELECT * FROM users WHERE email=?",
+    [req.body.email],
+    async (err, user) => {
+      if (!user) return res.sendStatus(401);
+      const ok = await bcrypt.compare(req.body.password, user.password);
+      if (!ok) return res.sendStatus(401);
+      res.cookie("uid", user.id, { httpOnly: true });
+      res.sendStatus(200);
+    }
+  );
+});
+
+/* =========================
+   STREAM API
+========================= */
+app.post("/api/streams", (req, res) => {
+  if (!req.cookies.uid) return res.sendStatus(401);
+
+  const id = crypto.randomUUID();
+
+  db.run(
+    `INSERT INTO streams
+     (id,name,creator,max_cameras,resolution,
+      camera_access,camera_pass,viewer_access,viewer_pass)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [
+      id,
+      req.body.name,
+      req.cookies.uid,
+      req.body.maxCameras,
+      req.body.resolution,
+      req.body.cameraAccess,
+      req.body.cameraPass,
+      req.body.viewerAccess,
+      req.body.viewerPass
+    ],
+    () => res.json({ id })
+  );
+});
+
+app.get("/api/streams/:id", (req, res) => {
+  db.get(
+    "SELECT * FROM streams WHERE id=?",
+    [req.params.id],
+    (err, row) => row ? res.json(row) : res.sendStatus(404)
+  );
+});
+
+/* =========================
+   SOCKET.IO (UNCHANGED)
 ========================= */
 const io = new Server(server, {
   cors: { origin: "*" }
@@ -36,11 +137,6 @@ const io = new Server(server, {
 
 io.on("connection", socket => {
 
-  /**
-   * join supports BOTH:
-   *  - join("room")                     ← legacy
-   *  - join({ room, role, position })   ← new
-   */
   socket.on("join", payload => {
     let room, role, position;
 
@@ -65,10 +161,8 @@ io.on("connection", socket => {
       .filter(id => id !== socket.id)
       .map(id => ({ id }));
 
-    // Send existing peers to the new client
     socket.emit("existing-peers", others);
 
-    // Notify others
     socket.to(room).emit("peer-joined", {
       id: socket.id,
       role,
@@ -76,27 +170,18 @@ io.on("connection", socket => {
     });
   });
 
-  /* WebRTC signaling */
   socket.on("signal", ({ to, data }) => {
-    io.to(to).emit("signal", {
-      from: socket.id,
-      data
-    });
+    io.to(to).emit("signal", { from: socket.id, data });
   });
 
-  /* Camera control messages */
   socket.on("control", msg => {
-    if (msg.to) {
-      io.to(msg.to).emit("control", msg);
-    }
+    if (msg.to) io.to(msg.to).emit("control", msg);
   });
 
-  /* Program feed selection */
   socket.on("program", msg => {
     socket.broadcast.emit("program", msg);
   });
 
-  /* Disconnect cleanup */
   socket.on("disconnect", () => {
     if (socket.room) {
       socket.to(socket.room).emit("camera-left", {
@@ -109,7 +194,7 @@ io.on("connection", socket => {
 });
 
 /* =========================
-   START SERVER (TUNNEL SAFE)
+   START SERVER (DO NOT TOUCH)
 ========================= */
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`✅ CourtStream listening on localhost:${PORT}`);
