@@ -1,72 +1,50 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Camera Pre-Join</title>
+  <title>Camera Join</title>
   <link rel="stylesheet" href="theme.css">
 </head>
-<body style="padding:20px;display:flex;flex-direction:column;align-items:center">
+<body class="center">
 
-<p style="color:var(--danger)">
-  Keep camera in LANDSCAPE mode for better scalability
-</p>
+<form class="card">
+  <h3>Camera Preview</h3>
 
-<video id="preview" autoplay muted playsinline
-       style="width:360px;aspect-ratio:16/9;background:black;border-radius:12px"></video>
+  <video id="preview" autoplay muted playsinline></video>
 
-<div style="margin:16px;display:flex;gap:8px">
-  <button onclick="toggleCam()">Camera</button>
-  <button onclick="flip()">Flip</button>
-</div>
+  <label>Position</label>
+  <select id="pos">
+    <option value="center">Center</option>
+    <option value="left">Left</option>
+    <option value="right">Right</option>
+    <option value="benchA">Bench A</option>
+    <option value="benchB">Bench B</option>
+    <option value="moving">Moving</option>
+  </select>
 
-<select id="position">
-  <option value="center">Center</option>
-  <option value="left">Left</option>
-  <option value="right">Right</option>
-  <option value="benchA">Bench A</option>
-  <option value="benchB">Bench B</option>
-  <option value="moving">Moving</option>
-</select>
+  <button class="primary" type="button" onclick="join()">Join</button>
+</form>
 
-<br><br>
-<button class="primary" onclick="joinAsCamera()">
-  Join CourtStream
-</button>
-
-<script src="/socket.io/socket.io.js"></script>
 <script>
-const params = new URLSearchParams(location.search);
-const room = params.get("room") || "courtstream-demo";
+const room = new URLSearchParams(location.search).get("room");
+let res;
 
-let stream;
-let facing = "environment";
-
-async function start() {
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: facing },
-    audio: false
+fetch(`/api/courtstream/${room}`)
+  .then(r=>r.json())
+  .then(c=>{
+    res = c.resolution.split("x").map(Number);
+    navigator.mediaDevices.getUserMedia({
+      video:{ width:res[0], height:res[1] },
+      audio:false
+    }).then(s=>{
+      preview.srcObject = s;
+      window.stream = s;
+    });
   });
-  preview.srcObject = stream;
-}
 
-function flip() {
-  facing = facing === "environment" ? "user" : "environment";
-  start();
-}
-
-function toggleCam() {
-  const track = stream.getVideoTracks()[0];
-  track.enabled = !track.enabled;
-}
-
-function joinAsCamera() {
-  const pos = document.getElementById("position").value;
-  sessionStorage.setItem("cameraPosition", pos);
-  sessionStorage.setItem("role", "camera");
+function join(){
+  sessionStorage.setItem("pos", pos.value);
   location.href = `phone.html?room=${room}`;
 }
-
-start();
 </script>
-
 </body>
 </html>
