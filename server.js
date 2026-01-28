@@ -1,108 +1,74 @@
+// =========================
+// CourtStream Server (FINAL)
+// Tunnel-safe, PM2-safe
+// =========================
+
 const express = require("express");
 const http = require("http");
 const path = require("path");
-const bcrypt = require("bcrypt");
-const cookieParser = require("cookie-parser");
-const sqlite3 = require("sqlite3").verbose();
 const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
 
+/* =========================
+   CONFIG
+========================= */
 const PORT = process.env.PORT || 3000;
 
-/* ===== MIDDLEWARE ===== */
-app.use(express.json());
-app.use(cookieParser());
+/* =========================
+   STATIC FILES (REPO ROOT)
+========================= */
 app.use(express.static(__dirname));
+app.use(express.json());
 
-/* ===== DB ===== */
-const db = new sqlite3.Database("./db.sqlite");
-
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE,
-      password TEXT
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS streams (
-      id TEXT PRIMARY KEY,
-      name TEXT,
-      creator INTEGER,
-      max_cameras INTEGER,
-      resolution TEXT,
-      camera_access TEXT,
-      camera_pass TEXT,
-      viewer_access TEXT,
-      viewer_pass TEXT
-    )
-  `);
+/* ROOT */
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
-/* ===== AUTH ===== */
-app.post("/api/register", async (req, res) => {
-  const hash = await bcrypt.hash(req.body.password, 10);
-  db.run(
-    "INSERT INTO users (email,password) VALUES (?,?)",
-    [req.body.email, hash],
-    err => err ? res.sendStatus(400) : res.sendStatus(200)
-  );
+/* =========================
+   SOCKET.IO
+========================= */
+const io = new Server(server, {
+  cors: { origin: "*" }
 });
 
-app.post("/api/login", (req, res) => {
-  db.get(
-    "SELECT * FROM users WHERE email=?",
-    [req.body.email],
-    async (err, user) => {
-      if (!user) return res.sendStatus(401);
-      const ok = await bcrypt.compare(req.body.password, user.password);
-      if (!ok) return res.sendStatus(401);
-      res.cookie("uid", user.id, { httpOnly: true });
-      res.sendStatus(200);
-    }
-  );
-});
-
-/* ===== STREAMS ===== */
-app.post("/api/streams", (req, res) => {
-  const id = crypto.randomUUID();
-  const uid = req.cookies.uid;
-  if (!uid) return res.sendStatus(401);
-
-  db.run(
-    `INSERT INTO streams VALUES (?,?,?,?,?,?,?,?)`,
-    [
-      id,
-      req.body.name,
-      uid,
-      req.body.maxCameras,
-      req.body.resolution,
-      req.body.cameraAccess,
-      req.body.cameraPass,
-      req.body.viewerAccess,
-      req.body.viewerPass
-    ],
-    () => res.json({ id })
-  );
-});
-
-app.get("/api/streams/:id", (req, res) => {
-  db.get(
-    "SELECT * FROM streams WHERE id=?",
-    [req.params.id],
-    (err, row) => row ? res.json(row) : res.sendStatus(404)
-  );
-});
-
-/* ===== SOCKET.IO (UNCHANGED CORE) ===== */
 io.on("connection", socket => {
-  socket.on("join", ({ room, role, position }) => {
+
+  /**
+   * join supports BOTH:
+   *  - join("room")                     ← legacy
+   *  - join({ room, role, position })   ← new
+   */
+  socket.on("join", payload => {
+    let room, role, position;
+
+    if (typeof payload === "string") {
+      room = payload;
+      role = "camera";
+    } else {
+      room = payload.room;
+      role = payload.role || "camera";
+      position = payload.position || null;
+    }
+
     socket.join(room);
+    socket.room = room;
+    socket.role = role;
+    socket.position = position;
+
+    const clients =
+      io.sockets.adapter.rooms.get(room) || new Set();
+
+    const others = [...clients]
+      .filter(id => id !== socket.id)
+      .map(id => ({ id }));
+
+    // Send existing peers to the new client
+    socket.emit("existing-peers", others);
+
+    // Notify others
     socket.to(room).emit("peer-joined", {
       id: socket.id,
       role,
@@ -110,12 +76,41 @@ io.on("connection", socket => {
     });
   });
 
+  /* WebRTC signaling */
   socket.on("signal", ({ to, data }) => {
-    io.to(to).emit("signal", { from: socket.id, data });
+    io.to(to).emit("signal", {
+      from: socket.id,
+      data
+    });
+  });
+
+  /* Camera control messages */
+  socket.on("control", msg => {
+    if (msg.to) {
+      io.to(msg.to).emit("control", msg);
+    }
+  });
+
+  /* Program feed selection */
+  socket.on("program", msg => {
+    socket.broadcast.emit("program", msg);
+  });
+
+  /* Disconnect cleanup */
+  socket.on("disconnect", () => {
+    if (socket.room) {
+      socket.to(socket.room).emit("camera-left", {
+        id: socket.id,
+        role: socket.role,
+        position: socket.position
+      });
+    }
   });
 });
 
-/* ===== START ===== */
-server.listen(PORT, "0.0.0.0", () =>
-  console.log("✅ CourtStream running")
-);
+/* =========================
+   START SERVER (TUNNEL SAFE)
+========================= */
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`✅ CourtStream listening on localhost:${PORT}`);
+});
