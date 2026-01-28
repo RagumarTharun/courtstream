@@ -1,40 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8" />
-<title>Register – CourtStream</title>
+<meta charset="UTF-8">
+<title>Register</title>
 <style>
 body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
 .page{min-height:100vh;display:flex;align-items:center;justify-content:center}
 .card{width:360px;background:#161922;border:1px solid #262b3d;border-radius:16px;padding:28px}
 input{width:100%;margin-top:12px;padding:10px;border-radius:10px;background:#0f1115;border:1px solid #262b3d;color:#e6e6eb}
 button{width:100%;margin-top:20px;padding:10px;border-radius:999px;border:none;background:#3b82f6;color:#fff}
-a{display:block;margin-top:12px;color:#9aa0b4;font-size:13px;text-align:center}
 </style>
 </head>
-
 <body>
 <div class="page">
   <div class="card">
-    <h2>Create account</h2>
-    <input id="email" placeholder="Email" />
-    <input id="password" type="password" placeholder="Password" />
+    <h2>Create Account</h2>
+    <input id="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
     <button onclick="register()">Register</button>
-    <a href="login.html">Already have an account?</a>
   </div>
 </div>
 
 <script>
 async function register(){
-  await fetch('/api/register',{
+  const res = await fetch('/api/register',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      email:email.value,
-      password:password.value
-    })
+    body:JSON.stringify({email:email.value,password:password.value})
   });
-  location.href='login.html';
+  if(res.ok) location.href='login.html';
+  else alert("Registration failed");
 }
 </script>
 </body>
