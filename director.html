@@ -1,67 +1,254 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Director</title>
-  <link rel="stylesheet" href="theme.css">
+<meta charset="UTF-8" />
+<title>CourtStream – Director</title>
+
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161922;
+    --border: #262b3d;
+    --text: #e6e6eb;
+    --muted: #9aa0b4;
+    --blue: #3b82f6;
+    --red: #ef4444;
+    --green: #22c55e;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    height: 100vh;
+    display: flex;
+  }
+
+  /* ===== LAYOUT ===== */
+
+  .director {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: 1fr 140px;
+    gap: 14px;
+    padding: 14px;
+    width: 100%;
+  }
+
+  .panel {
+    background: var(--panel);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+  }
+
+  /* ===== MAIN FEED ===== */
+
+  .main-feed {
+    position: relative;
+    grid-row: 1 / span 1;
+    grid-column: 1 / span 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .main-feed video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 16px;
+    background: #000;
+  }
+
+  .record-bar {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(15,17,21,.85);
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    border-radius: 999px;
+  }
+
+  .record-btn {
+    width: 14px;
+    height: 14px;
+    background: var(--red);
+    border-radius: 50%;
+  }
+
+  .timer {
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  /* ===== CAMERA GRID (BOTTOM) ===== */
+
+  .camera-strip {
+    grid-column: 1 / span 1;
+    grid-row: 2 / span 1;
+    display: flex;
+    gap: 12px;
+  }
+
+  .camera-tile {
+    flex: 1;
+    position: relative;
+    background: #000;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .camera-tile video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .camera-label {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: rgba(0,0,0,.6);
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  /* ===== SIDE CAMERAS ===== */
+
+  .side-panel {
+    grid-column: 2 / span 1;
+    grid-row: 1 / span 2;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .side-title {
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  .side-camera {
+    height: 140px;
+    background: #000;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+
+  .side-camera span {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    font-size: 12px;
+    background: rgba(0,0,0,.6);
+    padding: 4px 8px;
+    border-radius: 999px;
+  }
+
+  /* ===== TOP BAR ===== */
+
+  .top-bar {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    right: 14px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+  }
+
+  .stream-info {
+    pointer-events: auto;
+    background: rgba(15,17,21,.85);
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .qr-box {
+    pointer-events: auto;
+    background: rgba(15,17,21,.85);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 8px;
+  }
+
+  .qr-box img {
+    width: 80px;
+    height: 80px;
+    background: #000;
+  }
+</style>
 </head>
+
 <body>
 
-<header>
-  <strong>Director</strong>
-  <button id="qr">QR</button>
-  <button id="rec" class="danger">● Record</button>
-  <span id="time">00:00</span>
-</header>
+<div class="director">
 
-<main>
-  <div id="program"></div>
+  <!-- MAIN FEED -->
+  <div class="panel main-feed">
+    <video autoplay muted></video>
 
-  <div id="grid">
-    <div data-pos="left"></div>
-    <div data-pos="center"></div>
-    <div data-pos="right"></div>
-    <div data-pos="benchA"></div>
-    <div data-pos="benchB"></div>
-    <div data-pos="moving"></div>
+    <div class="top-bar">
+      <div class="stream-info">CourtStream • Live</div>
+      <div class="qr-box">
+        <!-- placeholder -->
+        <img alt="QR Code" />
+      </div>
+    </div>
+
+    <div class="record-bar">
+      <div class="record-btn"></div>
+      <div class="timer">00:00:00</div>
+    </div>
   </div>
-</main>
 
-<canvas id="canvas" hidden></canvas>
+  <!-- SIDE CAMERAS -->
+  <div class="panel side-panel">
+    <div class="side-title">Additional Cameras</div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-<script>
-const socket = io();
-const room = new URLSearchParams(location.search).get("room");
-const peers={};
-const streams={};
+    <div class="side-camera">
+      <span>Bench A</span>
+    </div>
 
-socket.emit("join",{room,role:"director"});
+    <div class="side-camera">
+      <span>Bench B</span>
+    </div>
 
-socket.on("peer-joined", ({id,position})=>{
-  const pc=new RTCPeerConnection();
-  peers[id]=pc;
-  pc.addTransceiver("video",{direction:"recvonly"});
-  pc.ontrack=e=>{
-    const v=document.createElement("video");
-    v.srcObject=e.streams[0];
-    v.autoplay=true;
-    streams[id]=v;
-    document.querySelector(`[data-pos=${position}]`).appendChild(v);
-  };
-  pc.onicecandidate=e=>e.candidate &&
-    socket.emit("signal",{to:id,data:e.candidate});
-  pc.createOffer().then(o=>{
-    pc.setLocalDescription(o);
-    socket.emit("signal",{to:id,data:o});
-  });
-});
+    <div class="side-camera">
+      <span>Moving</span>
+    </div>
 
-socket.on("signal",async({from,data})=>{
-  const pc=peers[from];
-  if(data.type==="answer") await pc.setRemoteDescription(data);
-  if(data.candidate) await pc.addIceCandidate(data);
-});
-</script>
+    <!-- Scoreboard can be added later as floating -->
+  </div>
+
+  <!-- CAMERA STRIP -->
+  <div class="camera-strip">
+    <div class="camera-tile">
+      <span class="camera-label">Left</span>
+    </div>
+    <div class="camera-tile">
+      <span class="camera-label">Center</span>
+    </div>
+    <div class="camera-tile">
+      <span class="camera-label">Right</span>
+    </div>
+  </div>
+
+</div>
+
 </body>
 </html>
