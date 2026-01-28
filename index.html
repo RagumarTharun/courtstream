@@ -5,38 +5,28 @@
 <title>CourtStream</title>
 <style>
 body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
-.page{min-height:100vh;display:flex;align-items:center;justify-content:center}
-.card{width:520px;background:#161922;border:1px solid #262b3d;border-radius:16px;padding:32px}
-h1{margin:0 0 12px}
-input{width:100%;padding:12px;border-radius:12px;background:#0f1115;border:1px solid #262b3d;color:#e6e6eb}
-.actions{display:flex;justify-content:space-between;margin-top:20px}
-button{padding:10px 18px;border-radius:999px;border:none;cursor:pointer}
-.primary{background:#3b82f6;color:#fff}
-.secondary{background:transparent;border:1px solid #262b3d;color:#e6e6eb}
+.wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{width:420px;background:#161922;border:1px solid #262b3d;border-radius:16px;padding:28px}
+input,button{width:100%;margin-top:14px;padding:10px;border-radius:999px;border:1px solid #262b3d;background:#0f1115;color:#e6e6eb}
+.primary{background:#3b82f6;border:none}
 </style>
 </head>
 <body>
-<div class="page">
+<div class="wrap">
   <div class="card">
-    <h1>CourtStream</h1>
-    <p>Enter a CourtStream ID to join</p>
-    <input id="streamId" placeholder="Stream ID">
-
-    <div class="actions">
-      <button class="secondary" onclick="location.href='login.html'">Login</button>
-      <button class="primary" onclick="join()">Join</button>
-    </div>
-
-    <div class="actions" style="margin-top:14px">
-      <button class="secondary" onclick="location.href='create.html'">Create CourtStream</button>
-    </div>
+    <h2>CourtStream</h2>
+    <input id="stream" placeholder="Enter Stream ID">
+    <button class="primary" onclick="join()">Join</button>
+    <button onclick="location.href='create.html'">Create CourtStream</button>
   </div>
 </div>
 
 <script>
-function join(){
-  if(!streamId.value) return alert("Enter stream ID");
-  location.href=`join.html?stream=${streamId.value}`;
+async function join(){
+  if(!stream.value) return;
+  const res = await fetch(`/api/streams/${stream.value}`);
+  if(!res.ok) return alert("Stream not found");
+  location.href = `join.html?stream=${stream.value}`;
 }
 </script>
 </body>
