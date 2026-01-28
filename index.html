@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <title>CourtStream</title>
 <style>
 body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
@@ -15,19 +15,29 @@ button{padding:10px 18px;border-radius:999px;border:none;cursor:pointer}
 .secondary{background:transparent;border:1px solid #262b3d;color:#e6e6eb}
 </style>
 </head>
-
 <body>
 <div class="page">
   <div class="card">
-    <h1>Welcome to CourtStream</h1>
-    <p>Find an active court stream near you</p>
-    <input placeholder="Search court streams…" />
+    <h1>CourtStream</h1>
+    <p>Enter a CourtStream ID to join</p>
+    <input id="streamId" placeholder="Stream ID">
 
     <div class="actions">
       <button class="secondary" onclick="location.href='login.html'">Login</button>
-      <button class="primary" onclick="location.href='create.html'">Create CourtStream</button>
+      <button class="primary" onclick="join()">Join</button>
+    </div>
+
+    <div class="actions" style="margin-top:14px">
+      <button class="secondary" onclick="location.href='create.html'">Create CourtStream</button>
     </div>
   </div>
 </div>
+
+<script>
+function join(){
+  if(!streamId.value) return alert("Enter stream ID");
+  location.href=`join.html?stream=${streamId.value}`;
+}
+</script>
 </body>
 </html>
