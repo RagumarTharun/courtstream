@@ -1,147 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
-<title>CourtStream – Director</title>
-
+<meta charset="UTF-8">
+<title>Director</title>
 <style>
-:root{
-  --bg:#0f1115;--panel:#161922;--border:#262b3d;
-  --text:#e6e6eb;--red:#ef4444;
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui;height:100vh}
-.director{
-  display:grid;grid-template-columns:1fr 320px;
-  grid-template-rows:1fr 140px;gap:14px;padding:14px;height:100%
-}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px}
-.main-feed{position:relative}
-.main-feed video{width:100%;height:100%;object-fit:cover;background:#000;border-radius:16px}
-.record-bar{
-  position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
-  display:flex;gap:12px;align-items:center;
-  background:rgba(15,17,21,.85);border:1px solid var(--border);
-  padding:8px 14px;border-radius:999px
-}
-.dot{width:12px;height:12px;background:var(--red);border-radius:50%;cursor:pointer}
-.camera-strip{display:flex;gap:12px}
-.camera-tile,.side-camera{
-  background:#000;border-radius:14px;border:1px solid var(--border);
-  position:relative;overflow:hidden;cursor:pointer
-}
-.camera-tile video,.side-camera video{width:100%;height:100%;object-fit:cover}
-.label{
-  position:absolute;bottom:8px;left:8px;font-size:12px;
-  background:rgba(0,0,0,.6);padding:4px 8px;border-radius:999px
-}
-.side-panel{padding:14px;display:flex;flex-direction:column;gap:14px}
+body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
+video{width:100vw;height:100vh;object-fit:contain;background:#000}
 </style>
 </head>
-
 <body>
-<div class="director">
-
-  <div class="panel main-feed">
-    <video id="program" autoplay muted playsinline></video>
-    <div class="record-bar">
-      <div class="dot" id="recBtn"></div>
-      <div id="timer">00:00:00</div>
-    </div>
-  </div>
-
-  <div class="panel side-panel">
-    <div class="side-camera" data-pos="benchA"><span class="label">Bench A</span></div>
-    <div class="side-camera" data-pos="benchB"><span class="label">Bench B</span></div>
-    <div class="side-camera" data-pos="moving"><span class="label">Moving</span></div>
-  </div>
-
-  <div class="camera-strip">
-    <div class="camera-tile" data-pos="left"><span class="label">Left</span></div>
-    <div class="camera-tile" data-pos="center"><span class="label">Center</span></div>
-    <div class="camera-tile" data-pos="right"><span class="label">Right</span></div>
-  </div>
-
-</div>
+<video id="main" autoplay muted playsinline></video>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const params=new URLSearchParams(location.search);
-const ROOM=params.get("stream");
-if(!ROOM){alert("Invalid stream");location.href="/"}
-
+const s=new URLSearchParams(location.search).get("stream");
 const socket=io();
-const peers={};
-const program=document.getElementById("program");
+const pc=new RTCPeerConnection({
+  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+});
+socket.emit("join",{room:s,role:"director"});
 
-const ICE={
-  iceServers:[
-    {urls:"stun:stun.l.google.com:19302"},
-    {urls:"stun:stun1.l.google.com:19302"}
-  ]
-};
-
-socket.emit("join",{room:ROOM,role:"director"});
-
-function makePeer(id){
-  const pc=new RTCPeerConnection(ICE);
-  pc.ontrack=e=>{
-    attach("center",e.streams[0]);
-    if(!program.srcObject) program.srcObject=e.streams[0];
-  };
-  pc.onicecandidate=e=>{
-    if(e.candidate){
-      socket.emit("signal",{to:id,data:{candidate:e.candidate}});
-    }
-  };
-  peers[id]=pc;
-  return pc;
-}
+pc.ontrack=e=>main.srcObject=e.streams[0];
+pc.onicecandidate=e=>e.candidate&&socket.emit("signal",{data:{candidate:e.candidate}});
 
 socket.on("peer-joined",async({id})=>{
-  const pc=makePeer(id);
   const offer=await pc.createOffer();
   await pc.setLocalDescription(offer);
   socket.emit("signal",{to:id,data:{sdp:offer}});
 });
-
 socket.on("signal",async({from,data})=>{
-  const pc=peers[from];
-  if(!pc) return;
   if(data.sdp) await pc.setRemoteDescription(data.sdp);
   if(data.candidate) await pc.addIceCandidate(data.candidate);
 });
-
-function attach(pos,stream){
-  const el=document.querySelector(`[data-pos="${pos}"]`);
-  el.innerHTML='<video autoplay playsinline></video>';
-  el.querySelector("video").srcObject=stream;
-}
-
-document.querySelectorAll(".camera-tile,.side-camera").forEach(el=>{
-  el.onclick=()=>{
-    const v=el.querySelector("video");
-    if(v) program.srcObject=v.srcObject;
-  };
-});
-
-/* recording */
-let rec,buf=[],t0,intv;
-function fmt(ms){return new Date(ms).toISOString().substr(11,8)}
-document.getElementById("recBtn").onclick=()=>{
-  if(rec&&rec.state==="recording"){rec.stop();clearInterval(intv);return;}
-  if(!program.srcObject){alert("No feed");return;}
-  rec=new MediaRecorder(program.srcObject);
-  buf=[];
-  rec.ondataavailable=e=>buf.push(e.data);
-  rec.onstop=()=>{
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(new Blob(buf,{type:"video/webm"}));
-    a.download=`${ROOM}-program.webm`;a.click();
-  };
-  rec.start();t0=Date.now();
-  intv=setInterval(()=>timer.textContent=fmt(Date.now()-t0),1000);
-};
 </script>
 </body>
 </html>
