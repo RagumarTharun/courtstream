@@ -113,6 +113,6 @@ io.on("connection", socket => {
 /* =========================
    START SERVER
 ========================= */
-server.listen(PORT, () => {
+server.listen(PORT,"0.0.0.0" () => {
   console.log(`CourtStream running on port ${PORT}`);
 });
