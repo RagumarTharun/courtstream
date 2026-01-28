@@ -1,1 +1,68 @@
-<!DOCTYPE html><html><head><title>Camera Join</title><link rel='stylesheet' href='theme.css'></head><body style='display:flex;flex-direction:column;align-items:center;padding:20px'><video autoplay muted playsinline style='width:360px;background:black'></video><br><button class='primary'>Join</button></body></html>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Camera Pre-Join</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body style="padding:20px;
+             display:flex;
+             flex-direction:column;
+             align-items:center">
+
+<p style="color:var(--danger)">
+  Keep camera in LANDSCAPE mode for better scalability
+</p>
+
+<video id="preview"
+       autoplay muted playsinline
+       style="width:360px;
+              aspect-ratio:16/9;
+              background:black;
+              border-radius:12px"></video>
+
+<div style="margin:16px;display:flex;gap:8px">
+  <button onclick="toggleCam()">Camera</button>
+  <button onclick="flip()">Flip</button>
+</div>
+
+<select>
+  <option>Center</option>
+  <option>Left</option>
+  <option>Right</option>
+  <option>Bench A</option>
+  <option>Bench B</option>
+  <option>Moving</option>
+</select>
+
+<br><br>
+<button class="primary" onclick="location.href='phone.html'">
+  Join CourtStream
+</button>
+
+<script>
+let stream;
+let facing = "environment";
+
+async function start() {
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: facing },
+    audio: false
+  });
+  preview.srcObject = stream;
+}
+
+function flip() {
+  facing = facing === "environment" ? "user" : "environment";
+  start();
+}
+
+function toggleCam() {
+  const track = stream.getVideoTracks()[0];
+  track.enabled = !track.enabled;
+}
+
+start();
+</script>
+
+</body>
+</html>
