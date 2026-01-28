@@ -4,43 +4,47 @@
   <title>Create CourtStream</title>
   <link rel="stylesheet" href="theme.css">
 </head>
-<body style="padding:40px;max-width:600px;margin:auto">
+<body class="center">
 
-<h2>Create CourtStream</h2>
+<form class="card">
+  <h2>Create CourtStream</h2>
 
-<label>Stream Name</label>
-<input placeholder="Court / Match name">
+  <label>Name</label>
+  <input id="name" placeholder="Court / Match name">
 
-<br><br>
-<label>Maximum Cameras</label>
-<select>
-  <option>3</option>
-  <option>4</option>
-  <option>6</option>
-</select>
+  <label>Resolution</label>
+  <select id="res">
+    <option value="1280x720">720p</option>
+    <option value="1920x1080">1080p</option>
+  </select>
 
-<br><br>
-<label>Viewer Access</label>
-<select>
-  <option>Anyone</option>
-  <option>Passcode</option>
-</select>
+  <label>Max Cameras</label>
+  <select id="max">
+    <option>3</option>
+    <option>4</option>
+    <option>6</option>
+  </select>
 
-<br><br>
-<label>Camera Join Passcode</label>
-<input placeholder="Optional">
+  <button class="primary" type="button" onclick="create()">
+    Create & Go Live
+  </button>
+</form>
 
-<br><br>
-<label>Recording Resolution</label>
-<select>
-  <option>720p</option>
-  <option>1080p</option>
-</select>
-
-<br><br>
-<button class="primary" onclick="location.href='director.html'">
-  Create & Go Live
-</button>
-
+<script>
+async function create(){
+  const id = crypto.randomUUID();
+  await fetch("/api/create", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      id,
+      name:name.value,
+      resolution:res.value,
+      maxCameras:max.value
+    })
+  });
+  location.href = `director.html?room=${id}`;
+}
+</script>
 </body>
 </html>
