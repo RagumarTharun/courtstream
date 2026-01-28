@@ -7,42 +7,21 @@
 <style>
 :root{
   --bg:#0f1115;--panel:#161922;--border:#262b3d;
-  --text:#e6e6eb;--muted:#9aa0b4;--red:#ef4444;
+  --text:#e6e6eb;--red:#ef4444;
 }
 *{box-sizing:border-box}
-body{
-  margin:0;background:var(--bg);color:var(--text);
-  font-family:system-ui;height:100vh;display:flex
-}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui;height:100vh}
 .director{
   display:grid;grid-template-columns:1fr 320px;
-  grid-template-rows:1fr 140px;gap:14px;
-  padding:14px;width:100%
+  grid-template-rows:1fr 140px;gap:14px;padding:14px;height:100%
 }
-.panel{
-  background:var(--panel);border:1px solid var(--border);
-  border-radius:16px
-}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px}
 .main-feed{position:relative}
-.main-feed video{
-  width:100%;height:100%;object-fit:cover;
-  background:#000;border-radius:16px
-}
-.top-bar{
-  position:absolute;top:14px;left:14px;right:14px;
-  display:flex;justify-content:space-between
-}
-.pill{
-  background:rgba(15,17,21,.85);
-  border:1px solid var(--border);
-  padding:8px 14px;border-radius:999px;font-size:13px
-}
+.main-feed video{width:100%;height:100%;object-fit:cover;background:#000;border-radius:16px}
 .record-bar{
-  position:absolute;bottom:14px;left:50%;
-  transform:translateX(-50%);
+  position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
   display:flex;gap:12px;align-items:center;
-  background:rgba(15,17,21,.85);
-  border:1px solid var(--border);
+  background:rgba(15,17,21,.85);border:1px solid var(--border);
   padding:8px 14px;border-radius:999px
 }
 .dot{width:12px;height:12px;background:var(--red);border-radius:50%;cursor:pointer}
@@ -64,10 +43,7 @@ body{
 <div class="director">
 
   <div class="panel main-feed">
-    <video id="programVideo" autoplay muted playsinline></video>
-    <div class="top-bar">
-      <div class="pill">CourtStream • Director</div>
-    </div>
+    <video id="program" autoplay muted playsinline></video>
     <div class="record-bar">
       <div class="dot" id="recBtn"></div>
       <div id="timer">00:00:00</div>
@@ -96,19 +72,22 @@ if(!ROOM){alert("Invalid stream");location.href="/"}
 
 const socket=io();
 const peers={};
-const streamsById={};
-const program=document.getElementById("programVideo");
+const program=document.getElementById("program");
 
-/* join as director */
+const ICE={
+  iceServers:[
+    {urls:"stun:stun.l.google.com:19302"},
+    {urls:"stun:stun1.l.google.com:19302"}
+  ]
+};
+
 socket.emit("join",{room:ROOM,role:"director"});
 
-/* create peer for camera */
 function makePeer(id){
-  const pc=new RTCPeerConnection();
+  const pc=new RTCPeerConnection(ICE);
   pc.ontrack=e=>{
-    streamsById[id]=e.streams[0];
-    placeStream(id,e.streams[0]);
-    program.srcObject ||= e.streams[0];
+    attach("center",e.streams[0]);
+    if(!program.srcObject) program.srcObject=e.streams[0];
   };
   pc.onicecandidate=e=>{
     if(e.candidate){
@@ -119,7 +98,6 @@ function makePeer(id){
   return pc;
 }
 
-/* server notifies when camera joins */
 socket.on("peer-joined",async({id})=>{
   const pc=makePeer(id);
   const offer=await pc.createOffer();
@@ -127,7 +105,6 @@ socket.on("peer-joined",async({id})=>{
   socket.emit("signal",{to:id,data:{sdp:offer}});
 });
 
-/* receive answers / ICE */
 socket.on("signal",async({from,data})=>{
   const pc=peers[from];
   if(!pc) return;
@@ -135,15 +112,12 @@ socket.on("signal",async({from,data})=>{
   if(data.candidate) await pc.addIceCandidate(data.candidate);
 });
 
-/* position mapping */
-function placeStream(id,stream){
-  const el=document.querySelector(`[data-pos="center"]`);
-  if(!el) return;
+function attach(pos,stream){
+  const el=document.querySelector(`[data-pos="${pos}"]`);
   el.innerHTML='<video autoplay playsinline></video>';
   el.querySelector("video").srcObject=stream;
 }
 
-/* click any tile → program */
 document.querySelectorAll(".camera-tile,.side-camera").forEach(el=>{
   el.onclick=()=>{
     const v=el.querySelector("video");
@@ -153,12 +127,9 @@ document.querySelectorAll(".camera-tile,.side-camera").forEach(el=>{
 
 /* recording */
 let rec,buf=[],t0,intv;
-const timer=document.getElementById("timer");
 function fmt(ms){return new Date(ms).toISOString().substr(11,8)}
 document.getElementById("recBtn").onclick=()=>{
-  if(rec&&rec.state==="recording"){
-    rec.stop();clearInterval(intv);return;
-  }
+  if(rec&&rec.state==="recording"){rec.stop();clearInterval(intv);return;}
   if(!program.srcObject){alert("No feed");return;}
   rec=new MediaRecorder(program.srcObject);
   buf=[];
