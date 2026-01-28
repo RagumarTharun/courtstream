@@ -2,262 +2,72 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>CourtStream – Director</title>
-
+<title>Join as Camera</title>
 <style>
-/* ===== THEME ===== */
-:root {
-  --bg:#0f1115;--panel:#161922;--border:#262b3d;
-  --text:#e6e6eb;--muted:#9aa0b4;
-  --blue:#3b82f6;--red:#ef4444;--green:#22c55e;
-}
-*{box-sizing:border-box}
-body{
-  margin:0;background:var(--bg);color:var(--text);
-  font-family:system-ui;height:100vh;display:flex
-}
-
-/* ===== LAYOUT ===== */
-.director{
-  display:grid;
-  grid-template-columns:1fr 320px;
-  grid-template-rows:1fr 140px;
-  gap:14px;padding:14px;width:100%
-}
-.panel{
-  background:var(--panel);
-  border-radius:16px;
-  border:1px solid var(--border)
-}
-
-/* ===== MAIN FEED ===== */
-.main-feed{
-  position:relative;
-  display:flex;
-  align-items:center;
-  justify-content:center
-}
-.main-feed video{
-  width:100%;height:100%;
-  object-fit:cover;
-  background:#000;
-  border-radius:16px
-}
-
-/* ===== RECORD BAR ===== */
-.record-bar{
-  position:absolute;
-  bottom:14px;left:50%;
-  transform:translateX(-50%);
-  display:flex;align-items:center;
-  gap:14px;
-  background:rgba(15,17,21,.85);
-  border:1px solid var(--border);
-  padding:8px 14px;
-  border-radius:999px
-}
-.record-btn{
-  width:14px;height:14px;
-  background:var(--red);
-  border-radius:50%;
-  cursor:pointer
-}
-.timer{font-size:13px}
-
-/* ===== CAMERA STRIP ===== */
-.camera-strip{
-  display:flex;gap:12px
-}
-.camera-tile{
-  flex:1;position:relative;
-  background:#000;
-  border-radius:14px;
-  border:1px solid var(--border);
-  overflow:hidden;cursor:pointer
-}
-.camera-tile video{
-  width:100%;height:100%;object-fit:cover
-}
-.camera-label{
-  position:absolute;
-  bottom:8px;left:8px;
-  font-size:12px;
-  background:rgba(0,0,0,.6);
-  padding:4px 8px;border-radius:999px
-}
-
-/* ===== SIDE CAMERAS ===== */
-.side-panel{
-  padding:14px;
-  display:flex;
-  flex-direction:column;
-  gap:14px
-}
-.side-camera{
-  height:140px;
-  background:#000;
-  border-radius:14px;
-  border:1px solid var(--border);
-  position:relative
-}
-.side-camera span{
-  position:absolute;
-  bottom:8px;left:8px;
-  font-size:12px;
-  background:rgba(0,0,0,.6);
-  padding:4px 8px;border-radius:999px
-}
-
-/* ===== TOP BAR ===== */
-.top-bar{
-  position:absolute;
-  top:14px;left:14px;right:14px;
-  display:flex;justify-content:space-between
-}
-.stream-info{
-  background:rgba(15,17,21,.85);
-  padding:8px 14px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  font-size:13px
-}
-.qr-box{
-  background:rgba(15,17,21,.85);
-  border:1px solid var(--border);
-  border-radius:14px;
-  padding:8px
-}
-.qr-box img{width:80px;height:80px}
+body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui;
+display:flex;align-items:center;justify-content:center;height:100vh}
+.wrap{width:100%;max-width:420px;padding:16px}
+.preview{aspect-ratio:16/9;background:#000;border:1px solid #262b3d;border-radius:16px}
+.preview video{width:100%;height:100%;object-fit:cover}
+.controls{margin-top:12px;display:flex;gap:10px}
+select,button{flex:1;padding:10px;border-radius:999px;background:#161922;border:1px solid #262b3d;color:#e6e6eb}
+.primary{background:#3b82f6;border:none}
 </style>
 </head>
 
 <body>
-
-<div class="director">
-
-  <!-- MAIN -->
-  <div class="panel main-feed">
-    <video id="programVideo" autoplay muted playsinline></video>
-
-    <div class="top-bar">
-      <div class="stream-info">CourtStream • Director</div>
-      <div class="qr-box"><img id="qr" /></div>
-    </div>
-
-    <div class="record-bar">
-      <div class="record-btn" id="recordBtn"></div>
-      <div class="timer" id="timer">00:00:00</div>
-    </div>
+<div class="wrap">
+  <div class="preview"><video id="local" autoplay muted playsinline></video></div>
+  <div class="controls">
+    <select id="pos">
+      <option value="center">Center</option>
+      <option value="left">Left</option>
+      <option value="right">Right</option>
+      <option value="benchA">Bench A</option>
+      <option value="benchB">Bench B</option>
+      <option value="moving">Moving</option>
+    </select>
   </div>
-
-  <!-- SIDE -->
-  <div class="panel side-panel">
-    <div class="side-camera" data-pos="benchA"><span>Bench A</span></div>
-    <div class="side-camera" data-pos="benchB"><span>Bench B</span></div>
-    <div class="side-camera" data-pos="moving"><span>Moving</span></div>
+  <div class="controls">
+    <button class="primary" id="join">Join</button>
   </div>
-
-  <!-- BOTTOM -->
-  <div class="camera-strip">
-    <div class="camera-tile" data-pos="left"><span class="camera-label">Left</span></div>
-    <div class="camera-tile" data-pos="center"><span class="camera-label">Center</span></div>
-    <div class="camera-tile" data-pos="right"><span class="camera-label">Right</span></div>
-  </div>
-
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const params = new URLSearchParams(location.search);
-const ROOM = params.get("stream");
-if (!ROOM) { alert("Invalid stream"); location.href = "/"; }
+const params=new URLSearchParams(location.search);
+const ROOM=params.get("stream");
+if(!ROOM){alert("Invalid stream");location.href="/"}
 
-const socket = io();
-const peers = {};
-const cameras = {};
-const programVideo = document.getElementById("programVideo");
+const socket=io();
+const pc=new RTCPeerConnection();
+let localStream;
 
-socket.emit("join", { room: ROOM, role: "director" });
-
-function createPeer(id) {
-  const pc = new RTCPeerConnection();
-
-  pc.ontrack = e => {
-    cameras[id] = e.streams[0];
-    setTile("center", e.streams[0]);
-  };
-
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      socket.emit("signal", { to: id, data: { candidate: e.candidate } });
-    }
-  };
-
-  peers[id] = pc;
-  return pc;
-}
-
-socket.on("peer-joined", async ({ id }) => {
-  const pc = createPeer(id);
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  socket.emit("signal", { to: id, data: { sdp: offer } });
-});
-
-socket.on("signal", async ({ from, data }) => {
-  const pc = peers[from];
-  if (!pc) return;
-
-  if (data.sdp) {
-    await pc.setRemoteDescription(data.sdp);
-  }
-  if (data.candidate) {
-    await pc.addIceCandidate(data.candidate);
-  }
-});
-
-function setTile(pos, stream) {
-  const el = document.querySelector(`[data-pos="${pos}"]`);
-  if (!el) return;
-  el.innerHTML = `<video autoplay playsinline></video>`;
-  el.querySelector("video").srcObject = stream;
-  programVideo.srcObject = stream;
-}
-</script>
-
-/* =====================
-   RECORDING
-===================== */
-let recorder,chunks=[],startTime,recInt;
-const timer=document.getElementById("timer");
-
-function fmt(ms){
-  const s=Math.floor(ms/1000);
-  return new Date(s*1000).toISOString().substr(11,8);
-}
-
-document.getElementById("recordBtn").onclick=()=>{
-  if(recorder && recorder.state==="recording"){
-    recorder.stop();clearInterval(recInt);
-    return;
-  }
-  const stream=programVideo.srcObject;
-  if(!stream){alert("No program feed");return;}
-  recorder=new MediaRecorder(stream);
-  chunks=[];
-  recorder.ondataavailable=e=>chunks.push(e.data);
-  recorder.onstop=()=>{
-    const blob=new Blob(chunks,{type:"video/webm"});
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download=`${ROOM}-program.webm`;
-    a.click();
-  };
-  recorder.start();
-  startTime=Date.now();
-  recInt=setInterval(()=>timer.textContent=fmt(Date.now()-startTime),1000);
+document.getElementById("join").onclick=async()=>{
+  localStream=await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:"environment",width:1280,height:720},
+    audio:true
+  });
+  document.getElementById("local").srcObject=localStream;
+  localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+  socket.emit("join",{room:ROOM,role:"camera",position:pos.value});
 };
-</script>
 
+pc.onicecandidate=e=>{
+  if(e.candidate) socket.emit("signal",{data:{candidate:e.candidate}});
+};
+
+socket.on("signal",async({data})=>{
+  if(data.sdp){
+    await pc.setRemoteDescription(data.sdp);
+    if(data.sdp.type==="offer"){
+      const ans=await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      socket.emit("signal",{data:{sdp:ans}});
+    }
+  }
+  if(data.candidate) await pc.addIceCandidate(data.candidate);
+});
+</script>
 </body>
 </html>
