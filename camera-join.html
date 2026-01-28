@@ -1,50 +1,40 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Camera Join</title>
-  <link rel="stylesheet" href="theme.css">
+<meta charset="UTF-8" />
+<title>Camera Preview</title>
+<style>
+body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
+.page{min-height:100vh;display:flex;align-items:center;justify-content:center}
+.wrap{width:720px}
+.preview{height:400px;background:#000;border-radius:16px;border:1px solid #262b3d}
+.controls{display:flex;justify-content:space-between;margin-top:14px}
+select,button{padding:10px 14px;border-radius:999px;border:1px solid #262b3d;background:#161922;color:#e6e6eb}
+.primary{background:#3b82f6;border:none}
+.warning{margin-top:10px;font-size:13px;color:#9aa0b4}
+</style>
 </head>
-<body class="center">
 
-<form class="card">
-  <h3>Camera Preview</h3>
+<body>
+<div class="page">
+  <div class="wrap">
+    <div class="preview"></div>
 
-  <video id="preview" autoplay muted playsinline></video>
+    <div class="controls">
+      <select>
+        <option>Center</option>
+        <option>Left</option>
+        <option>Right</option>
+        <option>Bench A</option>
+        <option>Bench B</option>
+        <option>Moving</option>
+      </select>
 
-  <label>Position</label>
-  <select id="pos">
-    <option value="center">Center</option>
-    <option value="left">Left</option>
-    <option value="right">Right</option>
-    <option value="benchA">Bench A</option>
-    <option value="benchB">Bench B</option>
-    <option value="moving">Moving</option>
-  </select>
+      <button class="primary" onclick="location.href='director.html'">Join as Camera</button>
+    </div>
 
-  <button class="primary" type="button" onclick="join()">Join</button>
-</form>
-
-<script>
-const room = new URLSearchParams(location.search).get("room");
-let res;
-
-fetch(`/api/courtstream/${room}`)
-  .then(r=>r.json())
-  .then(c=>{
-    res = c.resolution.split("x").map(Number);
-    navigator.mediaDevices.getUserMedia({
-      video:{ width:res[0], height:res[1] },
-      audio:false
-    }).then(s=>{
-      preview.srcObject = s;
-      window.stream = s;
-    });
-  });
-
-function join(){
-  sessionStorage.setItem("pos", pos.value);
-  location.href = `phone.html?room=${room}`;
-}
-</script>
+    <div class="warning">Keep camera in landscape mode for best results</div>
+  </div>
+</div>
 </body>
 </html>
