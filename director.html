@@ -168,87 +168,62 @@ body{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* =====================
-   BASIC STATE
-===================== */
-const params=new URLSearchParams(location.search);
-const ROOM=params.get("stream");
-if(!ROOM){alert("Invalid stream");location.href="/"}
+const params = new URLSearchParams(location.search);
+const ROOM = params.get("stream");
+if (!ROOM) { alert("Invalid stream"); location.href = "/"; }
 
-const socket=io();
-const peers={};
-const cameras={};
-const programVideo=document.getElementById("programVideo");
+const socket = io();
+const peers = {};
+const cameras = {};
+const programVideo = document.getElementById("programVideo");
 
-/* =====================
-   JOIN AS DIRECTOR
-===================== */
-socket.emit("join",{room:ROOM,role:"director"});
+socket.emit("join", { room: ROOM, role: "director" });
 
-/* =====================
-   WEBRTC
-===================== */
-function createPeer(id){
-  const pc=new RTCPeerConnection();
-  pc.ontrack=e=>{
-    const stream=e.streams[0];
-    cameras[id]=stream;
-    assignCamera(id,stream);
+function createPeer(id) {
+  const pc = new RTCPeerConnection();
+
+  pc.ontrack = e => {
+    cameras[id] = e.streams[0];
+    setTile("center", e.streams[0]);
   };
-  pc.onicecandidate=e=>{
-    if(e.candidate){
-      socket.emit("signal",{to:id,data:{candidate:e.candidate}});
+
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit("signal", { to: id, data: { candidate: e.candidate } });
     }
   };
-  peers[id]=pc;
+
+  peers[id] = pc;
   return pc;
 }
 
-socket.on("existing-peers",list=>{
-  list.forEach(({id})=>createPeer(id));
+socket.on("peer-joined", async ({ id }) => {
+  const pc = createPeer(id);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit("signal", { to: id, data: { sdp: offer } });
 });
 
-socket.on("peer-joined",({id})=>{
-  createPeer(id);
-});
+socket.on("signal", async ({ from, data }) => {
+  const pc = peers[from];
+  if (!pc) return;
 
-socket.on("signal",async({from,data})=>{
-  const pc=peers[from]||createPeer(from);
-  if(data.sdp){
+  if (data.sdp) {
     await pc.setRemoteDescription(data.sdp);
-    if(data.sdp.type==="offer"){
-      const ans=await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      socket.emit("signal",{to:from,data:{sdp:ans}});
-    }
   }
-  if(data.candidate){
+  if (data.candidate) {
     await pc.addIceCandidate(data.candidate);
   }
 });
 
-/* =====================
-   CAMERA POSITIONING
-===================== */
-function assignCamera(id,stream){
-  // default → bottom center
-  setTile("center",stream);
+function setTile(pos, stream) {
+  const el = document.querySelector(`[data-pos="${pos}"]`);
+  if (!el) return;
+  el.innerHTML = `<video autoplay playsinline></video>`;
+  el.querySelector("video").srcObject = stream;
+  programVideo.srcObject = stream;
 }
-
-function setTile(pos,stream){
-  const el=document.querySelector(`[data-pos="${pos}"]`);
-  if(!el) return;
-  el.innerHTML=`<video autoplay playsinline></video>`;
-  el.querySelector("video").srcObject=stream;
-}
-
-/* click any tile to program */
-document.querySelectorAll(".camera-tile,.side-camera").forEach(tile=>{
-  tile.onclick=()=>{
-    const v=tile.querySelector("video");
-    if(v) programVideo.srcObject=v.srcObject;
-  };
-});
+</script>
 
 /* =====================
    RECORDING
