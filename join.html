@@ -1,27 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Join CourtStream</title>
-  <link rel="stylesheet" href="theme.css">
+<meta charset="UTF-8" />
+<title>Join Stream</title>
+<style>
+body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
+.page{min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{width:400px;background:#161922;border:1px solid #262b3d;border-radius:16px;padding:28px}
+select,input{width:100%;margin-top:12px;padding:10px;border-radius:10px;background:#0f1115;border:1px solid #262b3d;color:#e6e6eb}
+button{margin-top:20px;width:100%;padding:10px;border-radius:999px;border:none;background:#3b82f6;color:#fff}
+</style>
 </head>
-<body style="display:flex;justify-content:center;
-             align-items:center;height:100vh">
 
-<div style="width:340px">
-  <h2>Enter Passcode</h2>
+<body>
+<div class="page">
+  <div class="card">
+    <h2>Join CourtStream</h2>
 
-  <input placeholder="Passcode">
+    <input placeholder="Passcode (if required)" />
 
-  <br><br>
-  <button class="primary" onclick="location.href='camera-join.html'">
-    Join as Camera
-  </button>
+    <select>
+      <option value="viewer">Join as Viewer</option>
+      <option value="camera">Join as Camera</option>
+    </select>
 
-  <br><br>
-  <button onclick="alert('Viewer mode coming soon')">
-    Join as Viewer
-  </button>
+    <button onclick="location.href='camera-join.html'">Continue</button>
+  </div>
 </div>
-
 </body>
 </html>
