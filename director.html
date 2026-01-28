@@ -2,35 +2,90 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Join as Camera</title>
+<title>CourtStream – Director</title>
+
 <style>
-body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui;
-display:flex;align-items:center;justify-content:center;height:100vh}
-.wrap{width:100%;max-width:420px;padding:16px}
-.preview{aspect-ratio:16/9;background:#000;border:1px solid #262b3d;border-radius:16px}
-.preview video{width:100%;height:100%;object-fit:cover}
-.controls{margin-top:12px;display:flex;gap:10px}
-select,button{flex:1;padding:10px;border-radius:999px;background:#161922;border:1px solid #262b3d;color:#e6e6eb}
-.primary{background:#3b82f6;border:none}
+:root{
+  --bg:#0f1115;--panel:#161922;--border:#262b3d;
+  --text:#e6e6eb;--muted:#9aa0b4;--red:#ef4444;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui;height:100vh;display:flex
+}
+.director{
+  display:grid;grid-template-columns:1fr 320px;
+  grid-template-rows:1fr 140px;gap:14px;
+  padding:14px;width:100%
+}
+.panel{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:16px
+}
+.main-feed{position:relative}
+.main-feed video{
+  width:100%;height:100%;object-fit:cover;
+  background:#000;border-radius:16px
+}
+.top-bar{
+  position:absolute;top:14px;left:14px;right:14px;
+  display:flex;justify-content:space-between
+}
+.pill{
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:8px 14px;border-radius:999px;font-size:13px
+}
+.record-bar{
+  position:absolute;bottom:14px;left:50%;
+  transform:translateX(-50%);
+  display:flex;gap:12px;align-items:center;
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:8px 14px;border-radius:999px
+}
+.dot{width:12px;height:12px;background:var(--red);border-radius:50%;cursor:pointer}
+.camera-strip{display:flex;gap:12px}
+.camera-tile,.side-camera{
+  background:#000;border-radius:14px;border:1px solid var(--border);
+  position:relative;overflow:hidden;cursor:pointer
+}
+.camera-tile video,.side-camera video{width:100%;height:100%;object-fit:cover}
+.label{
+  position:absolute;bottom:8px;left:8px;font-size:12px;
+  background:rgba(0,0,0,.6);padding:4px 8px;border-radius:999px
+}
+.side-panel{padding:14px;display:flex;flex-direction:column;gap:14px}
 </style>
 </head>
 
 <body>
-<div class="wrap">
-  <div class="preview"><video id="local" autoplay muted playsinline></video></div>
-  <div class="controls">
-    <select id="pos">
-      <option value="center">Center</option>
-      <option value="left">Left</option>
-      <option value="right">Right</option>
-      <option value="benchA">Bench A</option>
-      <option value="benchB">Bench B</option>
-      <option value="moving">Moving</option>
-    </select>
+<div class="director">
+
+  <div class="panel main-feed">
+    <video id="programVideo" autoplay muted playsinline></video>
+    <div class="top-bar">
+      <div class="pill">CourtStream • Director</div>
+    </div>
+    <div class="record-bar">
+      <div class="dot" id="recBtn"></div>
+      <div id="timer">00:00:00</div>
+    </div>
   </div>
-  <div class="controls">
-    <button class="primary" id="join">Join</button>
+
+  <div class="panel side-panel">
+    <div class="side-camera" data-pos="benchA"><span class="label">Bench A</span></div>
+    <div class="side-camera" data-pos="benchB"><span class="label">Bench B</span></div>
+    <div class="side-camera" data-pos="moving"><span class="label">Moving</span></div>
   </div>
+
+  <div class="camera-strip">
+    <div class="camera-tile" data-pos="left"><span class="label">Left</span></div>
+    <div class="camera-tile" data-pos="center"><span class="label">Center</span></div>
+    <div class="camera-tile" data-pos="right"><span class="label">Right</span></div>
+  </div>
+
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -40,34 +95,82 @@ const ROOM=params.get("stream");
 if(!ROOM){alert("Invalid stream");location.href="/"}
 
 const socket=io();
-const pc=new RTCPeerConnection();
-let localStream;
+const peers={};
+const streamsById={};
+const program=document.getElementById("programVideo");
 
-document.getElementById("join").onclick=async()=>{
-  localStream=await navigator.mediaDevices.getUserMedia({
-    video:{facingMode:"environment",width:1280,height:720},
-    audio:true
-  });
-  document.getElementById("local").srcObject=localStream;
-  localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
-  socket.emit("join",{room:ROOM,role:"camera",position:pos.value});
-};
+/* join as director */
+socket.emit("join",{room:ROOM,role:"director"});
 
-pc.onicecandidate=e=>{
-  if(e.candidate) socket.emit("signal",{data:{candidate:e.candidate}});
-};
-
-socket.on("signal",async({data})=>{
-  if(data.sdp){
-    await pc.setRemoteDescription(data.sdp);
-    if(data.sdp.type==="offer"){
-      const ans=await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      socket.emit("signal",{data:{sdp:ans}});
+/* create peer for camera */
+function makePeer(id){
+  const pc=new RTCPeerConnection();
+  pc.ontrack=e=>{
+    streamsById[id]=e.streams[0];
+    placeStream(id,e.streams[0]);
+    program.srcObject ||= e.streams[0];
+  };
+  pc.onicecandidate=e=>{
+    if(e.candidate){
+      socket.emit("signal",{to:id,data:{candidate:e.candidate}});
     }
-  }
+  };
+  peers[id]=pc;
+  return pc;
+}
+
+/* server notifies when camera joins */
+socket.on("peer-joined",async({id})=>{
+  const pc=makePeer(id);
+  const offer=await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit("signal",{to:id,data:{sdp:offer}});
+});
+
+/* receive answers / ICE */
+socket.on("signal",async({from,data})=>{
+  const pc=peers[from];
+  if(!pc) return;
+  if(data.sdp) await pc.setRemoteDescription(data.sdp);
   if(data.candidate) await pc.addIceCandidate(data.candidate);
 });
+
+/* position mapping */
+function placeStream(id,stream){
+  const el=document.querySelector(`[data-pos="center"]`);
+  if(!el) return;
+  el.innerHTML='<video autoplay playsinline></video>';
+  el.querySelector("video").srcObject=stream;
+}
+
+/* click any tile → program */
+document.querySelectorAll(".camera-tile,.side-camera").forEach(el=>{
+  el.onclick=()=>{
+    const v=el.querySelector("video");
+    if(v) program.srcObject=v.srcObject;
+  };
+});
+
+/* recording */
+let rec,buf=[],t0,intv;
+const timer=document.getElementById("timer");
+function fmt(ms){return new Date(ms).toISOString().substr(11,8)}
+document.getElementById("recBtn").onclick=()=>{
+  if(rec&&rec.state==="recording"){
+    rec.stop();clearInterval(intv);return;
+  }
+  if(!program.srcObject){alert("No feed");return;}
+  rec=new MediaRecorder(program.srcObject);
+  buf=[];
+  rec.ondataavailable=e=>buf.push(e.data);
+  rec.onstop=()=>{
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob(buf,{type:"video/webm"}));
+    a.download=`${ROOM}-program.webm`;a.click();
+  };
+  rec.start();t0=Date.now();
+  intv=setInterval(()=>timer.textContent=fmt(Date.now()-t0),1000);
+};
 </script>
 </body>
 </html>
