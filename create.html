@@ -1,50 +1,123 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
   <title>Create CourtStream</title>
-  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="theme.css" />
+  <style>
+    .page {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #0f1115;
+    }
+
+    .card {
+      width: 420px;
+      background: #161922;
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 0 0 1px #262b3d;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+      font-size: 20px;
+    }
+
+    label {
+      font-size: 13px;
+      color: #9aa0b4;
+      margin-top: 14px;
+      display: block;
+    }
+
+    input, select {
+      width: 100%;
+      margin-top: 6px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #0f1115;
+      border: 1px solid #262b3d;
+      color: #e6e6eb;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .row > div {
+      flex: 1;
+    }
+
+    .actions {
+      margin-top: 24px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .primary {
+      background: #3b82f6;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 999px;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .secondary {
+      background: transparent;
+      border: 1px solid #262b3d;
+      padding: 10px 16px;
+      border-radius: 999px;
+      color: #e6e6eb;
+      cursor: pointer;
+    }
+  </style>
 </head>
-<body class="center">
+<body>
 
-<form class="card">
-  <h2>Create CourtStream</h2>
+<div class="page">
+  <div class="card">
+    <h2>Create CourtStream</h2>
 
-  <label>Name</label>
-  <input id="name" placeholder="Court / Match name">
+    <label>Stream name</label>
+    <input placeholder="JBA Court – Evening Practice" />
 
-  <label>Resolution</label>
-  <select id="res">
-    <option value="1280x720">720p</option>
-    <option value="1920x1080">1080p</option>
-  </select>
+    <div class="row">
+      <div>
+        <label>Max cameras</label>
+        <select>
+          <option>3</option>
+          <option>4</option>
+          <option>6</option>
+        </select>
+      </div>
 
-  <label>Max Cameras</label>
-  <select id="max">
-    <option>3</option>
-    <option>4</option>
-    <option>6</option>
-  </select>
+      <div>
+        <label>Resolution</label>
+        <select>
+          <option>720p</option>
+          <option>1080p</option>
+        </select>
+      </div>
+    </div>
 
-  <button class="primary" type="button" onclick="create()">
-    Create & Go Live
-  </button>
-</form>
+    <label>Viewer access</label>
+    <select>
+      <option>Anyone can view</option>
+      <option>Passcode required</option>
+    </select>
 
-<script>
-async function create(){
-  const id = crypto.randomUUID();
-  await fetch("/api/create", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({
-      id,
-      name:name.value,
-      resolution:res.value,
-      maxCameras:max.value
-    })
-  });
-  location.href = `director.html?room=${id}`;
-}
-</script>
+    <div class="actions">
+      <button class="secondary">Cancel</button>
+      <button class="primary">Create Stream</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
