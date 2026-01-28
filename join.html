@@ -2,36 +2,29 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Join</title>
+<title>Join CourtStream</title>
 <style>
 body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
-.page{min-height:100vh;display:flex;align-items:center;justify-content:center}
-.card{width:380px;background:#161922;border:1px solid #262b3d;border-radius:16px;padding:28px}
-select,input{width:100%;margin-top:12px;padding:10px;border-radius:10px;background:#0f1115;border:1px solid #262b3d;color:#e6e6eb}
-button{margin-top:20px;width:100%;padding:10px;border-radius:999px;border:none;background:#3b82f6;color:#fff}
+.wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{width:360px;background:#161922;border:1px solid #262b3d;border-radius:16px;padding:28px}
+button{width:100%;margin-top:14px;padding:10px;border-radius:999px;border:none;background:#3b82f6;color:#fff}
 </style>
 </head>
 <body>
-<div class="page">
+<div class="wrap">
   <div class="card">
-    <h2>Join CourtStream</h2>
-    <input id="passcode" placeholder="Passcode (if required)">
-    <select id="role">
-      <option value="viewer">Viewer</option>
-      <option value="camera">Camera</option>
-    </select>
-    <button onclick="proceed()">Continue</button>
+    <h3>Join as</h3>
+    <button onclick="go('camera')">Camera</button>
+    <button onclick="go('viewer')">Viewer</button>
   </div>
 </div>
 
 <script>
-const params=new URLSearchParams(location.search);
-const stream=params.get('stream');
-function proceed(){
-  if(role.value==='camera')
-    location.href=`camera-join.html?stream=${stream}`;
-  else
-    location.href=`viewer.html?stream=${stream}`;
+const s=new URLSearchParams(location.search).get("stream");
+function go(role){
+  location.href = role==="camera"
+    ? `camera-join.html?stream=${s}`
+    : `viewer.html?stream=${s}`;
 }
 </script>
 </body>
