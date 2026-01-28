@@ -1,43 +1,52 @@
 :root {
-  --bg-primary: #0f1115;
-  --bg-panel: #161922;
+  --bg: #0f1115;
+  --panel: #161922;
   --border: #262b3d;
-  --text-primary: #e6e6eb;
-  --text-muted: #9aa0b4;
+
+  --text: #e6e6eb;
+  --muted: #9aa0b4;
+
   --accent: #3b82f6;
   --danger: #ef4444;
   --success: #22c55e;
 }
+
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: var(--bg);
+  color: var(--text);
   font-family: system-ui, -apple-system, BlinkMacSystemFont,
                "Segoe UI", Roboto, Ubuntu, Cantarell;
 }
+
 button {
-  border-radius: 999px;
-  padding: 8px 14px;
+  background: var(--panel);
+  color: var(--text);
   border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 10px 16px;
   cursor: pointer;
 }
+
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: #fff;
 }
+
 button.danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: white;
+  color: #fff;
 }
+
 input, select {
-  background: var(--bg-panel);
+  width: 100%;
+  background: var(--panel);
   border: 1px solid var(--border);
-  color: var(--text-primary);
-  padding: 10px;
   border-radius: 10px;
+  padding: 10px;
+  color: var(--text);
 }
