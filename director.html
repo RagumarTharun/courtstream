@@ -1,1 +1,52 @@
-<!DOCTYPE html><html><head><title>Director</title><link rel='stylesheet' href='theme.css'></head><body><h2>Director Dashboard</h2></body></html>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Director</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body style="display:flex;
+             flex-direction:column;
+             height:100vh">
+
+<div style="height:56px;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:0 16px;
+            border-bottom:1px solid var(--border)">
+
+  <strong>CourtStream – Live</strong>
+
+  <div>
+    <button>QR</button>
+    <button class="danger">● Record</button>
+    <span>00:00</span>
+  </div>
+</div>
+
+<div style="flex:1;
+            display:flex;
+            gap:12px;
+            padding:12px">
+
+  <!-- MAIN FEED -->
+  <div style="flex:3;
+              background:black;
+              border-radius:12px">
+  </div>
+
+  <!-- CAMERA TILES -->
+  <div style="flex:1;
+              display:grid;
+              grid-template-columns:repeat(2,1fr);
+              gap:8px">
+    <div style="background:black;border-radius:10px"></div>
+    <div style="background:black;border-radius:10px"></div>
+    <div style="background:black;border-radius:10px"></div>
+    <div style="background:black;border-radius:10px"></div>
+  </div>
+
+</div>
+
+</body>
+</html>
