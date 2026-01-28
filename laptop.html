@@ -1,24 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CourtStream – Director</title>
+  <title>CourtStream – Director (Meet Style)</title>
 
   <style>
     :root {
-      /* Sports-Tech Analytics Theme */
-      --bg-primary: #0b0e14;
-      --bg-panel: #121726;
-      --bg-panel-2: #0f1320;
+      --bg-primary: #0f1115;
+      --bg-panel: #161922;
+      --border: #262b3d;
 
-      --border: #1f2937;
+      --text-primary: #e6e6eb;
+      --text-muted: #9aa0b4;
 
-      --text-primary: #e5e7eb;
-      --text-muted: #9ca3af;
-
-      --accent: #22d3ee;   /* cyan analytics highlight */
-      --danger: #ef4444;   /* record */
+      --accent: #3b82f6;
+      --danger: #ef4444;
       --success: #22c55e;
-      --warning: #f59e0b;
     }
 
     * { box-sizing: border-box; }
@@ -29,38 +25,41 @@
       color: var(--text-primary);
       font-family: system-ui, -apple-system, BlinkMacSystemFont,
                    "Segoe UI", Roboto, Ubuntu, Cantarell;
-      padding: 14px;
-    }
-
-    h2 {
-      margin: 0 0 12px;
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-    }
-
-    /* ===== TOP BAR ===== */
-    #top {
+      height: 100vh;
       display: flex;
-      gap: 10px;
+      flex-direction: column;
+    }
+
+    /* ===== TOP BAR (MEET STYLE) ===== */
+    #topbar {
+      height: 56px;
+      display: flex;
       align-items: center;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
+      justify-content: space-between;
+      padding: 0 16px;
       background: var(--bg-panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #title {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    #controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
 
     button {
-      background: var(--bg-panel-2);
+      background: transparent;
       color: var(--text-primary);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px 12px;
+      border-radius: 999px;
+      padding: 8px 14px;
       font-size: 12px;
       cursor: pointer;
-      letter-spacing: 0.3px;
     }
 
     button:hover {
@@ -69,123 +68,140 @@
     }
 
     .recording {
-      background: var(--danger) !important;
+      background: var(--danger);
       border-color: var(--danger);
       color: white !important;
     }
 
     #timer {
-      font-weight: 600;
-      color: var(--accent);
-      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: 8px;
     }
 
-    /* ===== QR ===== */
-    #qrBox {
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
+    /* ===== MAIN AREA ===== */
+    #main {
+      flex: 1;
+      display: flex;
       padding: 12px;
-      margin-bottom: 12px;
-      display: none;
+      gap: 12px;
+      overflow: hidden;
     }
 
-    /* ===== PROGRAM FEED ===== */
+    /* ===== MAIN FEED ===== */
     #program {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      width: 380px;
-      background: var(--bg-panel);
-      border: 2px solid var(--danger);
+      flex: 3;
+      background: black;
       border-radius: 12px;
-      padding: 6px;
-      z-index: 10;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     #program video {
       width: 100%;
-      border-radius: 8px;
-      background: black;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 12px;
     }
 
-    /* ===== CAMERA GRID ===== */
+    #recordOverlay {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      background: rgba(0,0,0,0.6);
+      padding: 8px 14px;
+      border-radius: 999px;
+    }
+
+    /* ===== CAMERA GRID (MEET STYLE) ===== */
     #videos {
+      flex: 1.3;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      overflow-y: auto;
     }
 
     .camera-box {
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px;
-      position: relative;
-    }
-
-    .camera-box::before {
-      content: "CAMERA";
-      position: absolute;
-      top: 8px;
-      right: 10px;
-      font-size: 10px;
-      color: var(--text-muted);
-      letter-spacing: 1px;
-    }
-
-    video {
-      width: 100%;
-      border-radius: 8px;
       background: black;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+      aspect-ratio: 16 / 9;
     }
 
-    .controls {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-top: 8px;
+    .camera-box video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
 
-    .row {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    input {
-      background: var(--bg-panel-2);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
+    .camera-label {
+      position: absolute;
+      bottom: 6px;
+      left: 6px;
+      background: rgba(0,0,0,0.6);
+      padding: 2px 6px;
       border-radius: 6px;
-      padding: 4px 6px;
       font-size: 11px;
     }
 
+    /* ===== QR MODAL ===== */
+    #qrBox {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+    }
+
+    #qrInner {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      text-align: center;
+    }
   </style>
 </head>
 
 <body>
 
-<h2>🏀 CourtStream – Live Analysis Director</h2>
+<div id="topbar">
+  <div id="title">CourtStream – Live Session</div>
+  <div id="controls">
+    <button id="qrBtn">Add camera</button>
+    <button id="recordBtn">Record</button>
+    <span id="timer">00:00</span>
+  </div>
+</div>
 
-<div id="top">
-  <button id="recordBtn">● RECORD</button>
-  <button id="qrBtn">📱 ADD CAMERA</button>
-  <button onclick="location.href='playback.html'">📊 ANALYSIS</button>
-  <span id="timer">00:00</span>
+<div id="main">
+  <div id="program">
+    <video id="programVideo" autoplay muted playsinline></video>
+
+    <div id="recordOverlay">
+      <button id="recordBtnOverlay">● Record</button>
+    </div>
+  </div>
+
+  <div id="videos"></div>
 </div>
 
 <div id="qrBox">
-  <strong>Scan to Join as Camera / Viewer</strong><br><br>
-  <canvas id="qrCanvas"></canvas>
-</div>
-
-<div id="videos"></div>
-
-<div id="program">
-  <video id="programVideo" autoplay muted playsinline></video>
+  <div id="qrInner">
+    <strong>Scan to join</strong><br><br>
+    <canvas id="qrCanvas"></canvas><br><br>
+    <button onclick="qrBox.style.display='none'">Close</button>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -199,7 +215,6 @@ const socket = io();
 const room = "room1";
 
 const peers = {};
-const streams = {};
 const recorders = {};
 const chunks = {};
 const cameraNames = {};
@@ -221,13 +236,7 @@ let programStream = programCanvas.captureStream(30);
 let programRecorder = null;
 let programChunks = [];
 
-/* =======================
-   UI REFS
-======================= */
-const recordBtn = document.getElementById("recordBtn");
-const timer = document.getElementById("timer");
 const programVideo = document.getElementById("programVideo");
-
 programVideo.srcObject = programStream;
 
 /* =======================
@@ -239,12 +248,12 @@ const qrCanvas = document.getElementById("qrCanvas");
 const cameraURL = `${location.origin}/phone.html?room=${room}`;
 
 qrBtn.onclick = () => {
-  qrBox.style.display = qrBox.style.display === "none" ? "block" : "none";
+  qrBox.style.display = "flex";
   QRCode.toCanvas(qrCanvas, cameraURL, { width:220, margin:1 });
 };
 
 /* =======================
-   SOCKET SETUP
+   SOCKET
 ======================= */
 socket.emit("join", room);
 
@@ -282,7 +291,6 @@ socket.on("signal", async ({from,data})=>{
 function addCamera(id, stream){
   if (document.getElementById(id)) return;
 
-  streams[id] = stream;
   cameraNames[id] = `Camera_${id.slice(0,4)}`;
 
   const box = document.createElement("div");
@@ -294,46 +302,13 @@ function addCamera(id, stream){
   video.autoplay = true;
   video.muted = true;
 
-  const controls = document.createElement("div");
-  controls.className = "controls";
+  const label = document.createElement("div");
+  label.className = "camera-label";
+  label.innerText = cameraNames[id];
 
-  const nameInput = document.createElement("input");
-  nameInput.value = cameraNames[id];
-  nameInput.oninput = e => cameraNames[id] = e.target.value;
+  box.onclick = () => activeProgramVideo = video;
 
-  const row1 = document.createElement("div");
-  row1.className = "row";
-
-  const live = document.createElement("button");
-  live.innerText = "GO LIVE";
-  live.onclick = ()=>{
-    activeProgramVideo = video;
-    socket.emit("program",{cameraId:id});
-  };
-  row1.append(live);
-
-  const row2 = document.createElement("div");
-  row2.className = "row";
-
-  [1,1.5,2].forEach(z=>{
-    const b=document.createElement("button");
-    b.innerText=z+"×";
-    b.onclick=()=>socket.emit("control",{to:id,type:"zoom",value:z});
-    row2.append(b);
-  });
-
-  const reset=document.createElement("button");
-  reset.innerText="RESET";
-  reset.onclick=()=>socket.emit("control",{to:id,type:"reset"});
-
-  const flip=document.createElement("button");
-  flip.innerText="FLIP";
-  flip.onclick=()=>socket.emit("control",{to:id,type:"flip"});
-
-  row2.append(reset,flip);
-
-  controls.append(nameInput,row1,row2);
-  box.append(video,controls);
+  box.append(video,label);
   document.getElementById("videos").appendChild(box);
 
   const rec = new MediaRecorder(stream);
@@ -346,7 +321,6 @@ function addCamera(id, stream){
     const blob = new Blob(chunks[id],{type:"video/webm"});
     chunks[id]=[];
     const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
-
     const a=document.createElement("a");
     a.href=URL.createObjectURL(blob);
     a.download=`${cameraNames[id]}_${ts}.webm`;
@@ -355,82 +329,63 @@ function addCamera(id, stream){
 }
 
 /* =======================
-   PROGRAM RENDER LOOP
+   PROGRAM RENDER
 ======================= */
 function renderProgram(){
-  programCtx.fillStyle = "black";
-  programCtx.fillRect(0, 0, programCanvas.width, programCanvas.height);
-
-  if (activeProgramVideo && activeProgramVideo.videoWidth) {
-    const vw = activeProgramVideo.videoWidth;
-    const vh = activeProgramVideo.videoHeight;
-
-    const canvasAR = programCanvas.width / programCanvas.height;
-    const videoAR = vw / vh;
-
-    let drawW, drawH, x, y;
-
-    if (videoAR > canvasAR) {
-      drawW = programCanvas.width;
-      drawH = drawW / videoAR;
-      x = 0;
-      y = (programCanvas.height - drawH) / 2;
-    } else {
-      drawH = programCanvas.height;
-      drawW = drawH * videoAR;
-      y = 0;
-      x = (programCanvas.width - drawW) / 2;
-    }
-
-    programCtx.drawImage(activeProgramVideo, x, y, drawW, drawH);
+  programCtx.fillStyle="black";
+  programCtx.fillRect(0,0,programCanvas.width,programCanvas.height);
+  if(activeProgramVideo){
+    programCtx.drawImage(activeProgramVideo,0,0,
+      programCanvas.width,programCanvas.height);
   }
-
   requestAnimationFrame(renderProgram);
 }
 renderProgram();
 
 /* =======================
-   RECORD BUTTON
+   RECORD
 ======================= */
-recordBtn.onclick = ()=>{
-  isRecording = !isRecording;
-  recordBtn.classList.toggle("recording",isRecording);
-  recordBtn.innerText = isRecording ? "■ STOP" : "● RECORD";
+const recordBtn = document.getElementById("recordBtn");
+const recordBtnOverlay = document.getElementById("recordBtnOverlay");
+const timer = document.getElementById("timer");
 
-  if (isRecording){
+function toggleRecord(){
+  isRecording=!isRecording;
+  recordBtn.classList.toggle("recording",isRecording);
+  recordBtnOverlay.classList.toggle("recording",isRecording);
+  recordBtn.innerText = recordBtnOverlay.innerText =
+    isRecording ? "■ Stop" : "● Record";
+
+  if(isRecording){
     seconds=0;
     timerInt=setInterval(()=>{
       seconds++;
-      timer.innerText =
+      timer.innerText=
         `${String(seconds/60|0).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;
     },1000);
 
     Object.values(recorders).forEach(r=>r.start());
-
-    programRecorder = new MediaRecorder(programStream);
-    programChunks = [];
-
-    programRecorder.ondataavailable = e =>
-      e.data.size && programChunks.push(e.data);
-
-    programRecorder.onstop = ()=>{
-      const blob = new Blob(programChunks,{type:"video/webm"});
-      const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
-
+    programRecorder=new MediaRecorder(programStream);
+    programChunks=[];
+    programRecorder.ondataavailable=e=>e.data.size&&programChunks.push(e.data);
+    programRecorder.onstop=()=>{
+      const blob=new Blob(programChunks,{type:"video/webm"});
+      const ts=new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
       const a=document.createElement("a");
       a.href=URL.createObjectURL(blob);
       a.download=`PROGRAM_FINAL_${ts}.webm`;
       a.click();
     };
-
     programRecorder.start();
-
   } else {
     clearInterval(timerInt);
     Object.values(recorders).forEach(r=>r.stop());
     programRecorder.stop();
   }
-};
+}
+
+recordBtn.onclick = toggleRecord;
+recordBtnOverlay.onclick = toggleRecord;
 </script>
 
 </body>
