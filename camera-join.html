@@ -1,44 +1,128 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Camera Join</title>
+<meta charset="UTF-8" />
+<title>Join as Camera – CourtStream</title>
+
 <style>
-body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
-.page{min-height:100vh;display:flex;align-items:center;justify-content:center}
-.wrap{width:720px}
-.preview{height:400px;background:#000;border-radius:16px;border:1px solid #262b3d}
-.controls{display:flex;justify-content:space-between;margin-top:14px}
-select,button{padding:10px 14px;border-radius:999px;border:1px solid #262b3d;background:#161922;color:#e6e6eb}
+body{
+  margin:0;background:#0f1115;color:#e6e6eb;
+  font-family:system-ui;height:100vh;
+  display:flex;align-items:center;justify-content:center
+}
+.wrap{
+  width:100%;max-width:420px;padding:16px
+}
+.preview{
+  width:100%;aspect-ratio:16/9;
+  background:#000;border-radius:16px;
+  border:1px solid #262b3d;overflow:hidden
+}
+.preview video{width:100%;height:100%;object-fit:cover}
+.controls{margin-top:14px;display:flex;gap:10px}
+select,button{
+  flex:1;padding:10px;border-radius:999px;
+  background:#161922;border:1px solid #262b3d;
+  color:#e6e6eb
+}
 .primary{background:#3b82f6;border:none}
+.note{
+  margin-top:10px;font-size:12px;
+  color:#9aa0b4;text-align:center
+}
 </style>
 </head>
+
 <body>
-<div class="page">
-  <div class="wrap">
-    <div class="preview"></div>
+<div class="wrap">
 
-    <div class="controls">
-      <select id="pos">
-        <option>Center</option>
-        <option>Left</option>
-        <option>Right</option>
-        <option>Bench A</option>
-        <option>Bench B</option>
-        <option>Moving</option>
-      </select>
-
-      <button class="primary" onclick="join()">Join</button>
-    </div>
+  <div class="preview">
+    <video id="localVideo" autoplay muted playsinline></video>
   </div>
+
+  <div class="controls">
+    <select id="position">
+      <option value="left">Left</option>
+      <option value="center" selected>Center</option>
+      <option value="right">Right</option>
+      <option value="benchA">Bench A</option>
+      <option value="benchB">Bench B</option>
+      <option value="moving">Moving</option>
+    </select>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="joinBtn">Join Stream</button>
+  </div>
+
+  <div class="note">
+    Keep phone in landscape for best quality
+  </div>
+
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
+/* =====================
+   PARAMS & STATE
+===================== */
 const params=new URLSearchParams(location.search);
-function join(){
-  localStorage.setItem('cameraPosition',pos.value);
-  location.href=`director.html?stream=${params.get('stream')}`;
-}
+const ROOM=params.get("stream");
+if(!ROOM){alert("Invalid stream");location.href="/"}
+
+const socket=io();
+const pc=new RTCPeerConnection();
+let localStream;
+
+/* =====================
+   CAMERA START (USER GESTURE)
+===================== */
+document.getElementById("joinBtn").onclick=async()=>{
+  localStream=await navigator.mediaDevices.getUserMedia({
+    video:{
+      facingMode:"environment",
+      width:{ideal:1280},
+      height:{ideal:720}
+    },
+    audio:true
+  });
+
+  document.getElementById("localVideo").srcObject=localStream;
+
+  localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+
+  socket.emit("join",{
+    room:ROOM,
+    role:"camera",
+    position:position.value
+  });
+
+  const offer=await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  socket.emit("signal",{to:"director",data:{sdp:offer}});
+};
+
+/* =====================
+   SIGNALING
+===================== */
+pc.onicecandidate=e=>{
+  if(e.candidate){
+    socket.emit("signal",{data:{candidate:e.candidate}});
+  }
+};
+
+socket.on("signal",async({data})=>{
+  if(data.sdp){
+    await pc.setRemoteDescription(data.sdp);
+    if(data.sdp.type==="answer"){
+      // connected
+    }
+  }
+  if(data.candidate){
+    await pc.addIceCandidate(data.candidate);
+  }
+});
 </script>
 </body>
 </html>
