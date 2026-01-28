@@ -1,18 +1,68 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Live View</title>
+<title>CourtStream – Viewer</title>
+
 <style>
-body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
-video{width:100vw;height:100vh;object-fit:contain;background:#000}
-.notice{position:absolute;top:20px;left:50%;transform:translateX(-50%);
-background:#161922;border:1px solid #262b3d;padding:8px 14px;border-radius:999px}
+body{
+  margin:0;background:#0f1115;
+  display:flex;align-items:center;justify-content:center;
+  height:100vh
+}
+video{
+  width:100%;height:100%;
+  object-fit:contain;background:#000
+}
+.badge{
+  position:absolute;top:14px;left:50%;
+  transform:translateX(-50%);
+  background:#161922;color:#e6e6eb;
+  padding:6px 14px;border-radius:999px;
+  border:1px solid #262b3d;
+  font-size:13px
+}
 </style>
 </head>
 
 <body>
-<div class="notice">Viewer mode • Controls disabled</div>
-<video autoplay></video>
+<div class="badge">Viewer Mode</div>
+<video id="video" autoplay playsinline></video>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const params=new URLSearchParams(location.search);
+const ROOM=params.get("stream");
+if(!ROOM){alert("Invalid stream");location.href="/"}
+
+const socket=io();
+const pc=new RTCPeerConnection();
+
+socket.emit("join",{room:ROOM,role:"viewer"});
+
+pc.ontrack=e=>{
+  document.getElementById("video").srcObject=e.streams[0];
+};
+
+pc.onicecandidate=e=>{
+  if(e.candidate){
+    socket.emit("signal",{data:{candidate:e.candidate}});
+  }
+};
+
+socket.on("signal",async({data})=>{
+  if(data.sdp){
+    await pc.setRemoteDescription(data.sdp);
+    if(data.sdp.type==="offer"){
+      const ans=await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      socket.emit("signal",{data:{sdp:ans}});
+    }
+  }
+  if(data.candidate){
+    await pc.addIceCandidate(data.candidate);
+  }
+});
+</script>
 </body>
 </html>
