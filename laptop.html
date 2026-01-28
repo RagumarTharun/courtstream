@@ -5,21 +5,23 @@
 
   <style>
     :root {
-      --bg-primary: #0f1115;
-      --bg-panel: #161922;
-      --border: #262b3d;
+      /* Sports-Tech Analytics Theme */
+      --bg-primary: #0b0e14;
+      --bg-panel: #121726;
+      --bg-panel-2: #0f1320;
 
-      --text-primary: #e6e6eb;
-      --text-muted: #9aa0b4;
+      --border: #1f2937;
 
-      --accent: #3b82f6;
-      --danger: #ef4444;
+      --text-primary: #e5e7eb;
+      --text-muted: #9ca3af;
+
+      --accent: #22d3ee;   /* cyan analytics highlight */
+      --danger: #ef4444;   /* record */
       --success: #22c55e;
+      --warning: #f59e0b;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -27,50 +29,90 @@
       color: var(--text-primary);
       font-family: system-ui, -apple-system, BlinkMacSystemFont,
                    "Segoe UI", Roboto, Ubuntu, Cantarell;
-      padding: 16px;
+      padding: 14px;
     }
 
     h2 {
       margin: 0 0 12px;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 600;
+      letter-spacing: 0.3px;
     }
 
+    /* ===== TOP BAR ===== */
     #top {
       display: flex;
       gap: 10px;
       align-items: center;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
       flex-wrap: wrap;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
     }
 
     button {
-      background: var(--bg-panel);
+      background: var(--bg-panel-2);
       color: var(--text-primary);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 8px 12px;
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
+      letter-spacing: 0.3px;
     }
 
     button:hover {
       border-color: var(--accent);
-    }
-
-    #timer {
-      font-weight: 600;
-      color: var(--text-primary);
+      color: var(--accent);
     }
 
     .recording {
       background: var(--danger) !important;
       border-color: var(--danger);
+      color: white !important;
     }
 
+    #timer {
+      font-weight: 600;
+      color: var(--accent);
+      margin-left: auto;
+    }
+
+    /* ===== QR ===== */
+    #qrBox {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    /* ===== PROGRAM FEED ===== */
+    #program {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      width: 380px;
+      background: var(--bg-panel);
+      border: 2px solid var(--danger);
+      border-radius: 12px;
+      padding: 6px;
+      z-index: 10;
+    }
+
+    #program video {
+      width: 100%;
+      border-radius: 8px;
+      background: black;
+    }
+
+    /* ===== CAMERA GRID ===== */
     #videos {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       gap: 14px;
     }
 
@@ -79,6 +121,17 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 10px;
+      position: relative;
+    }
+
+    .camera-box::before {
+      content: "CAMERA";
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
     }
 
     video {
@@ -102,50 +155,30 @@
     }
 
     input {
-      background: transparent;
+      background: var(--bg-panel-2);
       border: 1px solid var(--border);
       color: var(--text-primary);
       border-radius: 6px;
       padding: 4px 6px;
-      font-size: 12px;
+      font-size: 11px;
     }
 
-    #program {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      width: 360px;
-      background: var(--bg-panel);
-      border: 2px solid var(--danger);
-      border-radius: 12px;
-      padding: 6px;
-      z-index: 10;
-    }
-
-    #qrBox {
-      background: var(--bg-panel);
-      padding: 12px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      margin-bottom: 14px;
-      display: none;
-    }
   </style>
 </head>
 
 <body>
 
-<h2>🎬 CourtStream – Director</h2>
+<h2>🏀 CourtStream – Live Analysis Director</h2>
 
 <div id="top">
-  <button id="recordBtn">▶ Start Recording</button>
+  <button id="recordBtn">● RECORD</button>
+  <button id="qrBtn">📱 ADD CAMERA</button>
+  <button onclick="location.href='playback.html'">📊 ANALYSIS</button>
   <span id="timer">00:00</span>
-  <button id="qrBtn">📱 Scan QR to Connect</button>
-  <button onclick="location.href='playback.html'">▶ Playback</button>
 </div>
 
 <div id="qrBox">
-  <b>Scan QR to join as Camera or Viewer</b><br><br>
+  <strong>Scan to Join as Camera / Viewer</strong><br><br>
   <canvas id="qrCanvas"></canvas>
 </div>
 
@@ -290,11 +323,11 @@ function addCamera(id, stream){
   });
 
   const reset=document.createElement("button");
-  reset.innerText="Reset";
+  reset.innerText="RESET";
   reset.onclick=()=>socket.emit("control",{to:id,type:"reset"});
 
   const flip=document.createElement("button");
-  flip.innerText="Flip";
+  flip.innerText="FLIP";
   flip.onclick=()=>socket.emit("control",{to:id,type:"flip"});
 
   row2.append(reset,flip);
@@ -362,7 +395,7 @@ renderProgram();
 recordBtn.onclick = ()=>{
   isRecording = !isRecording;
   recordBtn.classList.toggle("recording",isRecording);
-  recordBtn.innerText = isRecording ? "⏹ Stop Recording" : "▶ Start Recording";
+  recordBtn.innerText = isRecording ? "■ STOP" : "● RECORD";
 
   if (isRecording){
     seconds=0;
