@@ -1,1 +1,32 @@
-<!DOCTYPE html><html><head><title>CourtStream</title><link rel='stylesheet' href='theme.css'></head><body style='display:flex;flex-direction:column;align-items:center;padding:40px'><h1>CourtStream</h1><input placeholder='Search active court streams' style='width:360px;margin:20px 0'><button class='primary'>+ Create a Court Stream</button></body></html>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CourtStream</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body style="padding:40px;max-width:700px;margin:auto">
+
+<h1>CourtStream</h1>
+<p style="color:var(--muted)">
+  Live multi-camera sports streams near you
+</p>
+
+<input placeholder="Search active court streams near you">
+
+<div style="margin:20px 0">
+  <button class="primary" onclick="location.href='create.html'">
+    + Create a Court Stream
+  </button>
+</div>
+
+<h3>Active Court Streams</h3>
+
+<div
+  style="padding:16px;border:1px solid var(--border);
+         border-radius:12px;cursor:pointer"
+  onclick="location.href='join.html'">
+  JBA Court – Evening Practice
+</div>
+
+</body>
+</html>
