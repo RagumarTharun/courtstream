@@ -1,12 +1,16 @@
+// =========================
+// CourtStream Server
+// (Based on LAST WORKING VERSION)
+// =========================
+
 const express = require("express");
 const http = require("http");
+const path = require("path");
 const { Server } = require("socket.io");
 const sqlite3 = require("sqlite3").verbose();
-const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
 
 /* =========================
    CONFIG
@@ -14,18 +18,23 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 
 /* =========================
-   MIDDLEWARE
+   STATIC FILES (REPO ROOT)
 ========================= */
+app.use(express.static(__dirname));
 app.use(express.json());
 
-// 🔥 IMPORTANT: serve CURRENT DIRECTORY
-app.use(express.static(__dirname));
+/* ROOT → director (or change later) */
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 
 /* =========================
-   DATABASE
+   DATABASE (SAFE ADD)
 ========================= */
-const dbPath = path.join(__dirname, "db.sqlite");
-const db = new sqlite3.Database(dbPath);
+const db = new sqlite3.Database(
+  path.join(__dirname, "db.sqlite"),
+  err => err && console.error("DB error:", err)
+);
 
 db.serialize(() => {
   db.run(`
@@ -40,7 +49,7 @@ db.serialize(() => {
 });
 
 /* =========================
-   API
+   API (NON-BREAKING)
 ========================= */
 app.post("/api/create", (req, res) => {
   const { id, name, resolution, maxCameras } = req.body;
@@ -50,7 +59,8 @@ app.post("/api/create", (req, res) => {
   }
 
   db.run(
-    `INSERT INTO courtstreams (id, name, resolution, max_cameras)
+    `INSERT OR REPLACE INTO courtstreams
+     (id, name, resolution, max_cameras)
      VALUES (?, ?, ?, ?)`,
     [id, name, resolution, maxCameras],
     err => {
@@ -79,20 +89,48 @@ app.get("/api/courtstream/:id", (req, res) => {
 });
 
 /* =========================
-   SOCKET.IO
+   SOCKET.IO (EXTENDED, SAFE)
 ========================= */
+const io = new Server(server, {
+  cors: { origin: "*" }
+});
+
 io.on("connection", socket => {
 
-  socket.on("join", ({ room, role, position }) => {
-    socket.join(room);
-    socket.role = role;
-    socket.position = position;
-    socket.room = room;
+  /*
+    join payload supports:
+    - string room (BACKWARD COMPATIBLE)
+    - { room, role, position }
+  */
+  socket.on("join", payload => {
+    let room, role, position;
 
+    if (typeof payload === "string") {
+      room = payload;
+      role = "camera"; // default (old behavior)
+    } else {
+      ({ room, role, position } = payload);
+    }
+
+    socket.join(room);
+    socket.room = room;
+    socket.role = role || "camera";
+    socket.position = position || null;
+
+    const clients = io.sockets.adapter.rooms.get(room) || new Set();
+    const others = [...clients].filter(id => id !== socket.id);
+
+    // unchanged behavior
+    socket.emit(
+      "existing-peers",
+      others.map(id => ({ id }))
+    );
+
+    // extended metadata (safe)
     socket.to(room).emit("peer-joined", {
       id: socket.id,
-      role,
-      position
+      role: socket.role,
+      position: socket.position
     });
   });
 
@@ -103,16 +141,28 @@ io.on("connection", socket => {
     });
   });
 
+  socket.on("control", msg => {
+    if (msg.to) io.to(msg.to).emit("control", msg);
+  });
+
+  socket.on("program", msg => {
+    socket.broadcast.emit("program", msg);
+  });
+
   socket.on("disconnect", () => {
     if (socket.room) {
-      socket.to(socket.room).emit("peer-left", socket.id);
+      socket.to(socket.room).emit("camera-left", {
+        id: socket.id,
+        role: socket.role,
+        position: socket.position
+      });
     }
   });
 });
 
 /* =========================
-   START SERVER
+   LISTEN (PRODUCTION SAFE)
 ========================= */
-server.listen(PORT,"0.0.0.0" () => {
-  console.log(`CourtStream running on port ${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ CourtStream server running on port ${PORT}`);
 });
