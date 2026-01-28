@@ -60,69 +60,54 @@ select,button{
   </div>
 
 </div>
-
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* =====================
-   PARAMS & STATE
-===================== */
-const params=new URLSearchParams(location.search);
-const ROOM=params.get("stream");
-if(!ROOM){alert("Invalid stream");location.href="/"}
+const params = new URLSearchParams(location.search);
+const ROOM = params.get("stream");
+if (!ROOM) { alert("Invalid stream"); location.href = "/"; }
 
-const socket=io();
-const pc=new RTCPeerConnection();
+const socket = io();
+const pc = new RTCPeerConnection();
 let localStream;
 
-/* =====================
-   CAMERA START (USER GESTURE)
-===================== */
-document.getElementById("joinBtn").onclick=async()=>{
-  localStream=await navigator.mediaDevices.getUserMedia({
-    video:{
-      facingMode:"environment",
-      width:{ideal:1280},
-      height:{ideal:720}
-    },
-    audio:true
+const video = document.getElementById("localVideo");
+
+document.getElementById("joinBtn").onclick = async () => {
+  localStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment", width: 1280, height: 720 },
+    audio: true
   });
 
-  document.getElementById("localVideo").srcObject=localStream;
+  video.srcObject = localStream;
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
-  localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
-
-  socket.emit("join",{
-    room:ROOM,
-    role:"camera",
-    position:position.value
+  socket.emit("join", {
+    room: ROOM,
+    role: "camera",
+    position: position.value
   });
-
-  const offer=await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  socket.emit("signal",{to:"director",data:{sdp:offer}});
 };
 
-/* =====================
-   SIGNALING
-===================== */
-pc.onicecandidate=e=>{
-  if(e.candidate){
-    socket.emit("signal",{data:{candidate:e.candidate}});
+pc.onicecandidate = e => {
+  if (e.candidate) {
+    socket.emit("signal", { data: { candidate: e.candidate } });
   }
 };
 
-socket.on("signal",async({data})=>{
-  if(data.sdp){
+socket.on("signal", async ({ data }) => {
+  if (data.sdp) {
     await pc.setRemoteDescription(data.sdp);
-    if(data.sdp.type==="answer"){
-      // connected
+    if (data.sdp.type === "offer") {
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("signal", { data: { sdp: answer } });
     }
   }
-  if(data.candidate){
+  if (data.candidate) {
     await pc.addIceCandidate(data.candidate);
   }
 });
 </script>
+
 </body>
 </html>
