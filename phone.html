@@ -4,10 +4,7 @@
   <title>Camera</title>
   <link rel="stylesheet" href="theme.css">
 </head>
-<body style="margin:0;
-             height:100vh;
-             display:flex;
-             flex-direction:column">
+<body style="margin:0;height:100vh;display:flex;flex-direction:column">
 
 <div style="flex:1;background:black">
   <video id="cam" autoplay playsinline muted></video>
@@ -20,11 +17,19 @@
   <button onclick="flip()">Flip</button>
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
+const socket = io();
+const params = new URLSearchParams(location.search);
+const room = params.get("room");
+const role = sessionStorage.getItem("role");
+const position = sessionStorage.getItem("cameraPosition");
+
+let pc;
 let stream;
 let facing = "environment";
 
-async function start() {
+async function startCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: facing },
     audio: false
@@ -34,7 +39,7 @@ async function start() {
 
 function flip() {
   facing = facing === "environment" ? "user" : "environment";
-  start();
+  startCamera();
 }
 
 function setZoom(z) {
@@ -46,7 +51,32 @@ function setZoom(z) {
   }
 }
 
-start();
+socket.emit("join", room, { role, position });
+
+socket.on("signal", async ({ from, data }) => {
+  if (data.type === "offer") {
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+    pc.onicecandidate = e =>
+      e.candidate && socket.emit("signal", { to: from, data: e.candidate });
+
+    await pc.setRemoteDescription(data);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    socket.emit("signal", { to: from, data: answer });
+  }
+
+  if (data.candidate && pc) {
+    await pc.addIceCandidate(data);
+  }
+});
+
+startCamera();
 </script>
 
 </body>
