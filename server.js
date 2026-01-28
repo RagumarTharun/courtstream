@@ -8,13 +8,24 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static("public"));
+/* =========================
+   CONFIG
+========================= */
+const PORT = process.env.PORT || 3000;
+
+/* =========================
+   MIDDLEWARE
+========================= */
 app.use(express.json());
+
+// 🔥 IMPORTANT: serve CURRENT DIRECTORY
+app.use(express.static(__dirname));
 
 /* =========================
    DATABASE
 ========================= */
-const db = new sqlite3.Database("./db.sqlite");
+const dbPath = path.join(__dirname, "db.sqlite");
+const db = new sqlite3.Database(dbPath);
 
 db.serialize(() => {
   db.run(`
@@ -29,28 +40,46 @@ db.serialize(() => {
 });
 
 /* =========================
-   CREATE COURTSTREAM
+   API
 ========================= */
 app.post("/api/create", (req, res) => {
   const { id, name, resolution, maxCameras } = req.body;
+
+  if (!id || !name) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+
   db.run(
-    `INSERT INTO courtstreams (id,name,resolution,max_cameras)
-     VALUES (?,?,?,?)`,
+    `INSERT INTO courtstreams (id, name, resolution, max_cameras)
+     VALUES (?, ?, ?, ?)`,
     [id, name, resolution, maxCameras],
-    () => res.json({ ok: true })
+    err => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: "DB error" });
+      }
+      res.json({ ok: true });
+    }
   );
 });
 
 app.get("/api/courtstream/:id", (req, res) => {
   db.get(
-    `SELECT * FROM courtstreams WHERE id=?`,
+    `SELECT * FROM courtstreams WHERE id = ?`,
     [req.params.id],
-    (err, row) => res.json(row)
+    (err, row) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: "DB error" });
+      }
+      if (!row) return res.status(404).json({ error: "Not found" });
+      res.json(row);
+    }
   );
 });
 
 /* =========================
-   SOCKETS
+   SOCKET.IO
 ========================= */
 io.on("connection", socket => {
 
@@ -67,18 +96,23 @@ io.on("connection", socket => {
     });
   });
 
-  socket.on("signal", data => {
-    io.to(data.to).emit("signal", {
+  socket.on("signal", ({ to, data }) => {
+    io.to(to).emit("signal", {
       from: socket.id,
-      data: data.data
+      data
     });
   });
 
   socket.on("disconnect", () => {
-    socket.to(socket.room).emit("peer-left", socket.id);
+    if (socket.room) {
+      socket.to(socket.room).emit("peer-left", socket.id);
+    }
   });
 });
 
-server.listen(3000,"0.0.0.0" () =>
-  console.log("CourtStream running on http://localhost:3000")
-);
+/* =========================
+   START SERVER
+========================= */
+server.listen(PORT, () => {
+  console.log(`CourtStream running on port ${PORT}`);
+});
