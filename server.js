@@ -1,10 +1,9 @@
 // =========================
-// CourtStream Server (FINAL, SESSION-SAFE)
+// CourtStream Server (FINAL)
 // =========================
 
 const express = require("express");
 const http = require("http");
-const path = require("path");
 const crypto = require("crypto");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
@@ -61,14 +60,14 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,        // REQUIRED for HTTPS
+      secure: true,
       sameSite: "lax"
     }
   })
 );
 
 /* =========================
-   AUTH HELPERS
+   AUTH MIDDLEWARE
 ========================= */
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.sendStatus(401);
@@ -104,7 +103,7 @@ app.post("/api/login", (req, res) => {
       const ok = await bcrypt.compare(password, user.password);
       if (!ok) return res.sendStatus(401);
 
-      // ✅ STORE USER IN SESSION
+      // ✅ STORE USER CORRECTLY
       req.session.user = {
         id: user.id,
         email: user.email
@@ -116,18 +115,11 @@ app.post("/api/login", (req, res) => {
 });
 
 app.post("/api/logout", (req, res) => {
-  req.session.destroy(() => {
-    res.sendStatus(200);
-  });
+  req.session.destroy(() => res.sendStatus(200));
 });
 
-/* =========================
-   SESSION CHECK
-========================= */
 app.get("/me", (req, res) => {
-  if (!req.session.user) {
-    return res.sendStatus(401);
-  }
+  if (!req.session.user) return res.sendStatus(401);
   res.json(req.session.user);
 });
 
@@ -154,6 +146,10 @@ app.post("/api/streams", requireAuth, (req, res) => {
   const id = crypto.randomUUID();
   const { name } = req.body;
 
+  if (!name || name.length < 3) {
+    return res.status(400).json({ error: "Invalid name" });
+  }
+
   db.run(
     "INSERT INTO streams (id, name, creator_id) VALUES (?, ?, ?)",
     [id, name, req.session.user.id],
@@ -165,7 +161,7 @@ app.post("/api/streams", requireAuth, (req, res) => {
 });
 
 /* =========================
-   SOCKET.IO
+   SOCKET.IO (SESSION AWARE)
 ========================= */
 io.use((socket, next) => {
   session({
@@ -173,7 +169,10 @@ io.use((socket, next) => {
     secret: "REPLACE_WITH_LONG_RANDOM_SECRET",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: true, sameSite: "lax" }
+    cookie: {
+      secure: true,
+      sameSite: "lax"
+    }
   })(socket.request, {}, next);
 });
 
@@ -202,6 +201,12 @@ io.on("connection", socket => {
 
   socket.on("signal", ({ to, data }) => {
     if (to) io.to(to).emit("signal", { from: socket.id, data });
+  });
+
+  socket.on("disconnect", () => {
+    if (socket.room) {
+      socket.to(socket.room).emit("peer-left", { id: socket.id });
+    }
   });
 });
 
