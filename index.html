@@ -1,115 +1,103 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>CourtStream</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="stylesheet" href="theme.css" />
+  <meta charset="UTF-8" />
+  <title>CourtStream</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- KEEP YOUR EXISTING CSS -->
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
 
-<div class="container">
-  <h1 id="greeting">Welcome to CourtStream</h1>
-  <p class="subtitle" id="subtitle">
-    Discover live sports streams or create your own.
-  </p>
+  <h1 id="title">Welcome to CourtStream</h1>
+  <p id="subtitle">Discover live sports streams or create your own.</p>
 
-  <div class="actions" id="actions"></div>
+  <div id="auth-buttons"></div>
 
   <input
     id="search"
-    class="search"
+    type="text"
     placeholder="Search streams (e.g. JBA, Final, Court 1)"
-    autocomplete="off"
   />
 
-  <div class="stream-list" id="streamList"></div>
-</div>
+  <div id="streams"></div>
 
 <script>
-let allStreams = [];
-let loggedIn = false;
-
-/* ======================
+/* =========================
    AUTH STATE
-====================== */
-async function checkAuth() {
-  const actions = document.getElementById("actions");
+========================= */
+async function loadAuth() {
+  const box = document.getElementById("auth-buttons");
 
   try {
     const res = await fetch("/me");
     if (!res.ok) throw new Error();
 
     const user = await res.json();
-    loggedIn = true;
 
-    document.getElementById("greeting").innerText =
+    document.getElementById("title").innerText =
       `Hello ${user.email}`;
     document.getElementById("subtitle").innerText =
       "Pick a stream to join or create your own.";
 
-    actions.innerHTML = `
-      <button class="primary" onclick="location.href='create.html'">
-        + Create Stream
+    box.innerHTML = `
+      <button onclick="location.href='create.html'">
+        Create Stream
       </button>
-      <button class="secondary" onclick="logout()">
-        Logout
-      </button>
+      <button onclick="logout()">Logout</button>
     `;
   } catch {
-    actions.innerHTML = `
-      <button class="primary" onclick="location.href='login.html'">
-        Login
-      </button>
-      <button class="secondary" onclick="location.href='register.html'">
-        Register
-      </button>
+    box.innerHTML = `
+      <button onclick="location.href='login.html'">Login</button>
+      <button onclick="location.href='register.html'">Register</button>
     `;
   }
 }
 
-/* ======================
+/* =========================
    LOAD STREAMS
-====================== */
+========================= */
+let allStreams = [];
+
 async function loadStreams() {
   const res = await fetch("/api/streams");
   const rows = await res.json();
 
-  // 🔧 FIX: normalize DB rows → string names
+  // 🔒 HARDENED: handle all shapes safely
   allStreams = rows
-    .map(r => r.name)
+    .map(r => typeof r === "string" ? r : r?.name)
     .filter(Boolean);
 
   renderStreams(allStreams);
 }
 
 function renderStreams(list) {
-  const box = document.getElementById("streamList");
-  box.innerHTML = "";
+  const container = document.getElementById("streams");
+  container.innerHTML = "";
 
   if (!list.length) {
-    box.innerHTML = `<div class="empty">No streams available</div>`;
+    container.innerHTML = "<p>No streams available</p>";
     return;
   }
 
   list.forEach(name => {
     const div = document.createElement("div");
-    div.className = "stream-item";
+    div.className = "stream"; // <-- YOUR OLD CLASS
     div.innerHTML = `
-      <span class="stream-name">${name}</span>
-      <span class="join">Join →</span>
+      <span>${name}</span>
+      <button>Join</button>
     `;
     div.onclick = () => {
       location.href = `join.html?stream=${encodeURIComponent(name)}`;
     };
-    box.appendChild(div);
+    container.appendChild(div);
   });
 }
 
-/* ======================
+/* =========================
    SEARCH
-====================== */
+========================= */
 document.getElementById("search").addEventListener("input", e => {
   const q = e.target.value.toLowerCase();
   renderStreams(
@@ -117,16 +105,16 @@ document.getElementById("search").addEventListener("input", e => {
   );
 });
 
-/* ======================
+/* =========================
    LOGOUT
-====================== */
+========================= */
 async function logout() {
   await fetch("/logout", { method: "POST" });
   location.reload();
 }
 
 /* INIT */
-checkAuth();
+loadAuth();
 loadStreams();
 </script>
 
