@@ -91,25 +91,28 @@ app.post("/api/register", async (req, res) => {
   );
 });
 
-app.get("/api/streams", (req, res) => {
-  db.all(
-    `
-    SELECT id, name, creator
-    FROM streams
-    WHERE name IS NOT NULL AND TRIM(name) != ''
-    ORDER BY created_at DESC
-    `,
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json([]);
-      }
-      res.json(rows);
+app.post("/api/login", (req, res) => {
+  const { email, password } = req.body;
+
+  db.get(
+    "SELECT id, email, password FROM users WHERE email = ?",
+    [email],
+    async (err, user) => {
+      if (!user) return res.sendStatus(401);
+
+      const ok = await bcrypt.compare(password, user.password);
+      if (!ok) return res.sendStatus(401);
+
+      // ✅ STORE USER CORRECTLY
+      req.session.user = {
+        id: user.id,
+        email: user.email
+      };
+
+      res.sendStatus(200);
     }
   );
 });
-
 
 app.post("/api/logout", (req, res) => {
   req.session.destroy(() => res.sendStatus(200));
