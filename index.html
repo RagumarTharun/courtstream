@@ -4,8 +4,9 @@
   <meta charset="UTF-8" />
   <title>CourtStream</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- KEEP YOUR EXISTING CSS -->
-  <link rel="stylesheet" href="style.css" />
+
+  <!-- KEEP EXACTLY WHAT YOUR OLD FILE HAD -->
+  <link rel="stylesheet" href="index.css" />
 </head>
 
 <body>
@@ -13,7 +14,7 @@
   <h1 id="title">Welcome to CourtStream</h1>
   <p id="subtitle">Discover live sports streams or create your own.</p>
 
-  <div id="auth-buttons"></div>
+  <div id="auth"></div>
 
   <input
     id="search"
@@ -21,23 +22,34 @@
     placeholder="Search streams (e.g. JBA, Final, Court 1)"
   />
 
-  <div id="streams"></div>
+  <div id="streamList"></div>
 
 <script>
+let allStreams = [];
+
 /* =========================
-   AUTH STATE
+   AUTH CHECK (ROBUST)
 ========================= */
 async function loadAuth() {
-  const box = document.getElementById("auth-buttons");
+  const box = document.getElementById("auth");
 
   try {
     const res = await fetch("/me");
-    if (!res.ok) throw new Error();
+    if (!res.ok) throw new Error("not logged");
 
-    const user = await res.json();
+    const data = await res.json();
+
+    // 🔒 HANDLE ALL POSSIBLE SHAPES
+    const email =
+      data.email ||
+      data.user?.email ||
+      data.username ||
+      null;
+
+    if (!email) throw new Error("no identity");
 
     document.getElementById("title").innerText =
-      `Hello ${user.email}`;
+      `Hello ${email}`;
     document.getElementById("subtitle").innerText =
       "Pick a stream to join or create your own.";
 
@@ -56,15 +68,12 @@ async function loadAuth() {
 }
 
 /* =========================
-   LOAD STREAMS
+   STREAMS
 ========================= */
-let allStreams = [];
-
 async function loadStreams() {
   const res = await fetch("/api/streams");
   const rows = await res.json();
 
-  // 🔒 HARDENED: handle all shapes safely
   allStreams = rows
     .map(r => typeof r === "string" ? r : r?.name)
     .filter(Boolean);
@@ -73,25 +82,25 @@ async function loadStreams() {
 }
 
 function renderStreams(list) {
-  const container = document.getElementById("streams");
-  container.innerHTML = "";
+  const box = document.getElementById("streamList");
+  box.innerHTML = "";
 
   if (!list.length) {
-    container.innerHTML = "<p>No streams available</p>";
+    box.innerHTML = "<p>No streams found</p>";
     return;
   }
 
   list.forEach(name => {
-    const div = document.createElement("div");
-    div.className = "stream"; // <-- YOUR OLD CLASS
-    div.innerHTML = `
+    const row = document.createElement("div");
+    row.className = "stream"; // YOUR EXISTING CLASS
+    row.innerHTML = `
       <span>${name}</span>
-      <button>Join</button>
+      <span>Join →</span>
     `;
-    div.onclick = () => {
+    row.onclick = () => {
       location.href = `join.html?stream=${encodeURIComponent(name)}`;
     };
-    container.appendChild(div);
+    box.appendChild(row);
   });
 }
 
