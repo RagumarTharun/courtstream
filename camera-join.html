@@ -3,132 +3,156 @@
 <head>
 <meta charset="UTF-8">
 <title>Camera Preview – CourtStream</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
 <style>
+:root{
+  --bg:#0f1115;
+  --card:#161922;
+  --border:#262b3d;
+  --blue:#3b82f6;
+  --red:#b91c1c;
+}
+
 body{
   margin:0;
-  background:#0f1115;
-  color:#e6e6eb;
+  background:var(--bg);
+  color:#fff;
   font-family:system-ui;
 }
-.page{
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-.layout{
-  display:flex;
-  gap:32px;
-  max-width:980px;
-  width:100%;
-  padding:32px;
-}
-.preview-wrap{
-  position:relative;
-  flex:1.2;
+
+/* FULL SCREEN PREVIEW */
+.preview{
+  position:fixed;
+  inset:0;
+  background:#000;
 }
 video{
   width:100%;
-  aspect-ratio:16/9;
-  background:#000;
-  border-radius:16px;
+  height:100%;
+  object-fit:cover;
 }
-.preview-controls{
+
+/* TOP BAR */
+.topbar{
   position:absolute;
-  bottom:12px;
+  top:0;
+  left:0;
+  right:0;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px;
+  background:linear-gradient(to bottom,rgba(0,0,0,.6),transparent);
+  font-size:15px;
+}
+
+/* CENTER CONTROLS */
+.center-controls{
+  position:absolute;
   left:50%;
+  bottom:140px;
   transform:translateX(-50%);
   display:flex;
-  gap:12px;
+  gap:22px;
 }
-.ctrl-btn{
-  width:44px;
-  height:44px;
+.ctrl{
+  width:64px;
+  height:64px;
   border-radius:50%;
   border:none;
-  background:rgba(0,0,0,.55);
+  background:rgba(0,0,0,.6);
   color:#fff;
-  font-size:18px;
-  cursor:pointer;
+  font-size:24px;
 }
-.ctrl-btn.off{
-  background:#b91c1c;
+.ctrl.off{
+  background:var(--red);
 }
-.side{
-  flex:0.8;
-  background:#161922;
-  border:1px solid #262b3d;
-  border-radius:16px;
-  padding:24px;
-  display:flex;
-  flex-direction:column;
-  justify-content:space-between;
+
+/* BOTTOM SHEET */
+.sheet{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  background:var(--card);
+  border-top-left-radius:22px;
+  border-top-right-radius:22px;
+  padding:20px;
+  border-top:1px solid var(--border);
 }
-h2{margin-top:0}
-.muted{
+.label{
+  font-size:13px;
   color:#9aa0b4;
-  font-size:14px;
-}
-.join{
-  margin-top:24px;
-  padding:12px;
-  border-radius:999px;
-  border:none;
-  background:#3b82f6;
-  color:#fff;
-  font-size:15px;
-  cursor:pointer;
+  margin-bottom:6px;
 }
 .range{
   width:100%;
-  margin-top:12px;
+}
+.row{
+  display:flex;
+  gap:12px;
+  margin-top:14px;
+}
+.small{
+  flex:1;
+  padding:10px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:#0f1115;
+  color:#fff;
+}
+.join{
+  width:100%;
+  margin-top:18px;
+  padding:14px;
+  border-radius:999px;
+  border:none;
+  background:var(--blue);
+  color:#fff;
+  font-size:16px;
 }
 </style>
 </head>
 
 <body>
 
-<div class="page">
-  <div class="layout">
+<div class="preview">
+  <video id="video" autoplay muted playsinline></video>
 
-    <!-- LEFT: CAMERA PREVIEW -->
-    <div class="preview-wrap">
-      <video id="video" autoplay muted playsinline></video>
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <span>☰</span>
+    <strong>CourtStream</strong>
+    <span>🔊</span>
+  </div>
 
-      <div class="preview-controls">
-        <button id="camBtn" class="ctrl-btn" onclick="toggleCam()">🎥</button>
-        <button id="micBtn" class="ctrl-btn" onclick="toggleMic()">🎙️</button>
-        <button class="ctrl-btn" onclick="flip()">🔄</button>
-      </div>
+  <!-- CENTER CONTROLS -->
+  <div class="center-controls">
+    <button id="micBtn" class="ctrl" onclick="toggleMic()">🎙️</button>
+    <button id="camBtn" class="ctrl" onclick="toggleCam()">🎥</button>
+  </div>
+
+  <!-- BOTTOM SHEET -->
+  <div class="sheet">
+    <div class="label">Zoom</div>
+    <input
+      class="range"
+      type="range"
+      min="1"
+      max="3"
+      step="0.1"
+      value="1"
+      onchange="zoom(this.value)"
+    >
+
+    <div class="row">
+      <button class="small" onclick="flip()">🔄 Flip</button>
     </div>
 
-    <!-- RIGHT: INFO -->
-    <div class="side">
-      <div>
-        <h2>Ready to join?</h2>
-        <p class="muted">
-          Check your camera and microphone before joining the stream.
-        </p>
-
-        <p class="muted">Zoom</p>
-        <input
-          class="range"
-          type="range"
-          min="1"
-          max="3"
-          step="0.1"
-          value="1"
-          onchange="zoom(this.value)"
-        >
-      </div>
-
-      <button class="join" onclick="joinStream()">
-        Join Stream
-      </button>
-    </div>
-
+    <button class="join" onclick="joinStream()">
+      Join Stream
+    </button>
   </div>
 </div>
 
@@ -138,51 +162,47 @@ const streamId =
   new URLSearchParams(location.search).get("stream");
 
 const video = document.getElementById("video");
-const camBtn = document.getElementById("camBtn");
 const micBtn = document.getElementById("micBtn");
+const camBtn = document.getElementById("camBtn");
 
 let mediaStream;
-let camOn = true;
 let micOn = true;
-let facing = "environment";
+let camOn = true;
+let facing = "user";
 
 const socket = io();
 
-/* =========================
-   PREVIEW ON LOAD
-========================= */
+/* CAMERA PREVIEW */
 (async () => {
-  try {
+  try{
     mediaStream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:facing },
+      video:{facingMode:facing},
       audio:true
     });
     video.srcObject = mediaStream;
-  } catch {
-    alert("Camera & microphone access required");
+  }catch{
+    alert("Camera & microphone permission required");
   }
 })();
 
-/* =========================
-   CONTROLS
-========================= */
-function toggleCam(){
-  camOn = !camOn;
-  mediaStream.getVideoTracks()[0].enabled = camOn;
-  camBtn.classList.toggle("off", !camOn);
-}
-
+/* CONTROLS */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
-  micBtn.classList.toggle("off", !micOn);
+  micBtn.classList.toggle("off",!micOn);
+}
+
+function toggleCam(){
+  camOn = !camOn;
+  mediaStream.getVideoTracks()[0].enabled = camOn;
+  camBtn.classList.toggle("off",!camOn);
 }
 
 async function flip(){
-  facing = facing === "user" ? "environment" : "user";
+  facing = facing==="user"?"environment":"user";
   mediaStream.getTracks().forEach(t=>t.stop());
   mediaStream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:facing },
+    video:{facingMode:facing},
     audio:true
   });
   video.srcObject = mediaStream;
@@ -190,30 +210,16 @@ async function flip(){
 
 function zoom(z){
   const track = mediaStream.getVideoTracks()[0];
-  track.applyConstraints({
-    advanced:[{ zoom:Number(z) }]
-  });
+  track.applyConstraints({advanced:[{zoom:Number(z)}]});
 }
 
-/* =========================
-   JOIN STREAM (FIXED)
-========================= */
+/* JOIN */
 function joinStream(){
-  if(!streamId){
-    alert("Invalid stream");
-    return;
-  }
-
-  // Notify server that camera is ready
   socket.emit("join",{
     room:streamId,
     role:"camera"
   });
 
-  // Store media stream globally for next page
-  window.localStream = mediaStream;
-
-  // Move into actual camera session (next step)
   location.href = `camera-live.html?stream=${streamId}`;
 }
 </script>
