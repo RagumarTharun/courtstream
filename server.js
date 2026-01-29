@@ -92,7 +92,21 @@ app.post("/api/login", (req, res) => {
     }
   );
 });
+// Public: list all streams (for homepage discovery)
+app.get("/api/streams", (req, res) => {
+  db.all(
+    "SELECT name FROM streams ORDER BY created_at DESC",
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: "db_error" });
+      }
 
+      res.json(rows.map(r => r.name));
+    }
+  );
+});
 /* =========================
    STREAMS
 ========================= */
