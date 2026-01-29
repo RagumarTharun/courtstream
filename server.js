@@ -144,22 +144,56 @@ app.get("/api/streams", (req, res) => {
 
 app.post("/api/streams", requireAuth, (req, res) => {
   const id = crypto.randomUUID();
-  const { name } = req.body;
+
+  const {
+    name,
+    max_cameras = 6,
+    resolution = "720p",
+    camera_access = "open",
+    camera_pass = null,
+    viewer_access = "public",
+    viewer_pass = null
+  } = req.body;
 
   if (!name || name.length < 3) {
-    return res.status(400).json({ error: "Invalid name" });
+    return res.status(400).json({ error: "Invalid stream name" });
   }
 
   db.run(
-    "INSERT INTO streams (id, name, creator_id) VALUES (?, ?, ?)",
-    [id, name, req.session.user.id],
+    `
+    INSERT INTO streams (
+      id,
+      name,
+      creator,
+      max_cameras,
+      resolution,
+      camera_access,
+      camera_pass,
+      viewer_access,
+      viewer_pass
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      id,
+      name,
+      req.session.user.id,
+      max_cameras,
+      resolution,
+      camera_access,
+      camera_pass,
+      viewer_access,
+      viewer_pass
+    ],
     err => {
-      if (err) return res.status(409).json({ error: "Stream exists" });
+      if (err) {
+        console.error("STREAM INSERT ERROR:", err);
+        return res.status(409).json({ error: "Stream already exists" });
+      }
       res.json({ id });
     }
   );
 });
-
 /* =========================
    SOCKET.IO (SESSION AWARE)
 ========================= */
