@@ -92,21 +92,33 @@ app.post("/api/login", (req, res) => {
     }
   );
 });
-// Public: list all streams (for homepage discovery)
+// PUBLIC: list all valid stream names for homepage
 app.get("/api/streams", (req, res) => {
   db.all(
-    "SELECT name FROM streams ORDER BY created_at DESC",
+    `
+    SELECT name
+    FROM streams
+    WHERE name IS NOT NULL
+      AND TRIM(name) != ''
+    ORDER BY created_at DESC
+    `,
     [],
     (err, rows) => {
       if (err) {
-        console.error(err);
-        return res.status(500).json({ error: "db_error" });
+        console.error("api/streams error:", err);
+        return res.status(500).json([]);
       }
 
-      res.json(rows.map(r => r.name));
+      // IMPORTANT: return ONLY string names
+      const names = rows
+        .map(r => r.name)
+        .filter(Boolean);
+
+      res.json(names);
     }
   );
 });
+
 /* =========================
    STREAMS
 ========================= */
