@@ -1,73 +1,198 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Camera Join</title>
+<title>Camera Preview – CourtStream</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
-.wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}
-.box{width:420px}
-video{width:100%;aspect-ratio:16/9;background:#000;border-radius:16px}
-.controls{display:flex;gap:8px;margin-top:10px}
-button,input{flex:1;padding:8px;border-radius:999px;border:1px solid #262b3d;background:#161922;color:#e6e6eb}
-.primary{background:#3b82f6;border:none}
+body{
+  margin:0;
+  background:#0f1115;
+  color:#e6e6eb;
+  font-family:system-ui;
+}
+.page{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.card{
+  width:420px;
+  background:#161922;
+  border:1px solid #262b3d;
+  border-radius:16px;
+  padding:20px;
+}
+video{
+  width:100%;
+  aspect-ratio:16/9;
+  background:#000;
+  border-radius:14px;
+}
+.controls{
+  display:flex;
+  gap:8px;
+  margin-top:10px;
+}
+button,input{
+  flex:1;
+  padding:10px;
+  border-radius:999px;
+  border:1px solid #262b3d;
+  background:#0f1115;
+  color:#e6e6eb;
+  cursor:pointer;
+}
+.primary{
+  background:#3b82f6;
+  border:none;
+}
+.range{
+  flex:1;
+}
+.label{
+  font-size:13px;
+  color:#9aa0b4;
+  margin-top:10px;
+}
 </style>
 </head>
+
 <body>
-<div class="wrap">
-  <div class="box">
-    <video id="v" autoplay muted playsinline></video>
+<div class="page">
+  <div class="card">
+
+    <video id="preview" autoplay muted playsinline></video>
+
     <div class="controls">
-      <button onclick="toggleCam()">Cam</button>
-      <button onclick="toggleMic()">Mic</button>
-      <button onclick="flip()">Flip</button>
+      <button onclick="toggleCam()">🎥</button>
+      <button onclick="toggleMic()">🎙️</button>
+      <button onclick="flip()">🔄</button>
     </div>
+
+    <div class="label">Zoom</div>
     <div class="controls">
-      <input type="range" min="1" max="3" step="0.1" onchange="zoom(this.value)">
+      <input
+        class="range"
+        type="range"
+        min="1"
+        max="3"
+        step="0.1"
+        value="1"
+        onchange="zoom(this.value)"
+      >
     </div>
-    <button class="primary" onclick="join()">Join Stream</button>
+
+    <button class="primary" onclick="join()">
+      Join Stream
+    </button>
+
   </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const streamId=new URLSearchParams(location.search).get("stream");
-let stream,videoOn=true,micOn=true,facing="environment";
-const socket=io();
-const pc=new RTCPeerConnection({
+const streamId =
+  new URLSearchParams(location.search).get("stream");
+
+const video = document.getElementById("preview");
+let mediaStream;
+let videoOn = true;
+let micOn = true;
+let facing = "environment";
+
+const socket = io();
+const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-async function join(){
-  stream=await navigator.mediaDevices.getUserMedia({
-    video:{facingMode:facing},
-    audio:true
-  });
-  v.srcObject=stream;
-  stream.getTracks().forEach(t=>pc.addTrack(t,stream));
-  socket.emit("join",{room:streamId,role:"camera"});
+/* ======================
+   PREVIEW ON LOAD
+====================== */
+(async function init(){
+  try{
+    mediaStream =
+      await navigator.mediaDevices.getUserMedia({
+        video:{facingMode:facing},
+        audio:true
+      });
+    video.srcObject = mediaStream;
+  }catch{
+    alert("Camera permission required");
+  }
+})();
+
+/* ======================
+   CONTROLS
+====================== */
+function toggleCam(){
+  videoOn = !videoOn;
+  mediaStream.getVideoTracks()[0].enabled = videoOn;
 }
 
-function toggleCam(){ videoOn=!videoOn; stream.getVideoTracks()[0].enabled=videoOn; }
-function toggleMic(){ micOn=!micOn; stream.getAudioTracks()[0].enabled=micOn; }
-function flip(){ facing=facing==="user"?"environment":"user"; join(); }
+function toggleMic(){
+  micOn = !micOn;
+  mediaStream.getAudioTracks()[0].enabled = micOn;
+}
+
+async function flip(){
+  facing = facing === "user" ? "environment" : "user";
+  mediaStream.getTracks().forEach(t=>t.stop());
+  mediaStream =
+    await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:facing},
+      audio:true
+    });
+  video.srcObject = mediaStream;
+}
+
 function zoom(z){
-  const t=stream.getVideoTracks()[0];
-  t.applyConstraints({advanced:[{zoom:z}]});
+  const track = mediaStream.getVideoTracks()[0];
+  track.applyConstraints({
+    advanced:[{zoom:Number(z)}]
+  });
 }
 
-pc.onicecandidate=e=>e.candidate&&socket.emit("signal",{data:{candidate:e.candidate}});
+/* ======================
+   JOIN STREAM
+====================== */
+async function join(){
+  mediaStream.getTracks()
+    .forEach(t=>pc.addTrack(t,mediaStream));
+
+  socket.emit("join",{
+    room:streamId,
+    role:"camera"
+  });
+}
+
+/* ======================
+   WEBRTC SIGNALING
+====================== */
+pc.onicecandidate = e=>{
+  if(e.candidate){
+    socket.emit("signal",{
+      data:{candidate:e.candidate}
+    });
+  }
+};
+
 socket.on("signal",async({from,data})=>{
   if(data.sdp){
     await pc.setRemoteDescription(data.sdp);
     if(data.sdp.type==="offer"){
-      const ans=await pc.createAnswer();
+      const ans = await pc.createAnswer();
       await pc.setLocalDescription(ans);
       socket.emit("signal",{to:from,data:{sdp:ans}});
     }
   }
-  if(data.candidate) await pc.addIceCandidate(data.candidate);
+  if(data.candidate){
+    await pc.addIceCandidate(data.candidate);
+  }
 });
 </script>
+
 </body>
 </html>
