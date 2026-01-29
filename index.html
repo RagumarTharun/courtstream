@@ -1,33 +1,209 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <title>CourtStream</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="stylesheet" href="theme.css" />
+
 <style>
-body{margin:0;background:#0f1115;color:#e6e6eb;font-family:system-ui}
-.wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}
-.card{width:420px;background:#161922;border:1px solid #262b3d;border-radius:16px;padding:28px}
-input,button{width:100%;margin-top:14px;padding:10px;border-radius:999px;border:1px solid #262b3d;background:#0f1115;color:#e6e6eb}
-.primary{background:#3b82f6;border:none}
+  body {
+    background: #0f1115;
+    color: #eee;
+    font-family: system-ui, Arial;
+    margin: 0;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 60px auto;
+    padding: 20px;
+  }
+
+  h1 {
+    margin-bottom: 6px;
+  }
+
+  .muted {
+    color: #aaa;
+    margin-bottom: 24px;
+  }
+
+  .top-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  button {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: none;
+    background: #ff3b3b;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  button.secondary {
+    background: #333;
+  }
+
+  input {
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    font-size: 16px;
+    margin-bottom: 16px;
+  }
+
+  .streams {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .stream {
+    padding: 14px;
+    background: #161922;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .stream:hover {
+    background: #1e2230;
+  }
+
+  .empty {
+    color: #888;
+    margin-top: 20px;
+  }
 </style>
 </head>
+
 <body>
-<div class="wrap">
-  <div class="card">
-    <h2>CourtStream</h2>
-    <input id="stream" placeholder="Enter Stream ID">
-    <button class="primary" onclick="join()">Join</button>
-    <button onclick="location.href='create.html'">Create CourtStream</button>
+
+<div class="container">
+  <h1 id="greeting">Welcome to CourtStream</h1>
+  <div class="muted" id="subtext">
+    Discover live sports streams or create your own.
+  </div>
+
+  <div class="top-actions" id="authActions"></div>
+
+  <!-- SEARCH BAR -->
+  <input
+    id="search"
+    placeholder="Search streams (e.g. JBA, Final, Court 1)"
+    autocomplete="off"
+  />
+
+  <!-- STREAM LIST -->
+  <div class="streams" id="streamList"></div>
+  <div class="empty" id="emptyState" style="display:none;">
+    No streams found.
   </div>
 </div>
 
 <script>
-async function join(){
-  if(!stream.value) return;
-  const res = await fetch(`/api/streams/${stream.value}`);
-  if(!res.ok) return alert("Stream not found");
-  location.href = `join.html?stream=${stream.value}`;
+let allStreams = [];
+
+/* =========================
+   SESSION CHECK
+========================= */
+(async () => {
+  const authBox = document.getElementById("authActions");
+
+  try {
+    const res = await fetch("/me");
+    if (res.ok) {
+      const user = await res.json();
+      document.getElementById("greeting").innerText =
+        `Hello ${user.email}`;
+      document.getElementById("subtext").innerText =
+        "Pick a stream to join or create your own.";
+
+      authBox.innerHTML = `
+        <button onclick="location.href='create.html'">
+          + Create Stream
+        </button>
+        <button class="secondary" onclick="logout()">
+          Logout
+        </button>
+      `;
+    } else {
+      throw new Error();
+    }
+  } catch {
+    authBox.innerHTML = `
+      <button onclick="location.href='login.html'">Login</button>
+      <button class="secondary" onclick="location.href='register.html'">
+        Register
+      </button>
+    `;
+  }
+})();
+
+/* =========================
+   LOAD STREAMS
+========================= */
+async function loadStreams() {
+  const res = await fetch("/api/streams");
+  allStreams = await res.json();
+  renderStreams(allStreams);
 }
+
+function renderStreams(list) {
+  const box = document.getElementById("streamList");
+  const empty = document.getElementById("emptyState");
+  box.innerHTML = "";
+
+  if (!list.length) {
+    empty.style.display = "block";
+    return;
+  }
+
+  empty.style.display = "none";
+
+  list.forEach(name => {
+    const div = document.createElement("div");
+    div.className = "stream";
+    div.innerHTML = `
+      <strong>${name}</strong>
+      <span>Join →</span>
+    `;
+    div.onclick = () => {
+      location.href = `join.html?stream=${encodeURIComponent(name)}`;
+    };
+    box.appendChild(div);
+  });
+}
+
+/* =========================
+   SEARCH FILTER
+========================= */
+document.getElementById("search").oninput = e => {
+  const q = e.target.value.toLowerCase();
+  renderStreams(
+    allStreams.filter(s => s.toLowerCase().includes(q))
+  );
+};
+
+/* =========================
+   LOGOUT
+========================= */
+async function logout() {
+  await fetch("/logout", { method: "POST" });
+  location.reload();
+}
+
+loadStreams();
 </script>
+
 </body>
 </html>
