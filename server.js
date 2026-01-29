@@ -1,5 +1,5 @@
 // =========================
-// CourtStream Server (FINAL)
+// CourtStream Server (FIXED + UPDATED)
 // =========================
 
 const express = require("express");
@@ -46,25 +46,27 @@ db.serialize(() => {
 });
 
 /* =========================
+   SESSION (SINGLE INSTANCE)
+========================= */
+const sessionMiddleware = session({
+  name: "courtstream.sid",
+  secret: "REPLACE_WITH_LONG_RANDOM_SECRET",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax"
+  }
+});
+
+/* =========================
    MIDDLEWARE
 ========================= */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
-
-app.use(
-  session({
-    name: "courtstream.sid",
-    secret: "REPLACE_WITH_LONG_RANDOM_SECRET",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax"
-    }
-  })
-);
+app.use(sessionMiddleware);
 
 /* =========================
    AUTH MIDDLEWARE
@@ -103,7 +105,6 @@ app.post("/api/login", (req, res) => {
       const ok = await bcrypt.compare(password, user.password);
       if (!ok) return res.sendStatus(401);
 
-      // ✅ STORE USER CORRECTLY
       req.session.user = {
         id: user.id,
         email: user.email
@@ -124,67 +125,43 @@ app.get("/me", (req, res) => {
 });
 
 /* =========================
-   STREAMS
+   STREAMS API
 ========================= */
+
+// ✅ USED BY INDEX PAGE (Direct button logic)
 app.get("/api/streams", (req, res) => {
   db.all(
     `
-    SELECT name
+    SELECT id, name, creator_id
     FROM streams
-    WHERE name IS NOT NULL AND TRIM(name) != ''
     ORDER BY created_at DESC
     `,
     [],
     (err, rows) => {
-      if (err) return res.status(500).json([]);
-      res.json(rows.map(r => r.name));
+      if (err) {
+        console.error("STREAM LIST ERROR:", err);
+        return res.status(500).json([]);
+      }
+      res.json(rows);
     }
   );
 });
 
+// ✅ CREATE STREAM
 app.post("/api/streams", requireAuth, (req, res) => {
   const id = crypto.randomUUID();
+  const { name } = req.body;
 
-  const {
-    name,
-    max_cameras = 6,
-    resolution = "720p",
-    camera_access = "open",
-    camera_pass = null,
-    viewer_access = "public",
-    viewer_pass = null
-  } = req.body;
-
-  if (!name || name.length < 3) {
+  if (!name || name.trim().length < 3) {
     return res.status(400).json({ error: "Invalid stream name" });
   }
 
   db.run(
     `
-    INSERT INTO streams (
-      id,
-      name,
-      creator,
-      max_cameras,
-      resolution,
-      camera_access,
-      camera_pass,
-      viewer_access,
-      viewer_pass
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO streams (id, name, creator_id)
+    VALUES (?, ?, ?)
     `,
-    [
-      id,
-      name,
-      req.session.user.id,
-      max_cameras,
-      resolution,
-      camera_access,
-      camera_pass,
-      viewer_access,
-      viewer_pass
-    ],
+    [id, name.trim(), req.session.user.id],
     err => {
       if (err) {
         console.error("STREAM INSERT ERROR:", err);
@@ -194,20 +171,12 @@ app.post("/api/streams", requireAuth, (req, res) => {
     }
   );
 });
+
 /* =========================
-   SOCKET.IO (SESSION AWARE)
+   SOCKET.IO (SESSION SHARED)
 ========================= */
 io.use((socket, next) => {
-  session({
-    name: "courtstream.sid",
-    secret: "REPLACE_WITH_LONG_RANDOM_SECRET",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: true,
-      sameSite: "lax"
-    }
-  })(socket.request, {}, next);
+  sessionMiddleware(socket.request, {}, next);
 });
 
 io.on("connection", socket => {
@@ -229,17 +198,25 @@ io.on("connection", socket => {
       socket.room = room;
       socket.role = role;
 
-      socket.to(room).emit("peer-joined", { id: socket.id, role });
+      socket.to(room).emit("peer-joined", {
+        id: socket.id,
+        role
+      });
     });
   });
 
   socket.on("signal", ({ to, data }) => {
-    if (to) io.to(to).emit("signal", { from: socket.id, data });
+    if (to) io.to(to).emit("signal", {
+      from: socket.id,
+      data
+    });
   });
 
   socket.on("disconnect", () => {
     if (socket.room) {
-      socket.to(socket.room).emit("peer-left", { id: socket.id });
+      socket.to(socket.room).emit("peer-left", {
+        id: socket.id
+      });
     }
   });
 });
