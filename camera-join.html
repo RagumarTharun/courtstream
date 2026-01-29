@@ -18,76 +18,116 @@ body{
   align-items:center;
   justify-content:center;
 }
-.card{
-  width:420px;
-  background:#161922;
-  border:1px solid #262b3d;
-  border-radius:16px;
-  padding:20px;
+.layout{
+  display:flex;
+  gap:32px;
+  max-width:980px;
+  width:100%;
+  padding:32px;
+}
+.preview-wrap{
+  position:relative;
+  flex:1.2;
 }
 video{
   width:100%;
   aspect-ratio:16/9;
   background:#000;
-  border-radius:14px;
+  border-radius:16px;
 }
-.controls{
+.preview-controls{
+  position:absolute;
+  bottom:12px;
+  left:50%;
+  transform:translateX(-50%);
   display:flex;
-  gap:8px;
-  margin-top:10px;
+  gap:12px;
 }
-button,input{
-  flex:1;
-  padding:10px;
-  border-radius:999px;
-  border:1px solid #262b3d;
-  background:#0f1115;
-  color:#e6e6eb;
+.ctrl-btn{
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  border:none;
+  background:rgba(0,0,0,.55);
+  color:#fff;
+  font-size:18px;
   cursor:pointer;
 }
-.primary{
-  background:#3b82f6;
+.ctrl-btn.off{
+  background:#b91c1c;
+}
+.side{
+  flex:0.8;
+  background:#161922;
+  border:1px solid #262b3d;
+  border-radius:16px;
+  padding:24px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+h2{margin-top:0}
+.muted{
+  color:#9aa0b4;
+  font-size:14px;
+}
+.join{
+  margin-top:24px;
+  padding:12px;
+  border-radius:999px;
   border:none;
+  background:#3b82f6;
+  color:#fff;
+  font-size:15px;
+  cursor:pointer;
 }
 .range{
-  flex:1;
-}
-.label{
-  font-size:13px;
-  color:#9aa0b4;
-  margin-top:10px;
+  width:100%;
+  margin-top:12px;
 }
 </style>
 </head>
 
 <body>
+
 <div class="page">
-  <div class="card">
+  <div class="layout">
 
-    <video id="preview" autoplay muted playsinline></video>
+    <!-- LEFT: CAMERA PREVIEW -->
+    <div class="preview-wrap">
+      <video id="video" autoplay muted playsinline></video>
 
-    <div class="controls">
-      <button onclick="toggleCam()">🎥</button>
-      <button onclick="toggleMic()">🎙️</button>
-      <button onclick="flip()">🔄</button>
+      <div class="preview-controls">
+        <button id="camBtn" class="ctrl-btn" onclick="toggleCam()">🎥</button>
+        <button id="micBtn" class="ctrl-btn" onclick="toggleMic()">🎙️</button>
+        <button class="ctrl-btn" onclick="flip()">🔄</button>
+      </div>
     </div>
 
-    <div class="label">Zoom</div>
-    <div class="controls">
-      <input
-        class="range"
-        type="range"
-        min="1"
-        max="3"
-        step="0.1"
-        value="1"
-        onchange="zoom(this.value)"
-      >
-    </div>
+    <!-- RIGHT: INFO -->
+    <div class="side">
+      <div>
+        <h2>Ready to join?</h2>
+        <p class="muted">
+          Check your camera and microphone before joining the stream.
+        </p>
 
-    <button class="primary" onclick="join()">
-      Join Stream
-    </button>
+        <p class="muted">Zoom</p>
+        <input
+          class="range"
+          type="range"
+          min="1"
+          max="3"
+          step="0.1"
+          value="1"
+          onchange="zoom(this.value)"
+        >
+      </div>
+
+      <button class="join" onclick="joinStream()">
+        Join Stream
+      </button>
+    </div>
 
   </div>
 </div>
@@ -97,101 +137,85 @@ button,input{
 const streamId =
   new URLSearchParams(location.search).get("stream");
 
-const video = document.getElementById("preview");
+const video = document.getElementById("video");
+const camBtn = document.getElementById("camBtn");
+const micBtn = document.getElementById("micBtn");
+
 let mediaStream;
-let videoOn = true;
+let camOn = true;
 let micOn = true;
 let facing = "environment";
 
 const socket = io();
-const pc = new RTCPeerConnection({
-  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-});
 
-/* ======================
+/* =========================
    PREVIEW ON LOAD
-====================== */
-(async function init(){
-  try{
-    mediaStream =
-      await navigator.mediaDevices.getUserMedia({
-        video:{facingMode:facing},
-        audio:true
-      });
+========================= */
+(async () => {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:facing },
+      audio:true
+    });
     video.srcObject = mediaStream;
-  }catch{
-    alert("Camera permission required");
+  } catch {
+    alert("Camera & microphone access required");
   }
 })();
 
-/* ======================
+/* =========================
    CONTROLS
-====================== */
+========================= */
 function toggleCam(){
-  videoOn = !videoOn;
-  mediaStream.getVideoTracks()[0].enabled = videoOn;
+  camOn = !camOn;
+  mediaStream.getVideoTracks()[0].enabled = camOn;
+  camBtn.classList.toggle("off", !camOn);
 }
 
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
+  micBtn.classList.toggle("off", !micOn);
 }
 
 async function flip(){
   facing = facing === "user" ? "environment" : "user";
   mediaStream.getTracks().forEach(t=>t.stop());
-  mediaStream =
-    await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:facing},
-      audio:true
-    });
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:facing },
+    audio:true
+  });
   video.srcObject = mediaStream;
 }
 
 function zoom(z){
   const track = mediaStream.getVideoTracks()[0];
   track.applyConstraints({
-    advanced:[{zoom:Number(z)}]
+    advanced:[{ zoom:Number(z) }]
   });
 }
 
-/* ======================
-   JOIN STREAM
-====================== */
-async function join(){
-  mediaStream.getTracks()
-    .forEach(t=>pc.addTrack(t,mediaStream));
+/* =========================
+   JOIN STREAM (FIXED)
+========================= */
+function joinStream(){
+  if(!streamId){
+    alert("Invalid stream");
+    return;
+  }
 
+  // Notify server that camera is ready
   socket.emit("join",{
     room:streamId,
     role:"camera"
   });
+
+  // Store media stream globally for next page
+  window.localStream = mediaStream;
+
+  // Move into actual camera session (next step)
+  location.href = `camera-live.html?stream=${streamId}`;
 }
-
-/* ======================
-   WEBRTC SIGNALING
-====================== */
-pc.onicecandidate = e=>{
-  if(e.candidate){
-    socket.emit("signal",{
-      data:{candidate:e.candidate}
-    });
-  }
-};
-
-socket.on("signal",async({from,data})=>{
-  if(data.sdp){
-    await pc.setRemoteDescription(data.sdp);
-    if(data.sdp.type==="offer"){
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      socket.emit("signal",{to:from,data:{sdp:ans}});
-    }
-  }
-  if(data.candidate){
-    await pc.addIceCandidate(data.candidate);
-  }
-});
 </script>
 
 </body>
