@@ -20,6 +20,12 @@
     padding: 20px;
   }
 
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
   h1 {
     margin-bottom: 6px;
   }
@@ -34,6 +40,11 @@
     gap: 10px;
     margin-bottom: 24px;
     flex-wrap: wrap;
+  }
+
+  .user {
+    color: #aaa;
+    font-size: 14px;
   }
 
   button {
@@ -89,9 +100,15 @@
 <body>
 
 <div class="container">
-  <h1 id="greeting">Welcome to CourtStream</h1>
-  <div class="muted" id="subtext">
-    Discover live sports streams or create your own.
+
+  <div class="header">
+    <div>
+      <h1 id="greeting">Welcome to CourtStream</h1>
+      <div class="muted" id="subtext">
+        Discover live sports streams or create your own.
+      </div>
+    </div>
+    <div class="user" id="userInfo"></div>
   </div>
 
   <div class="top-actions" id="authActions"></div>
@@ -110,31 +127,40 @@
 
 <script>
 let allStreams = [];
+let currentUser = null;
 
-/* AUTH */
+/* ======================
+   AUTH
+====================== */
 (async () => {
   const authBox = document.getElementById("authActions");
+  const userInfo = document.getElementById("userInfo");
 
   try {
-    const res = await fetch("/me");
+    const res = await fetch("/me", { credentials: "include" });
     if (!res.ok) throw new Error();
 
-    const user = await res.json();
+    currentUser = await res.json();
 
     document.getElementById("greeting").innerText =
-      `Hello ${user.email}`;
+      `Hello ${currentUser.email}`;
     document.getElementById("subtext").innerText =
       "Pick a stream to join or create your own.";
 
+    userInfo.innerText = currentUser.email;
+
     authBox.innerHTML = `
-      <button onclick="location.href='create.html'">
-        + Create Stream
-      </button>
+      <button onclick="handleCreate()">+ Create Stream</button>
       <button class="secondary" onclick="logout()">Logout</button>
     `;
   } catch {
+    userInfo.innerText = "";
+
     authBox.innerHTML = `
-      <button onclick="location.href='login.html'">Login</button>
+      <button onclick="handleCreate()">+ Create Stream</button>
+      <button class="secondary" onclick="location.href='login.html'">
+        Login
+      </button>
       <button class="secondary" onclick="location.href='register.html'">
         Register
       </button>
@@ -142,7 +168,20 @@ let allStreams = [];
   }
 })();
 
-/* STREAMS */
+/* ======================
+   CREATE HANDLER
+====================== */
+function handleCreate() {
+  if (!currentUser) {
+    alert("Please log in to create a stream.");
+    return;
+  }
+  location.href = "create.html";
+}
+
+/* ======================
+   STREAMS
+====================== */
 async function loadStreams() {
   const res = await fetch("/api/streams");
   allStreams = await res.json();
@@ -175,7 +214,9 @@ function renderStreams(list) {
   });
 }
 
-/* SEARCH */
+/* ======================
+   SEARCH
+====================== */
 document.getElementById("search").oninput = e => {
   const q = e.target.value.toLowerCase();
   renderStreams(
@@ -183,9 +224,14 @@ document.getElementById("search").oninput = e => {
   );
 };
 
-/* LOGOUT */
+/* ======================
+   LOGOUT
+====================== */
 async function logout() {
-  await fetch("/logout", { method: "POST" });
+  await fetch("/logout", {
+    method: "POST",
+    credentials: "include"
+  });
   location.reload();
 }
 
