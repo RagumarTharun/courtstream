@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Camera Live – CourtStream</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+<style>
+:root{
+  --bg:#0f1115;
+  --card:#161922;
+  --border:#262b3d;
+  --red:#b91c1c;
+  --icon:#e6e6eb;
+  --muted:#9aa0b4;
+}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:#fff;
+  font-family:system-ui;
+}
+
+.page{
+  position:fixed;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+}
+
+/* HEADER */
+.header{
+  height:56px;
+  display:flex;
+  align-items:center;
+  padding:0 16px;
+  gap:12px;
+}
+.header-title{
+  flex:1;
+  text-align:center;
+  font-size:15px;
+  font-weight:500;
+}
+.badge{
+  font-size:12px;
+  color:#22c55e;
+}
+
+/* PREVIEW */
+.preview{
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+video{
+  width:88%;
+  max-width:420px;
+  aspect-ratio:3/4;
+  object-fit:cover;
+  background:#000;
+  border-radius:18px;
+}
+
+/* CONTROLS */
+.controls{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:18px 0 24px;
+}
+.ctrl{
+  width:56px;
+  height:56px;
+  border-radius:50%;
+  border:2px solid var(--border);
+  background:var(--card);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.ctrl.off{
+  background:var(--red);
+  border-color:var(--red);
+}
+.ctrl svg{
+  width:24px;
+  height:24px;
+  fill:#fff;
+}
+.ctrl.end{
+  background:var(--red);
+  border-color:var(--red);
+}
+</style>
+</head>
+
+<body>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-title">
+      Camera • <span class="badge">LIVE</span>
+    </div>
+  </div>
+
+  <!-- PREVIEW -->
+  <div class="preview">
+    <video id="video" autoplay muted playsinline></video>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+
+    <!-- MIC -->
+    <button id="micBtn" class="ctrl" onclick="toggleMic()">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
+        <path d="M19 11a7 7 0 01-14 0"/>
+      </svg>
+    </button>
+
+    <!-- CAMERA -->
+    <button id="camBtn" class="ctrl" onclick="toggleCam()">
+      <svg viewBox="0 0 24 24">
+        <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
+      </svg>
+    </button>
+
+    <!-- FLIP -->
+    <button class="ctrl" onclick="flip()">
+      <svg viewBox="0 0 24 24">
+        <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
+        <path d="M17 17H7v-4l-4 5 4 5v-4h14v-6h-4v4z"/>
+      </svg>
+    </button>
+
+    <!-- LEAVE -->
+    <button class="ctrl end" onclick="leave()">
+      <svg viewBox="0 0 24 24">
+        <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
+        <path d="M3 5h8v14H3z"/>
+      </svg>
+    </button>
+
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const streamId = new URLSearchParams(location.search).get("stream");
+const video = document.getElementById("video");
+const micBtn = document.getElementById("micBtn");
+const camBtn = document.getElementById("camBtn");
+
+let mediaStream;
+let micOn = true;
+let camOn = true;
+let facing = "user";
+
+const socket = io();
+const pc = new RTCPeerConnection({
+  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+});
+
+/* GET MEDIA */
+(async ()=>{
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:facing},
+    audio:true
+  });
+  video.srcObject = mediaStream;
+  mediaStream.getTracks().forEach(t=>pc.addTrack(t,mediaStream));
+})();
+
+/* JOIN */
+socket.emit("join",{room:streamId,role:"camera"});
+
+/* CONTROLS */
+function toggleMic(){
+  micOn = !micOn;
+  mediaStream.getAudioTracks()[0].enabled = micOn;
+  micBtn.classList.toggle("off",!micOn);
+}
+function toggleCam(){
+  camOn = !camOn;
+  mediaStream.getVideoTracks()[0].enabled = camOn;
+  camBtn.classList.toggle("off",!camOn);
+}
+async function flip(){
+  facing = facing==="user"?"environment":"user";
+  mediaStream.getTracks().forEach(t=>t.stop());
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:facing},
+    audio:true
+  });
+  video.srcObject = mediaStream;
+  mediaStream.getTracks().forEach(t=>pc.addTrack(t,mediaStream));
+}
+
+/* LEAVE */
+function leave(){
+  pc.close();
+  socket.disconnect();
+  mediaStream.getTracks().forEach(t=>t.stop());
+  location.href = "index.html";
+}
+
+/* WEBRTC */
+pc.onicecandidate = e=>{
+  if(e.candidate){
+    socket.emit("signal",{data:{candidate:e.candidate}});
+  }
+};
+
+socket.on("signal",async({from,data})=>{
+  if(data.sdp){
+    await pc.setRemoteDescription(data.sdp);
+    if(data.sdp.type==="offer"){
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      socket.emit("signal",{to:from,data:{sdp:ans}});
+    }
+  }
+  if(data.candidate){
+    await pc.addIceCandidate(data.candidate);
+  }
+});
+</script>
+
+</body>
+</html>
