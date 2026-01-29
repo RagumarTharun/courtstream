@@ -1,5 +1,5 @@
 // =========================
-// CourtStream Server (STABLE + COMPATIBLE)
+// CourtStream Server (SCHEMA-ALIGNED)
 // =========================
 
 const express = require("express");
@@ -25,26 +25,6 @@ app.set("trust proxy", 1);
    DATABASE
 ========================= */
 const db = new sqlite3.Database("db.sqlite");
-
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE,
-      password TEXT
-    )
-  `);
-
-  // 🔒 DO NOT ADD EXTRA COLUMNS UNTIL MIGRATION
-  db.run(`
-    CREATE TABLE IF NOT EXISTS streams (
-      id TEXT PRIMARY KEY,
-      name TEXT UNIQUE,
-      creator_id INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-});
 
 /* =========================
    SESSION (SINGLE INSTANCE)
@@ -77,6 +57,9 @@ function requireAuth(req, res, next) {
   next();
 }
 
+/* =========================
+   AUTH ROUTES
+========================= */
 app.post("/api/register", async (req, res) => {
   const hash = await bcrypt.hash(req.body.password, 10);
   db.run(
@@ -102,6 +85,7 @@ app.post("/api/login", (req, res) => {
         id: user.id,
         email: user.email
       };
+
       res.sendStatus(200);
     }
   );
@@ -120,11 +104,11 @@ app.get("/me", (req, res) => {
    STREAMS API (FIXED)
 ========================= */
 
-// ✅ USED BY INDEX PAGE
+// ✔ Home page needs id, name, creator
 app.get("/api/streams", (req, res) => {
   db.all(
     `
-    SELECT id, name, creator_id
+    SELECT id, name, creator
     FROM streams
     WHERE name IS NOT NULL AND TRIM(name) != ''
     ORDER BY created_at DESC
@@ -140,10 +124,19 @@ app.get("/api/streams", (req, res) => {
   );
 });
 
-// ✅ CREATE STREAM (MATCHES DB)
+// ✔ Create stream (MATCHES DB EXACTLY)
 app.post("/api/streams", requireAuth, (req, res) => {
   const id = crypto.randomUUID();
-  const { name } = req.body;
+
+  const {
+    name,
+    max_cameras = 6,
+    resolution = "720p",
+    camera_access = "open",
+    camera_pass = null,
+    viewer_access = "public",
+    viewer_pass = null
+  } = req.body;
 
   if (!name || name.trim().length < 3) {
     return res.status(400).json({ error: "Invalid stream name" });
@@ -151,10 +144,30 @@ app.post("/api/streams", requireAuth, (req, res) => {
 
   db.run(
     `
-    INSERT INTO streams (id, name, creator_id)
-    VALUES (?, ?, ?)
+    INSERT INTO streams (
+      id,
+      name,
+      creator,
+      max_cameras,
+      resolution,
+      camera_access,
+      camera_pass,
+      viewer_access,
+      viewer_pass
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    [id, name.trim(), req.session.user.id],
+    [
+      id,
+      name.trim(),
+      req.session.user.id,
+      max_cameras,
+      resolution,
+      camera_access,
+      camera_pass,
+      viewer_access,
+      viewer_pass
+    ],
     err => {
       if (err) {
         console.error("STREAM INSERT ERROR:", err);
@@ -184,7 +197,7 @@ io.on("connection", socket => {
 
         if (
           role === "director" &&
-          stream.creator_id !== socket.request.session?.user?.id
+          stream.creator !== socket.request.session?.user?.id
         ) {
           socket.disconnect();
           return;
