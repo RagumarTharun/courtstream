@@ -106,7 +106,7 @@
     <div class="muted">You will be the director of this stream.</div>
 
     <label>Stream name</label>
-    <input id="name" placeholder="e.g. JBA_U16_Final">
+    <input id="nameInput" placeholder="e.g. JBA_U16_Final">
 
     <label>Max cameras</label>
     <input id="maxCameras" type="number" min="1" max="12" value="6">
@@ -129,14 +129,19 @@
       <option value="protected">Password protected</option>
     </select>
 
-    <button id="createBtn" onclick="createStream()">Create Stream</button>
+    <button id="createBtn">Create Stream</button>
     <div class="error" id="error"></div>
 
   </div>
 </div>
 
 <script>
-let user = null;
+/* ======================
+   ELEMENT REFERENCES
+====================== */
+const nameInput = document.getElementById("nameInput");
+const createBtn = document.getElementById("createBtn");
+const errorBox = document.getElementById("error");
 
 /* ======================
    AUTH CHECK
@@ -147,7 +152,7 @@ let user = null;
     location.href = "login.html";
     return;
   }
-  user = await res.json();
+  const user = await res.json();
   document.getElementById("greeting").innerText =
     `Hello ${user.email}`;
 })();
@@ -155,20 +160,15 @@ let user = null;
 /* ======================
    CREATE STREAM
 ====================== */
-async function createStream() {
-  const error = document.getElementById("error");
-  const btn = document.getElementById("createBtn");
+createBtn.addEventListener("click", async () => {
+  errorBox.innerText = "";
+  createBtn.disabled = true;
 
-  error.innerText = "";
-  btn.disabled = true;
+  const name = nameInput.value.trim();
 
-  const payload = {
-    name: name.value.trim()
-  };
-
-  if (!payload.name || payload.name.length < 3) {
-    error.innerText = "Stream name must be at least 3 characters.";
-    btn.disabled = false;
+  if (!name || name.length < 3) {
+    errorBox.innerText = "Stream name must be at least 3 characters.";
+    createBtn.disabled = false;
     return;
   }
 
@@ -176,18 +176,18 @@ async function createStream() {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ name })
   });
 
-  btn.disabled = false;
+  createBtn.disabled = false;
 
   if (!res.ok) {
-    error.innerText = "Stream name already exists.";
+    errorBox.innerText = "Stream name already exists.";
     return;
   }
 
   location.href = "index.html";
-}
+});
 </script>
 
 </body>
