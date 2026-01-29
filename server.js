@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 3000;
 /* =========================
    DATABASE (SAFE)
 ========================= */
-const db = new sqlite3.Database("courtstream.db");
+const db = new sqlite3.Database("db.sqlite");
 
 db.serialize(() => {
   db.run(`
