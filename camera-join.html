@@ -12,6 +12,8 @@
   --border:#262b3d;
   --blue:#3b82f6;
   --red:#b91c1c;
+  --icon:#e6e6eb;
+  --muted:#9aa0b4;
 }
 
 body{
@@ -21,86 +23,100 @@ body{
   font-family:system-ui;
 }
 
-/* FULL SCREEN PREVIEW */
-.preview{
+/* FULL SCREEN */
+.page{
   position:fixed;
   inset:0;
-  background:#000;
-}
-video{
-  width:100%;
-  height:100%;
-  object-fit:cover;
+  display:flex;
+  flex-direction:column;
 }
 
-/* TOP BAR */
-.topbar{
-  position:absolute;
-  top:0;
-  left:0;
-  right:0;
+/* HEADER */
+.header{
+  height:56px;
   display:flex;
-  justify-content:space-between;
   align-items:center;
-  padding:14px;
-  background:linear-gradient(to bottom,rgba(0,0,0,.6),transparent);
-  font-size:15px;
+  padding:0 16px;
+  gap:12px;
 }
-
-/* CENTER CONTROLS */
-.center-controls{
-  position:absolute;
-  left:50%;
-  bottom:140px;
-  transform:translateX(-50%);
-  display:flex;
-  gap:22px;
+.header-title{
+  font-size:16px;
+  font-weight:500;
+  flex:1;
+  text-align:center;
+  margin-right:32px;
 }
-.ctrl{
-  width:64px;
-  height:64px;
+.icon-btn{
+  width:36px;
+  height:36px;
   border-radius:50%;
   border:none;
-  background:rgba(0,0,0,.6);
-  color:#fff;
-  font-size:24px;
+  background:transparent;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.icon-btn svg{
+  width:22px;
+  height:22px;
+  fill:var(--icon);
+}
+
+/* PREVIEW */
+.preview{
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+video{
+  width:88%;
+  max-width:420px;
+  aspect-ratio:3/4;
+  object-fit:cover;
+  background:#000;
+  border-radius:18px;
+}
+
+/* CONTROLS */
+.controls{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px 0;
+}
+.ctrl{
+  width:56px;
+  height:56px;
+  border-radius:50%;
+  border:2px solid var(--border);
+  background:var(--card);
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 .ctrl.off{
   background:var(--red);
+  border-color:var(--red);
+}
+.ctrl svg{
+  width:24px;
+  height:24px;
+  fill:#fff;
 }
 
-/* BOTTOM SHEET */
-.sheet{
-  position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
-  background:var(--card);
-  border-top-left-radius:22px;
-  border-top-right-radius:22px;
-  padding:20px;
-  border-top:1px solid var(--border);
+/* BOTTOM */
+.bottom{
+  padding:16px;
 }
 .label{
   font-size:13px;
-  color:#9aa0b4;
+  color:var(--muted);
   margin-bottom:6px;
 }
 .range{
   width:100%;
-}
-.row{
-  display:flex;
-  gap:12px;
-  margin-top:14px;
-}
-.small{
-  flex:1;
-  padding:10px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  background:#0f1115;
-  color:#fff;
 }
 .join{
   width:100%;
@@ -117,50 +133,52 @@ video{
 
 <body>
 
-<div class="preview">
-  <video id="video" autoplay muted playsinline></video>
+<div class="page">
 
-  <!-- TOP BAR -->
-  <div class="topbar">
-    <span>☰</span>
-    <strong>CourtStream</strong>
-    <span>🔊</span>
+  <!-- HEADER -->
+  <div class="header">
+    <button class="icon-btn" onclick="history.back()">
+      <!-- back arrow -->
+      <svg viewBox="0 0 24 24"><path d="M15.5 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="header-title">Ready to join?</div>
   </div>
 
-  <!-- CENTER CONTROLS -->
-  <div class="center-controls">
-    <button id="micBtn" class="ctrl" onclick="toggleMic()">🎙️</button>
-    <button id="camBtn" class="ctrl" onclick="toggleCam()">🎥</button>
+  <!-- PREVIEW -->
+  <div class="preview">
+    <video id="video" autoplay muted playsinline></video>
   </div>
 
-  <!-- BOTTOM SHEET -->
-  <div class="sheet">
-    <div class="label">Zoom</div>
-    <input
-      class="range"
-      type="range"
-      min="1"
-      max="3"
-      step="0.1"
-      value="1"
-      onchange="zoom(this.value)"
-    >
+  <!-- CONTROLS -->
+  <div class="controls">
+    <button id="micBtn" class="ctrl" onclick="toggleMic()">
+      <!-- mic -->
+      <svg viewBox="0 0 24 24">
+        <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
+        <path d="M19 11a7 7 0 01-14 0"/>
+      </svg>
+    </button>
 
-    <div class="row">
-      <button class="small" onclick="flip()">🔄 Flip</button>
-    </div>
-
-    <button class="join" onclick="joinStream()">
-      Join Stream
+    <button id="camBtn" class="ctrl" onclick="toggleCam()">
+      <!-- camera -->
+      <svg viewBox="0 0 24 24">
+        <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
+      </svg>
     </button>
   </div>
+
+  <!-- BOTTOM -->
+  <div class="bottom">
+    <div class="label">Zoom</div>
+    <input class="range" type="range" min="1" max="3" step="0.1" value="1" onchange="zoom(this.value)">
+    <button class="join" onclick="joinStream()">Join</button>
+  </div>
+
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const streamId =
-  new URLSearchParams(location.search).get("stream");
-
+const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
 const camBtn = document.getElementById("camBtn");
@@ -169,11 +187,10 @@ let mediaStream;
 let micOn = true;
 let camOn = true;
 let facing = "user";
-
 const socket = io();
 
-/* CAMERA PREVIEW */
-(async () => {
+/* PREVIEW */
+(async ()=>{
   try{
     mediaStream = await navigator.mediaDevices.getUserMedia({
       video:{facingMode:facing},
@@ -198,16 +215,6 @@ function toggleCam(){
   camBtn.classList.toggle("off",!camOn);
 }
 
-async function flip(){
-  facing = facing==="user"?"environment":"user";
-  mediaStream.getTracks().forEach(t=>t.stop());
-  mediaStream = await navigator.mediaDevices.getUserMedia({
-    video:{facingMode:facing},
-    audio:true
-  });
-  video.srcObject = mediaStream;
-}
-
 function zoom(z){
   const track = mediaStream.getVideoTracks()[0];
   track.applyConstraints({advanced:[{zoom:Number(z)}]});
@@ -215,11 +222,7 @@ function zoom(z){
 
 /* JOIN */
 function joinStream(){
-  socket.emit("join",{
-    room:streamId,
-    role:"camera"
-  });
-
+  socket.emit("join",{room:streamId,role:"camera"});
   location.href = `camera-live.html?stream=${streamId}`;
 }
 </script>
