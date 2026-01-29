@@ -1,5 +1,5 @@
 // =========================
-// CourtStream Server (FINAL, STABLE)
+// CourtStream Server (FINAL, SESSION-SAFE)
 // =========================
 
 const express = require("express");
@@ -13,12 +13,17 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
 /* =========================
-   DATABASE (SAFE)
+   TRUST PROXY (Cloudflare)
+========================= */
+app.set("trust proxy", 1);
+
+/* =========================
+   DATABASE
 ========================= */
 const db = new sqlite3.Database("db.sqlite");
 
@@ -50,20 +55,29 @@ app.use(express.static(__dirname));
 
 app.use(
   session({
-    secret: "courtstream-secret",
+    name: "courtstream.sid",
+    secret: "REPLACE_WITH_LONG_RANDOM_SECRET",
     resave: false,
-    saveUninitialized: false
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: true,        // REQUIRED for HTTPS
+      sameSite: "lax"
+    }
   })
 );
 
 /* =========================
-   AUTH
+   AUTH HELPERS
 ========================= */
 function requireAuth(req, res, next) {
-  if (!req.session.userId) return res.sendStatus(401);
+  if (!req.session.user) return res.sendStatus(401);
   next();
 }
 
+/* =========================
+   AUTH ROUTES
+========================= */
 app.post("/api/register", async (req, res) => {
   const { email, password } = req.body;
   const hash = await bcrypt.hash(password, 10);
@@ -80,55 +94,69 @@ app.post("/api/register", async (req, res) => {
 
 app.post("/api/login", (req, res) => {
   const { email, password } = req.body;
+
   db.get(
-    "SELECT * FROM users WHERE email = ?",
+    "SELECT id, email, password FROM users WHERE email = ?",
     [email],
     async (err, user) => {
       if (!user) return res.sendStatus(401);
+
       const ok = await bcrypt.compare(password, user.password);
       if (!ok) return res.sendStatus(401);
-      req.session.userId = user.id;
+
+      // ✅ STORE USER IN SESSION
+      req.session.user = {
+        id: user.id,
+        email: user.email
+      };
+
       res.sendStatus(200);
     }
   );
 });
-// PUBLIC: list all valid stream names for homepage
-app.get("/api/streams", (req, res) => {
-  db.all(
-    `
-    SELECT name
-    FROM streams
-    WHERE name IS NOT NULL
-      AND TRIM(name) != ''
-    ORDER BY created_at DESC
-    `,
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("api/streams error:", err);
-        return res.status(500).json([]);
-      }
 
-      // IMPORTANT: return ONLY string names
-      const names = rows
-        .map(r => r.name)
-        .filter(Boolean);
+app.post("/api/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.sendStatus(200);
+  });
+});
 
-      res.json(names);
-    }
-  );
+/* =========================
+   SESSION CHECK
+========================= */
+app.get("/me", (req, res) => {
+  if (!req.session.user) {
+    return res.sendStatus(401);
+  }
+  res.json(req.session.user);
 });
 
 /* =========================
    STREAMS
 ========================= */
+app.get("/api/streams", (req, res) => {
+  db.all(
+    `
+    SELECT name
+    FROM streams
+    WHERE name IS NOT NULL AND TRIM(name) != ''
+    ORDER BY created_at DESC
+    `,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json([]);
+      res.json(rows.map(r => r.name));
+    }
+  );
+});
+
 app.post("/api/streams", requireAuth, (req, res) => {
   const id = crypto.randomUUID();
   const { name } = req.body;
 
   db.run(
     "INSERT INTO streams (id, name, creator_id) VALUES (?, ?, ?)",
-    [id, name, req.session.userId],
+    [id, name, req.session.user.id],
     err => {
       if (err) return res.status(409).json({ error: "Stream exists" });
       res.json({ id });
@@ -136,20 +164,19 @@ app.post("/api/streams", requireAuth, (req, res) => {
   );
 });
 
-app.get("/api/streams/:id", (req, res) => {
-  db.get(
-    "SELECT * FROM streams WHERE id = ?",
-    [req.params.id],
-    (err, row) => {
-      if (!row) return res.sendStatus(404);
-      res.json(row);
-    }
-  );
-});
-
 /* =========================
    SOCKET.IO
 ========================= */
+io.use((socket, next) => {
+  session({
+    name: "courtstream.sid",
+    secret: "REPLACE_WITH_LONG_RANDOM_SECRET",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: true, sameSite: "lax" }
+  })(socket.request, {}, next);
+});
+
 io.on("connection", socket => {
   socket.on("join", ({ room, role }) => {
     if (!room) return;
@@ -157,7 +184,10 @@ io.on("connection", socket => {
     db.get("SELECT * FROM streams WHERE id = ?", [room], (err, stream) => {
       if (!stream) return;
 
-      if (role === "director" && stream.creator_id !== socket.request.session?.userId) {
+      if (
+        role === "director" &&
+        stream.creator_id !== socket.request.session?.user?.id
+      ) {
         socket.disconnect();
         return;
       }
@@ -172,12 +202,6 @@ io.on("connection", socket => {
 
   socket.on("signal", ({ to, data }) => {
     if (to) io.to(to).emit("signal", { from: socket.id, data });
-  });
-
-  socket.on("disconnect", () => {
-    if (socket.room) {
-      socket.to(socket.room).emit("peer-left", { id: socket.id });
-    }
   });
 });
 
