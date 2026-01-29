@@ -28,16 +28,7 @@
     padding: 28px;
   }
 
-  h2 {
-    margin-top: 0;
-    margin-bottom: 6px;
-  }
-
-  .muted {
-    color: #9aa0b4;
-    font-size: 14px;
-    margin-bottom: 18px;
-  }
+  h2 { margin-top: 0; }
 
   label {
     font-size: 13px;
@@ -69,26 +60,32 @@
     cursor: pointer;
   }
 
-  button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+  /* Modal */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
   }
 
-  .error {
-    color: #ff6b6b;
-    font-size: 13px;
-    margin-top: 12px;
+  .modal-box {
+    background: #161922;
+    border-radius: 14px;
+    padding: 20px;
+    width: 320px;
+    text-align: center;
+    border: 1px solid #262b3d;
   }
 
-  .top-link {
-    text-align: right;
-    margin-bottom: 8px;
+  .modal-box p {
+    margin: 0 0 14px;
+    font-size: 14px;
   }
 
-  .top-link a {
-    color: #9aa0b4;
-    font-size: 13px;
-    text-decoration: none;
+  .modal-box button {
+    background: #3b82f6;
   }
 </style>
 </head>
@@ -97,78 +94,74 @@
 
 <div class="page">
   <div class="card">
-
-    <div class="top-link">
-      <a href="index.html">← Home</a>
-    </div>
-
     <h2 id="greeting">Create Stream</h2>
-    <div class="muted">You will be the director of this stream.</div>
 
     <label>Stream name</label>
-    <input id="nameInput" placeholder="e.g. JBA_U16_Final">
+    <input id="nameInput" placeholder="e.g. JBA_Final">
 
     <label>Max cameras</label>
-    <input id="maxCameras" type="number" min="1" max="12" value="6">
+    <input id="maxCameras" type="number" value="6">
 
     <label>Resolution</label>
     <select id="resolution">
-      <option value="720p">720p (recommended)</option>
+      <option value="720p">720p</option>
       <option value="1080p">1080p</option>
     </select>
 
     <label>Camera access</label>
     <select id="cameraAccess">
       <option value="open">Open</option>
-      <option value="protected">Password protected</option>
+      <option value="protected">Protected</option>
     </select>
 
     <label>Viewer access</label>
     <select id="viewerAccess">
       <option value="public">Public</option>
-      <option value="protected">Password protected</option>
+      <option value="protected">Protected</option>
     </select>
 
     <button id="createBtn">Create Stream</button>
-    <div class="error" id="error"></div>
+  </div>
+</div>
 
+<!-- ERROR MODAL -->
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <p id="modalText"></p>
+    <button onclick="closeModal()">OK</button>
   </div>
 </div>
 
 <script>
-/* ======================
-   ELEMENT REFERENCES
-====================== */
 const nameInput = document.getElementById("nameInput");
 const createBtn = document.getElementById("createBtn");
-const errorBox = document.getElementById("error");
+const modal = document.getElementById("modal");
+const modalText = document.getElementById("modalText");
 
-/* ======================
-   AUTH CHECK
-====================== */
+function showError(msg) {
+  modalText.innerText = msg;
+  modal.style.display = "flex";
+}
+
+function closeModal() {
+  modal.style.display = "none";
+  nameInput.focus();
+}
+
+/* AUTH */
 (async () => {
   const res = await fetch("/me", { credentials: "include" });
-  if (!res.ok) {
-    location.href = "login.html";
-    return;
-  }
+  if (!res.ok) location.href = "login.html";
   const user = await res.json();
-  document.getElementById("greeting").innerText =
-    `Hello ${user.email}`;
+  document.getElementById("greeting").innerText = `Hello ${user.email}`;
 })();
 
-/* ======================
-   CREATE STREAM
-====================== */
-createBtn.addEventListener("click", async () => {
-  errorBox.innerText = "";
-  createBtn.disabled = true;
-
+/* CREATE */
+createBtn.onclick = async () => {
   const name = nameInput.value.trim();
 
-  if (!name || name.length < 3) {
-    errorBox.innerText = "Stream name must be at least 3 characters.";
-    createBtn.disabled = false;
+  if (name.length < 3) {
+    showError("Stream name must be at least 3 characters.");
     return;
   }
 
@@ -179,15 +172,14 @@ createBtn.addEventListener("click", async () => {
     body: JSON.stringify({ name })
   });
 
-  createBtn.disabled = false;
-
   if (!res.ok) {
-    errorBox.innerText = "Stream name already exists.";
+    const data = await res.json();
+    showError(data.message || "Failed to create stream.");
     return;
   }
 
   location.href = "index.html";
-});
+};
 </script>
 
 </body>
