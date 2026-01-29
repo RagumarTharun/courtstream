@@ -1,129 +1,194 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>CourtStream</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8" />
+<title>CourtStream</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="stylesheet" href="theme.css" />
 
-  <!-- KEEP EXACTLY WHAT YOUR OLD FILE HAD -->
-  <link rel="stylesheet" href="index.css" />
+<style>
+  body {
+    background: #0f1115;
+    color: #eee;
+    font-family: system-ui, Arial;
+    margin: 0;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 60px auto;
+    padding: 20px;
+  }
+
+  h1 {
+    margin-bottom: 6px;
+  }
+
+  .muted {
+    color: #aaa;
+    margin-bottom: 24px;
+  }
+
+  .top-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  button {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: none;
+    background: #ff3b3b;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  button.secondary {
+    background: #333;
+  }
+
+  input {
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    font-size: 16px;
+    margin-bottom: 16px;
+  }
+
+  .streams {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .stream {
+    padding: 14px;
+    background: #161922;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .stream:hover {
+    background: #1e2230;
+  }
+
+  .empty {
+    color: #888;
+    margin-top: 20px;
+  }
+</style>
 </head>
 
 <body>
 
-  <h1 id="title">Welcome to CourtStream</h1>
-  <p id="subtitle">Discover live sports streams or create your own.</p>
+<div class="container">
+  <h1 id="greeting">Welcome to CourtStream</h1>
+  <div class="muted" id="subtext">
+    Discover live sports streams or create your own.
+  </div>
 
-  <div id="auth"></div>
+  <div class="top-actions" id="authActions"></div>
 
   <input
     id="search"
-    type="text"
     placeholder="Search streams (e.g. JBA, Final, Court 1)"
+    autocomplete="off"
   />
 
-  <div id="streamList"></div>
+  <div class="streams" id="streamList"></div>
+  <div class="empty" id="emptyState" style="display:none;">
+    No streams found.
+  </div>
+</div>
 
 <script>
 let allStreams = [];
 
-/* =========================
-   AUTH CHECK (ROBUST)
-========================= */
-async function loadAuth() {
-  const box = document.getElementById("auth");
+/* AUTH */
+(async () => {
+  const authBox = document.getElementById("authActions");
 
   try {
     const res = await fetch("/me");
-    if (!res.ok) throw new Error("not logged");
+    if (!res.ok) throw new Error();
 
-    const data = await res.json();
+    const user = await res.json();
 
-    // 🔒 HANDLE ALL POSSIBLE SHAPES
-    const email =
-      data.email ||
-      data.user?.email ||
-      data.username ||
-      null;
-
-    if (!email) throw new Error("no identity");
-
-    document.getElementById("title").innerText =
-      `Hello ${email}`;
-    document.getElementById("subtitle").innerText =
+    document.getElementById("greeting").innerText =
+      `Hello ${user.email}`;
+    document.getElementById("subtext").innerText =
       "Pick a stream to join or create your own.";
 
-    box.innerHTML = `
+    authBox.innerHTML = `
       <button onclick="location.href='create.html'">
-        Create Stream
+        + Create Stream
       </button>
-      <button onclick="logout()">Logout</button>
+      <button class="secondary" onclick="logout()">Logout</button>
     `;
   } catch {
-    box.innerHTML = `
+    authBox.innerHTML = `
       <button onclick="location.href='login.html'">Login</button>
-      <button onclick="location.href='register.html'">Register</button>
+      <button class="secondary" onclick="location.href='register.html'">
+        Register
+      </button>
     `;
   }
-}
+})();
 
-/* =========================
-   STREAMS
-========================= */
+/* STREAMS */
 async function loadStreams() {
   const res = await fetch("/api/streams");
-  const rows = await res.json();
-
-  allStreams = rows
-    .map(r => typeof r === "string" ? r : r?.name)
-    .filter(Boolean);
-
+  allStreams = await res.json();
   renderStreams(allStreams);
 }
 
 function renderStreams(list) {
   const box = document.getElementById("streamList");
+  const empty = document.getElementById("emptyState");
   box.innerHTML = "";
 
   if (!list.length) {
-    box.innerHTML = "<p>No streams found</p>";
+    empty.style.display = "block";
     return;
   }
 
+  empty.style.display = "none";
+
   list.forEach(name => {
-    const row = document.createElement("div");
-    row.className = "stream"; // YOUR EXISTING CLASS
-    row.innerHTML = `
-      <span>${name}</span>
+    const div = document.createElement("div");
+    div.className = "stream";
+    div.innerHTML = `
+      <strong>${name}</strong>
       <span>Join →</span>
     `;
-    row.onclick = () => {
+    div.onclick = () => {
       location.href = `join.html?stream=${encodeURIComponent(name)}`;
     };
-    box.appendChild(row);
+    box.appendChild(div);
   });
 }
 
-/* =========================
-   SEARCH
-========================= */
-document.getElementById("search").addEventListener("input", e => {
+/* SEARCH */
+document.getElementById("search").oninput = e => {
   const q = e.target.value.toLowerCase();
   renderStreams(
     allStreams.filter(s => s.toLowerCase().includes(q))
   );
-});
+};
 
-/* =========================
-   LOGOUT
-========================= */
+/* LOGOUT */
 async function logout() {
   await fetch("/logout", { method: "POST" });
   location.reload();
 }
 
-/* INIT */
-loadAuth();
 loadStreams();
 </script>
 
