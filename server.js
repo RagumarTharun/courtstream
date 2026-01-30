@@ -1,5 +1,5 @@
 // =========================
-// CourtStream Server (FINAL WORKING)
+// CourtStream Server (FINAL, SAFE UPDATE)
 // =========================
 
 const express = require("express");
@@ -12,7 +12,17 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+
+/* =========================
+   SOCKET.IO (IMPORTANT FLAGS)
+========================= */
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  },
+  transports: ["websocket", "polling"]
+});
 
 const PORT = 3000;
 
@@ -56,13 +66,14 @@ app.use(
 );
 
 /* =========================
-   AUTH
+   AUTH (UNCHANGED)
 ========================= */
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   db.get("SELECT * FROM users WHERE email=?", [email], async (_, u) => {
     if (!u || !(await bcrypt.compare(password, u.password)))
       return res.sendStatus(401);
+
     req.session.user = { id: u.id, email: u.email };
     res.sendStatus(200);
   });
@@ -74,7 +85,7 @@ app.get("/me", (req, res) => {
 });
 
 /* =========================
-   STREAMS
+   STREAMS (UNCHANGED)
 ========================= */
 app.get("/api/streams", (_, res) => {
   db.all("SELECT * FROM streams ORDER BY created_at DESC", [], (_, rows) => {
@@ -84,7 +95,9 @@ app.get("/api/streams", (_, res) => {
 
 app.post("/api/streams", (req, res) => {
   if (!req.session.user) return res.sendStatus(401);
+
   const id = crypto.randomUUID();
+
   db.run(
     "INSERT INTO streams (id,name,creator) VALUES (?,?,?)",
     [id, req.body.name, req.session.user.id],
@@ -96,14 +109,19 @@ app.post("/api/streams", (req, res) => {
 });
 
 /* =========================
-   SOCKET.IO
+   SOCKET.IO (SAFE ENHANCED)
 ========================= */
 io.on("connection", socket => {
+  console.log("🟢 SOCKET CONNECTED:", socket.id);
 
   socket.on("join", ({ room, role }) => {
+    if (!room || !role) return;
+
     socket.join(room);
     socket.room = room;
     socket.role = role;
+
+    console.log("➡️ JOIN:", socket.id, "room:", room, "role:", role);
 
     socket.to(room).emit("peer-joined", {
       id: socket.id,
@@ -112,11 +130,25 @@ io.on("connection", socket => {
   });
 
   socket.on("signal", ({ to, data }) => {
-    io.to(to).emit("signal", { from: socket.id, data });
+    if (!to || !data) return;
+
+    console.log(
+      "🔁 SIGNAL:",
+      socket.id,
+      "→",
+      to,
+      data?.sdp?.type || "ICE"
+    );
+
+    io.to(to).emit("signal", {
+      from: socket.id,
+      data
+    });
   });
 
   socket.on("disconnect", () => {
     if (socket.room) {
+      console.log("🔴 DISCONNECT:", socket.id);
       socket.to(socket.room).emit("peer-left", { id: socket.id });
     }
   });
@@ -126,5 +158,5 @@ io.on("connection", socket => {
    START
 ========================= */
 server.listen(PORT, () => {
-  console.log("✅ CourtStream running on", PORT);
+  console.log("✅ CourtStream running on port", PORT);
 });
