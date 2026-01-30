@@ -1,62 +1,178 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Camera</title>
+<title>Camera – CourtStream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-body{margin:0;background:black}
-video{width:100vw;height:100vh;object-fit:cover}
+body{
+  margin:0;
+  background:#0f1115;
+  color:#e6e6eb;
+  font-family:system-ui;
+}
+
+.wrap{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.box{
+  width:420px;
+  max-width:92vw;
+}
+
+video{
+  width:100%;
+  aspect-ratio:16/9;
+  background:#000;
+  border-radius:16px;
+}
+
+.controls{
+  display:flex;
+  gap:10px;
+  margin-top:12px;
+}
+
+button{
+  flex:1;
+  padding:10px;
+  border-radius:999px;
+  border:1px solid #262b3d;
+  background:#161922;
+  color:#e6e6eb;
+  font-size:14px;
+}
+
+button.primary{
+  background:#3b82f6;
+  border:none;
+}
 </style>
 </head>
 
 <body>
-<video id="local" autoplay playsinline muted></video>
+
+<div class="wrap">
+  <div class="box">
+
+    <video id="preview" autoplay muted playsinline></video>
+
+    <div class="controls">
+      <button onclick="toggleCam()">Camera</button>
+      <button onclick="toggleMic()">Mic</button>
+      <button onclick="flip()">Flip</button>
+    </div>
+
+    <button class="primary" style="margin-top:12px" onclick="leave()">
+      Leave Stream
+    </button>
+
+  </div>
+</div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-if (location.protocol !== "https:") {
-  document.body.innerHTML =
-    "<h2 style='padding:20px'>❌ Open using HTTPS</h2>";
-  throw new Error("HTTPS required");
-}
+/* ===============================
+   BASIC STATE
+================================ */
+const streamId = new URLSearchParams(location.search).get("stream");
+const video = document.getElementById("preview");
+
+let localStream;
+let camOn = true;
+let micOn = true;
+let facing = "environment";
 
 const socket = io();
-const streamId = new URLSearchParams(location.search).get("stream");
-const video = document.getElementById("local");
+const pc = new RTCPeerConnection({
+  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+});
 
-let pc, stream;
-
-/* START CAMERA */
-(async ()=>{
-  stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:"environment" },
-    audio:false
+/* ===============================
+   GET MEDIA
+================================ */
+async function startMedia(){
+  localStream = await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:facing },
+    audio:true
   });
-  video.srcObject = stream;
+
+  video.srcObject = localStream;
+
+  localStream.getTracks().forEach(t=>{
+    pc.addTrack(t, localStream);
+  });
+}
+
+startMedia();
+
+/* ===============================
+   JOIN LOGIC (NO DUPLICATES)
+================================ */
+socket.emit("join", streamId);
+
+/* Director refreshed → re-announce */
+socket.on("director-ready", ()=>{
   socket.emit("join", streamId);
-})();
+});
 
-/* SIGNAL */
-socket.on("signal", async ({from,data})=>{
-  if (data.type === "offer") {
-    pc = new RTCPeerConnection({
-      iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-    });
+/* ===============================
+   WEBRTC SIGNALING
+================================ */
+pc.onicecandidate = e=>{
+  if(e.candidate){
+    socket.emit("signal", { data:e.candidate });
+  }
+};
 
-    stream.getTracks().forEach(t => pc.addTrack(t, stream));
-
-    pc.onicecandidate = e =>
-      e.candidate && socket.emit("signal", { to:from, data:e.candidate });
-
+socket.on("signal", async ({from, data})=>{
+  if(data.type === "offer"){
     await pc.setRemoteDescription(data);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    socket.emit("signal", { to:from, data:answer });
+    socket.emit("signal", {
+      to: from,
+      data: pc.localDescription
+    });
   }
 
-  if (data.candidate && pc) await pc.addIceCandidate(data);
+  if(data.candidate){
+    await pc.addIceCandidate(data);
+  }
 });
+
+/* ===============================
+   CONTROLS
+================================ */
+function toggleCam(){
+  camOn = !camOn;
+  localStream.getVideoTracks()[0].enabled = camOn;
+}
+
+function toggleMic(){
+  micOn = !micOn;
+  localStream.getAudioTracks()[0].enabled = micOn;
+}
+
+async function flip(){
+  facing = facing === "user" ? "environment" : "user";
+  localStream.getTracks().forEach(t=>t.stop());
+  pc.getSenders().forEach(s=>pc.removeTrack(s));
+  await startMedia();
+}
+
+function leave(){
+  pc.close();
+  socket.disconnect();
+  localStream.getTracks().forEach(t=>t.stop());
+  location.href = "index.html";
+}
 </script>
+
 </body>
 </html>
