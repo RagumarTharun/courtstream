@@ -1,60 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
 <title>Camera • LIVE</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-:root{
-  --bg:#0f1115;
-  --card:#161922;
-  --border:#262b3d;
-  --red:#b91c1c;
-}
-body{margin:0;background:var(--bg);color:#fff;font-family:system-ui}
-.page{position:fixed;inset:0;display:flex;flex-direction:column}
-.header{height:56px;display:flex;align-items:center;justify-content:center}
-.preview{flex:1;display:flex;align-items:center;justify-content:center}
+body{margin:0;background:#0f1115;color:#fff;font-family:system-ui}
 video{
-  width:88%;
-  max-width:420px;
-  aspect-ratio:3/4;
+  width:100vw;
+  height:100vh;
   object-fit:cover;
   background:#000;
-  border-radius:18px;
 }
-.controls{
-  display:flex;
-  justify-content:center;
-  gap:20px;
-  padding:18px 0 24px;
-}
-.ctrl{
-  width:56px;height:56px;border-radius:50%;
-  background:var(--card);
-  border:2px solid var(--border);
-  color:white;
-}
-.ctrl.off{background:var(--red);border-color:var(--red)}
 </style>
 </head>
 
 <body>
-<div class="page">
-  <div class="header">Camera • LIVE</div>
-
-  <div class="preview">
-    <video id="video" autoplay muted playsinline></video>
-  </div>
-
-  <div class="controls">
-    <button id="mic" class="ctrl">Mic</button>
-    <button id="cam" class="ctrl">Cam</button>
-    <button id="flip" class="ctrl">Flip</button>
-    <button class="ctrl off" onclick="leave()">End</button>
-  </div>
-</div>
+<video id="video" autoplay muted playsinline></video>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -63,73 +26,43 @@ const video = document.getElementById("video");
 const socket = io();
 
 let pc;
-let stream;
-let facing = "user";
+let mediaStream;
 
-/* INIT */
-async function start(){
-  pc = new RTCPeerConnection({
-    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-  });
+/* JOIN ROOM */
+socket.emit("join",{room:streamId,role:"camera"});
 
-  pc.onicecandidate = e=>{
-    if(e.candidate){
-      socket.emit("signal",{data:{candidate:e.candidate}});
-    }
-  };
-
-  stream = await navigator.mediaDevices.getUserMedia({
-    video:{facingMode:facing},
-    audio:true
-  });
-
-  video.srcObject = stream;
-  stream.getTracks().forEach(t=>pc.addTrack(t,stream));
-
-  socket.emit("join",{room:streamId,role:"camera"});
-  socket.emit("camera-ready");
-}
-
-start();
-
-/* SIGNAL */
+/* RECEIVE OFFER */
 socket.on("signal", async ({from,data})=>{
-  if(data.sdp){
+  if(data.sdp && data.sdp.type==="offer"){
+    pc = new RTCPeerConnection({
+      iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+    });
+
+    pc.onicecandidate = e=>{
+      if(e.candidate){
+        socket.emit("signal",{to:from,data:{candidate:e.candidate}});
+      }
+    };
+
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video:true,
+      audio:true
+    });
+
+    video.srcObject = mediaStream;
+    mediaStream.getTracks().forEach(t=>pc.addTrack(t,mediaStream));
+
     await pc.setRemoteDescription(data.sdp);
-    if(data.sdp.type==="offer"){
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      socket.emit("signal",{to:from,data:{sdp:ans}});
-    }
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    socket.emit("signal",{to:from,data:{sdp:answer}});
   }
+
   if(data.candidate){
     await pc.addIceCandidate(data.candidate);
   }
 });
-
-/* CONTROLS */
-mic.onclick = ()=>{
-  const t = stream.getAudioTracks()[0];
-  t.enabled = !t.enabled;
-  mic.classList.toggle("off",!t.enabled);
-};
-cam.onclick = ()=>{
-  const t = stream.getVideoTracks()[0];
-  t.enabled = !t.enabled;
-  cam.classList.toggle("off",!t.enabled);
-};
-flip.onclick = async ()=>{
-  facing = facing==="user"?"environment":"user";
-  stream.getTracks().forEach(t=>t.stop());
-  pc.close();
-  await start();
-};
-function leave(){
-  pc.close();
-  socket.disconnect();
-  stream.getTracks().forEach(t=>t.stop());
-  location.href="index.html";
-}
 </script>
 </body>
 </html>
