@@ -35,7 +35,6 @@ body{
   display:flex;
   align-items:center;
   padding:0 16px;
-  gap:12px;
 }
 .header-title{
   flex:1;
@@ -116,7 +115,6 @@ video{
   <!-- CONTROLS -->
   <div class="controls">
 
-    <!-- MIC -->
     <button id="micBtn" class="ctrl" onclick="toggleMic()">
       <svg viewBox="0 0 24 24">
         <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
@@ -124,14 +122,12 @@ video{
       </svg>
     </button>
 
-    <!-- CAMERA -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
       <svg viewBox="0 0 24 24">
         <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
       </svg>
     </button>
 
-    <!-- FLIP -->
     <button class="ctrl" onclick="flip()">
       <svg viewBox="0 0 24 24">
         <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
@@ -139,7 +135,6 @@ video{
       </svg>
     </button>
 
-    <!-- LEAVE -->
     <button class="ctrl end" onclick="leave()">
       <svg viewBox="0 0 24 24">
         <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
@@ -153,6 +148,9 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+/* ===========================
+   STATE
+=========================== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
@@ -168,42 +166,55 @@ const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* GET MEDIA */
-(async ()=>{
+/* ===========================
+   MEDIA
+=========================== */
+async function startMedia(){
   mediaStream = await navigator.mediaDevices.getUserMedia({
-    video:{facingMode:facing},
+    video:{ facingMode:facing },
     audio:true
   });
+
   video.srcObject = mediaStream;
-  mediaStream.getTracks().forEach(t=>pc.addTrack(t,mediaStream));
-})();
 
-/* JOIN */
-socket.emit("join",{room:streamId,role:"camera"});
+  mediaStream.getTracks().forEach(track=>{
+    pc.addTrack(track, mediaStream);
+  });
+}
+startMedia();
 
-/* CONTROLS */
+/* ===========================
+   JOIN (NO DUPLICATES)
+=========================== */
+socket.emit("join", streamId);
+
+/* If director refreshes */
+socket.on("director-ready", ()=>{
+  socket.emit("join", streamId);
+});
+
+/* ===========================
+   CONTROLS
+=========================== */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
-  micBtn.classList.toggle("off",!micOn);
+  micBtn.classList.toggle("off", !micOn);
 }
+
 function toggleCam(){
   camOn = !camOn;
   mediaStream.getVideoTracks()[0].enabled = camOn;
-  camBtn.classList.toggle("off",!camOn);
-}
-async function flip(){
-  facing = facing==="user"?"environment":"user";
-  mediaStream.getTracks().forEach(t=>t.stop());
-  mediaStream = await navigator.mediaDevices.getUserMedia({
-    video:{facingMode:facing},
-    audio:true
-  });
-  video.srcObject = mediaStream;
-  mediaStream.getTracks().forEach(t=>pc.addTrack(t,mediaStream));
+  camBtn.classList.toggle("off", !camOn);
 }
 
-/* LEAVE */
+async function flip(){
+  facing = facing === "user" ? "environment" : "user";
+  mediaStream.getTracks().forEach(t=>t.stop());
+  pc.getSenders().forEach(s=>pc.removeTrack(s));
+  await startMedia();
+}
+
 function leave(){
   pc.close();
   socket.disconnect();
@@ -211,24 +222,28 @@ function leave(){
   location.href = "index.html";
 }
 
-/* WEBRTC */
+/* ===========================
+   WEBRTC
+=========================== */
 pc.onicecandidate = e=>{
   if(e.candidate){
-    socket.emit("signal",{data:{candidate:e.candidate}});
+    socket.emit("signal",{ data:e.candidate });
   }
 };
 
-socket.on("signal",async({from,data})=>{
-  if(data.sdp){
-    await pc.setRemoteDescription(data.sdp);
-    if(data.sdp.type==="offer"){
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      socket.emit("signal",{to:from,data:{sdp:ans}});
-    }
+socket.on("signal", async ({from, data})=>{
+  if(data.type === "offer"){
+    await pc.setRemoteDescription(data);
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    socket.emit("signal",{
+      to: from,
+      data: pc.localDescription
+    });
   }
+
   if(data.candidate){
-    await pc.addIceCandidate(data.candidate);
+    await pc.addIceCandidate(data);
   }
 });
 </script>
