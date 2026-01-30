@@ -53,12 +53,17 @@ body{
 }
 
 video{
-  width:90vw;
-  max-width:420px;
-  max-height:100%;
+  /* ✅ THIS IS THE KEY FIX */
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* ✅ NO CROPPING */
+
+  /* ✅ NO CROPPING, NO FAKE ROTATION */
+  object-fit: contain;
 }
 
 /* CONTROLS */
@@ -102,19 +107,16 @@ video{
 
 <div class="page">
 
-  <!-- HEADER -->
   <div class="header">
     <div class="header-title">
       Camera • <span class="badge">LIVE</span>
     </div>
   </div>
 
-  <!-- PREVIEW -->
   <div class="preview">
     <video id="video" autoplay muted playsinline></video>
   </div>
 
-  <!-- CONTROLS -->
   <div class="controls">
 
     <!-- MIC -->
