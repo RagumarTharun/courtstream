@@ -26,95 +26,97 @@ body{
   height:100vh;
 }
 
+/* ===== LAYOUT ===== */
 .director{
   display:grid;
-  grid-template-columns:1fr 260px;
+  grid-template-columns:1fr 320px;
   gap:14px;
   padding:14px;
   height:100%;
 }
 
-/* ===== PREVIEW ===== */
-
-.preview{
-  position:relative;
+/* ===== PANELS ===== */
+.panel{
   background:var(--panel);
-  border:1px solid var(--border);
   border-radius:16px;
-  height:540px;
+  border:1px solid var(--border);
+}
+
+/* ===== MAIN PREVIEW ===== */
+.main-feed{
+  position:relative;
   display:flex;
   align-items:center;
   justify-content:center;
+  background:#000;
 }
 
-.preview video{
+.main-feed video{
   width:100%;
   height:100%;
-  object-fit:contain;
-  background:#000;
+  object-fit:cover;
   border-radius:16px;
 }
 
-.preview-hint{
+/* Placeholder */
+.placeholder{
   position:absolute;
   color:var(--muted);
   font-size:14px;
 }
 
-/* ===== TOP BAR ===== */
-
-.top-bar{
+/* Top label */
+.stream-badge{
   position:absolute;
-  top:12px;
-  left:12px;
-}
-
-.stream-name{
+  top:14px;
+  left:14px;
   background:rgba(15,17,21,.85);
   border:1px solid var(--border);
-  padding:8px 14px;
+  padding:6px 12px;
   border-radius:999px;
   font-size:13px;
 }
 
-/* ===== RECORD ===== */
-
+/* Record badge (visual only) */
 .record-bar{
   position:absolute;
-  bottom:12px;
-  left:50%;
-  transform:translateX(-50%);
+  bottom:14px;
   display:flex;
-  gap:10px;
   align-items:center;
+  gap:8px;
   background:rgba(15,17,21,.85);
   border:1px solid var(--border);
-  padding:8px 14px;
+  padding:6px 12px;
   border-radius:999px;
+  font-size:13px;
 }
-
 .record-dot{
-  width:12px;
-  height:12px;
+  width:10px;
+  height:10px;
   background:var(--red);
   border-radius:50%;
 }
 
-/* ===== RIGHT CAMERA STRIP ===== */
-
-.strip{
+/* ===== RIGHT CAMERA STRIPE ===== */
+.side-panel{
   display:flex;
   flex-direction:column;
   gap:12px;
+  padding:12px;
+}
+
+.side-title{
+  font-size:13px;
+  color:var(--muted);
 }
 
 .camera-slot{
-  height:140px;
+  flex:1;
   background:#000;
   border-radius:14px;
-  border:2px solid var(--border);
-  overflow:hidden;
+  border:1px solid var(--border);
   position:relative;
+  overflow:hidden;
   cursor:pointer;
 }
 
@@ -124,19 +126,15 @@ body{
   object-fit:cover;
 }
 
-.placeholder{
+.camera-slot span{
   position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--muted);
+  bottom:8px;
+  left:8px;
   font-size:12px;
-  pointer-events:none;
-}
-
-.camera-slot.active{
-  border-color:var(--blue);
+  background:rgba(0,0,0,.6);
+  padding:4px 8px;
+  border-radius:999px;
+  color:#fff;
 }
 </style>
 </head>
@@ -145,14 +143,12 @@ body{
 
 <div class="director">
 
-  <!-- PREVIEW -->
-  <div class="preview">
+  <!-- MAIN PREVIEW -->
+  <div class="panel main-feed">
     <video id="mainVideo" autoplay muted playsinline></video>
-    <div class="preview-hint" id="previewHint">Select a camera to preview</div>
+    <div id="placeholder" class="placeholder">Select a camera to preview</div>
 
-    <div class="top-bar">
-      <div class="stream-name" id="streamTitle">CourtStream • LIVE</div>
-    </div>
+    <div class="stream-badge" id="streamName">CourtStream • LIVE</div>
 
     <div class="record-bar">
       <div class="record-dot"></div>
@@ -160,11 +156,21 @@ body{
     </div>
   </div>
 
-  <!-- RIGHT CAMERA STRIP (FIXED 3) -->
-  <div class="strip" id="strip">
-    <div class="camera-slot"><video></video><div class="placeholder">Waiting for camera</div></div>
-    <div class="camera-slot"><video></video><div class="placeholder">Waiting for camera</div></div>
-    <div class="camera-slot"><video></video><div class="placeholder">Waiting for camera</div></div>
+  <!-- RIGHT CAMERA STRIPE -->
+  <div class="panel side-panel">
+    <div class="side-title">Cameras</div>
+
+    <div class="camera-slot" data-slot>
+      <span>Waiting for camera</span>
+    </div>
+
+    <div class="camera-slot" data-slot>
+      <span>Waiting for camera</span>
+    </div>
+
+    <div class="camera-slot" data-slot>
+      <span>Waiting for camera</span>
+    </div>
   </div>
 
 </div>
@@ -174,66 +180,89 @@ body{
 const streamId = new URLSearchParams(location.search).get("stream");
 const socket = io();
 
-const mainVideo = document.getElementById("mainVideo");
-const previewHint = document.getElementById("previewHint");
-const slots = Array.from(document.querySelectorAll(".camera-slot"));
+document.getElementById("streamName").innerText = streamId + " • LIVE";
 
-const peers = {};
-let slotIndex = 0;
+const mainVideo = document.getElementById("mainVideo");
+const placeholder = document.getElementById("placeholder");
+const slots = [...document.querySelectorAll("[data-slot]")];
+
+const peers = {}; // id -> { pc, stream }
 
 /* JOIN */
 socket.emit("join", streamId);
 
-/* CAMERA JOINED */
-socket.on("peer-joined", ({id}) => {
-  if (slotIndex >= slots.length) return;
+/* NEW CAMERA */
+socket.on("peer-joined", ({ id }) => {
+  if (Object.keys(peers).length >= slots.length) return;
+  createPeer(id);
+});
 
-  const slot = slots[slotIndex++];
-  const video = slot.querySelector("video");
-  const placeholder = slot.querySelector(".placeholder");
+/* CREATE PEER */
+function createPeer(id){
+  if (peers[id]) return;
 
   const pc = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
 
-  peers[id] = { pc, video, slot };
+  peers[id] = { pc };
 
   pc.addTransceiver("video", { direction:"recvonly" });
 
   pc.ontrack = e => {
-    video.srcObject = e.streams[0];
-    placeholder.style.display = "none";
+    const stream = e.streams[0];
+    peers[id].stream = stream;
+
+    const slot = slots.find(s => !s.querySelector("video"));
+    if (!slot) return;
+
+    slot.innerHTML = "";
+    const v = document.createElement("video");
+    v.autoplay = true;
+    v.muted = true;
+    v.playsInline = true;
+    v.srcObject = stream;
+
+    v.onloadedmetadata = () => {
+      v.play().catch(()=>{});
+    };
+
+    slot.appendChild(v);
+    slot.appendChild(Object.assign(document.createElement("span"),{
+      innerText:"Camera"
+    }));
+
+    slot.onclick = () => {
+      mainVideo.srcObject = stream;
+      placeholder.style.display = "none";
+      mainVideo.onloadedmetadata = () => {
+        mainVideo.play().catch(()=>{});
+      };
+    };
   };
 
-  pc.onicecandidate = e=>{
-    if(e.candidate){
-      socket.emit("signal",{to:id,data:e.candidate});
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit("signal",{ to:id, data:e.candidate });
     }
   };
 
-  slot.onclick = () => {
-    mainVideo.srcObject = video.srcObject;
-    previewHint.style.display = "none";
-    slots.forEach(s=>s.classList.remove("active"));
-    slot.classList.add("active");
-  };
-
   pc.createOffer()
-    .then(o=>pc.setLocalDescription(o))
-    .then(()=>{
-      socket.emit("signal",{to:id,data:pc.localDescription});
+    .then(o => pc.setLocalDescription(o))
+    .then(() => {
+      socket.emit("signal",{ to:id, data:pc.localDescription });
     });
-});
+}
 
 /* SIGNAL */
-socket.on("signal", async ({from,data})=>{
+socket.on("signal", async ({ from, data }) => {
   const peer = peers[from];
-  if(!peer) return;
+  if (!peer) return;
 
-  if(data.type){
+  if (data.type) {
     await peer.pc.setRemoteDescription(data);
   }
-  if(data.candidate){
+  if (data.candidate) {
     await peer.pc.addIceCandidate(data);
   }
 });
