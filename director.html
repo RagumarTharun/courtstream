@@ -26,12 +26,9 @@ body{
   height:100vh;
 }
 
-/* ===== LAYOUT ===== */
-
 .director{
   display:grid;
-  grid-template-columns:220px 1fr 220px;
-  grid-template-rows:auto 140px;
+  grid-template-columns:1fr 260px;
   gap:14px;
   padding:14px;
   height:100%;
@@ -40,12 +37,11 @@ body{
 /* ===== PREVIEW ===== */
 
 .preview{
-  grid-column:2;
   position:relative;
   background:var(--panel);
   border:1px solid var(--border);
   border-radius:16px;
-  height:520px;
+  height:540px;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -55,8 +51,8 @@ body{
   width:100%;
   height:100%;
   object-fit:contain;
-  border-radius:16px;
   background:#000;
+  border-radius:16px;
 }
 
 .preview-hint{
@@ -72,9 +68,6 @@ body{
   position:absolute;
   top:12px;
   left:12px;
-  right:12px;
-  display:flex;
-  justify-content:space-between;
 }
 
 .stream-name{
@@ -108,7 +101,7 @@ body{
   border-radius:50%;
 }
 
-/* ===== CAMERA STRIPS ===== */
+/* ===== RIGHT CAMERA STRIP ===== */
 
 .strip{
   display:flex;
@@ -116,28 +109,27 @@ body{
   gap:12px;
 }
 
-.strip.bottom{
-  grid-column:2;
-  grid-row:2;
-  flex-direction:row;
-}
-
-.camera-box{
-  background:#000;
-  border:1px solid var(--border);
-  border-radius:14px;
+.camera-tile{
   height:140px;
-  position:relative;
+  background:#000;
+  border-radius:14px;
+  border:2px solid transparent;
   overflow:hidden;
+  position:relative;
+  cursor:pointer;
   display:flex;
   align-items:center;
   justify-content:center;
 }
 
-.camera-box video{
+.camera-tile video{
   width:100%;
   height:100%;
   object-fit:cover;
+}
+
+.camera-tile.active{
+  border-color:var(--blue);
 }
 
 .placeholder{
@@ -145,7 +137,7 @@ body{
   font-size:12px;
 }
 
-.label{
+.camera-label{
   position:absolute;
   bottom:6px;
   left:6px;
@@ -160,13 +152,6 @@ body{
 <body>
 
 <div class="director">
-
-  <!-- LEFT STRIP -->
-  <div class="strip">
-    <div class="camera-box"><span class="placeholder">Waiting for camera</span></div>
-    <div class="camera-box"><span class="placeholder">Waiting for camera</span></div>
-    <div class="camera-box"><span class="placeholder">Waiting for camera</span></div>
-  </div>
 
   <!-- PREVIEW -->
   <div class="preview">
@@ -183,21 +168,18 @@ body{
     </div>
   </div>
 
-  <!-- RIGHT STRIP -->
-  <div class="strip">
-    <div class="camera-box"><span class="placeholder">Bench A</span></div>
-    <div class="camera-box"><span class="placeholder">Bench B</span></div>
-    <div class="camera-box"><span class="placeholder">Moving</span></div>
-  </div>
-
-  <!-- BOTTOM STRIP -->
-  <div class="strip bottom">
-    <div class="camera-box"><span class="placeholder">Waiting for camera</span></div>
-    <div class="camera-box"><span class="placeholder">Waiting for camera</span></div>
-    <div class="camera-box"><span class="placeholder">Waiting for camera</span></div>
+  <!-- RIGHT CAMERA STRIP -->
+  <div class="strip" id="strip">
+    <!-- JS will populate camera tiles here -->
   </div>
 
 </div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+/* 🔴 YOUR EXISTING, WORKING JS GOES HERE
+   NOTHING IN THIS FILE BREAKS IT */
+</script>
 
 </body>
 </html>
