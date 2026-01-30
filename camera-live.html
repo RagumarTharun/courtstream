@@ -11,8 +11,6 @@
   --card:#161922;
   --border:#262b3d;
   --red:#b91c1c;
-  --icon:#e6e6eb;
-  --muted:#9aa0b4;
 }
 
 body{
@@ -34,13 +32,11 @@ body{
   height:56px;
   display:flex;
   align-items:center;
-  padding:0 16px;
 }
 .header-title{
   flex:1;
   text-align:center;
   font-size:15px;
-  font-weight:500;
 }
 .badge{
   font-size:12px;
@@ -57,7 +53,7 @@ body{
 video{
   width:88%;
   max-width:420px;
-  aspect-ratio:16/9;        /* ✅ landscape */
+  aspect-ratio:16/9;
   object-fit:cover;
   background:#000;
   border-radius:18px;
@@ -67,7 +63,7 @@ video{
 .controls{
   display:flex;
   justify-content:center;
-  gap:24px;
+  gap:18px;
   padding:18px 0 24px;
 }
 .ctrl{
@@ -84,14 +80,14 @@ video{
   background:var(--red);
   border-color:var(--red);
 }
+.ctrl.end{
+  background:var(--red);
+  border-color:var(--red);
+}
 .ctrl svg{
   width:24px;
   height:24px;
   fill:#fff;
-}
-.ctrl.end{
-  background:var(--red);
-  border-color:var(--red);
 }
 </style>
 </head>
@@ -112,31 +108,29 @@ video{
 
   <div class="controls">
 
+    <!-- MIC -->
     <button id="micBtn" class="ctrl" onclick="toggleMic()">
-      <svg viewBox="0 0 24 24">
-        <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
-        <path d="M19 11a7 7 0 01-14 0"/>
-      </svg>
+      🎤
     </button>
 
+    <!-- CAMERA -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
-      <svg viewBox="0 0 24 24">
-        <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
-      </svg>
+      📷
     </button>
 
-    <button class="ctrl" onclick="flip()">
-      <svg viewBox="0 0 24 24">
-        <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
-        <path d="M17 17H7v-4l-4 5 4 5v-4h14v-6h-4v4z"/>
-      </svg>
+    <!-- FLIP CAMERA -->
+    <button class="ctrl" onclick="flipCamera()">
+      🔄
     </button>
 
+    <!-- ORIENTATION -->
+    <button class="ctrl" onclick="toggleOrientation()">
+      ↕️
+    </button>
+
+    <!-- LEAVE -->
     <button class="ctrl end" onclick="leave()">
-      <svg viewBox="0 0 24 24">
-        <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
-        <path d="M3 5h8v14H3z"/>
-      </svg>
+      ⏹
     </button>
 
   </div>
@@ -150,14 +144,13 @@ video{
 ===================== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
-const micBtn = document.getElementById("micBtn");
-const camBtn = document.getElementById("camBtn");
 
 let mediaStream;
 let videoSender;
 let micOn = true;
 let camOn = true;
-let facing = "environment"; // ✅ back camera default
+let facing = "environment";      // ✅ back camera default
+let orientation = "landscape";   // landscape | portrait
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -165,21 +158,22 @@ const pc = new RTCPeerConnection({
 });
 
 /* =====================
-   MEDIA (LANDSCAPE)
+   CAMERA START
 ===================== */
 async function startCamera(){
+  const isLandscape = orientation === "landscape";
+
   const constraints = {
     video: {
       facingMode: { ideal: facing },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-      aspectRatio: 16 / 9
+      width: { ideal: isLandscape ? 1280 : 720 },
+      height:{ ideal: isLandscape ? 720  : 1280 },
+      aspectRatio: isLandscape ? 16/9 : 3/4
     },
-    audio: true
+    audio:true
   };
 
   const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
   video.srcObject = stream;
 
   if (!mediaStream) {
@@ -208,18 +202,21 @@ socket.emit("join", streamId);
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
-  micBtn.classList.toggle("off", !micOn);
 }
 
 function toggleCam(){
   camOn = !camOn;
   mediaStream.getVideoTracks()[0].enabled = camOn;
-  camBtn.classList.toggle("off", !camOn);
 }
 
-async function flip(){
+async function flipCamera(){
   facing = facing === "environment" ? "user" : "environment";
-  await startCamera(); // ✅ safe replaceTrack
+  await startCamera();
+}
+
+async function toggleOrientation(){
+  orientation = orientation === "landscape" ? "portrait" : "landscape";
+  await startCamera();
 }
 
 function leave(){
