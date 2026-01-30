@@ -1,93 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Director – CourtStream</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<title>CourtStream – Director</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <style>
-:root{
+:root {
   --bg:#0f1115;
+  --panel:#161922;
   --border:#262b3d;
+  --text:#e6e6eb;
+  --muted:#9aa0b4;
   --blue:#3b82f6;
+  --red:#ef4444;
 }
+
+*{box-sizing:border-box}
 
 body{
   margin:0;
   background:var(--bg);
-  color:#fff;
+  color:var(--text);
   font-family:system-ui;
-}
-
-.page{
-  display:flex;
-  flex-direction:column;
   height:100vh;
 }
 
-/* HEADER */
-.header{
-  height:52px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-bottom:1px solid var(--border);
+.director{
+  display:grid;
+  grid-template-columns:1fr 320px;
+  grid-template-rows:1fr 140px;
+  gap:14px;
+  padding:14px;
+  height:100%;
+}
+
+.panel{
+  background:var(--panel);
+  border-radius:16px;
+  border:1px solid var(--border);
 }
 
 /* MAIN FEED */
-.main{
-  flex:1;
-  background:#000;
-}
-.main video{
-  width:100%;
-  height:100%;
-  object-fit:contain;
-}
-
-/* CAMERA STRIP */
-.strip{
+.main-feed{
+  position:relative;
   display:flex;
-  gap:10px;
-  padding:10px;
-  overflow-x:auto;
-  border-top:1px solid var(--border);
-  background:#0b0d12;
+  align-items:center;
+  justify-content:center;
 }
-
-.tile{
-  min-width:140px;
-  height:90px;
-  background:#000;
-  border-radius:10px;
-  overflow:hidden;
-  cursor:pointer;
-  border:2px solid transparent;
-}
-.tile.active{
-  border-color:var(--blue);
-}
-.tile video{
+.main-feed video{
   width:100%;
   height:100%;
   object-fit:cover;
+  border-radius:16px;
+  background:#000;
+}
+
+/* TOP BAR */
+.top-bar{
+  position:absolute;
+  top:14px;
+  left:14px;
+  right:14px;
+  display:flex;
+  justify-content:space-between;
+  pointer-events:none;
+}
+.stream-info,.qr-box{
+  pointer-events:auto;
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:8px 14px;
+  border-radius:999px;
+  font-size:13px;
+}
+.qr-box{
+  border-radius:14px;
+  padding:8px;
+}
+.qr-box img{
+  width:80px;height:80px;background:#000;
+}
+
+/* RECORD BAR (visual only) */
+.record-bar{
+  position:absolute;
+  bottom:14px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  gap:12px;
+  align-items:center;
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:8px 14px;
+  border-radius:999px;
+}
+.record-dot{
+  width:14px;height:14px;border-radius:50%;
+  background:var(--red);
+}
+.timer{font-size:13px}
+
+/* CAMERA STRIP */
+.camera-strip{
+  display:flex;
+  gap:12px;
+}
+.camera-tile{
+  flex:1;
+  background:#000;
+  border-radius:14px;
+  overflow:hidden;
+  border:2px solid transparent;
+  cursor:pointer;
+  position:relative;
+}
+.camera-tile.active{
+  border-color:var(--blue);
+}
+.camera-tile video{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.camera-label{
+  position:absolute;
+  bottom:8px;
+  left:8px;
+  background:rgba(0,0,0,.6);
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
+}
+
+/* SIDE PANEL */
+.side-panel{
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.side-title{
+  font-size:14px;
+  color:var(--muted);
+}
+.side-camera{
+  height:140px;
+  background:#000;
+  border-radius:14px;
+  border:1px solid var(--border);
+  overflow:hidden;
+  position:relative;
+}
+.side-camera video{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.side-camera span{
+  position:absolute;
+  bottom:8px;
+  left:8px;
+  background:rgba(0,0,0,.6);
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
 }
 </style>
 </head>
 
 <body>
 
-<div class="page">
+<div class="director">
 
-  <div class="header">
-    Director • LIVE
-  </div>
-
-  <div class="main">
+  <!-- MAIN FEED -->
+  <div class="panel main-feed">
     <video id="mainVideo" autoplay muted playsinline></video>
+
+    <div class="top-bar">
+      <div class="stream-info">CourtStream • Live</div>
+      <div class="qr-box"><img /></div>
+    </div>
+
+    <div class="record-bar">
+      <div class="record-dot"></div>
+      <div class="timer">00:00:00</div>
+    </div>
   </div>
 
-  <div class="strip" id="strip"></div>
+  <!-- SIDE PANEL -->
+  <div class="panel side-panel">
+    <div class="side-title">Additional Cameras</div>
+    <div class="side-camera"><span>Bench A</span></div>
+    <div class="side-camera"><span>Bench B</span></div>
+    <div class="side-camera"><span>Moving</span></div>
+  </div>
+
+  <!-- CAMERA STRIP -->
+  <div class="camera-strip" id="strip"></div>
 
 </div>
 
@@ -122,7 +233,7 @@ function createPeer(id){
 
   peers[id] = { pc };
 
-  // 🔑 critical line from your old working version
+  // 🔑 critical for reliable receive
   pc.addTransceiver("video", { direction:"recvonly" });
 
   pc.ontrack = e => {
@@ -132,21 +243,26 @@ function createPeer(id){
     peers[id].stream = stream;
 
     const tile = document.createElement("div");
-    tile.className = "tile";
+    tile.className = "camera-tile";
 
     const v = document.createElement("video");
     v.autoplay = true;
-    v.playsInline = true;
     v.muted = true;
+    v.playsInline = true;
     v.srcObject = stream;
 
+    const label = document.createElement("span");
+    label.className = "camera-label";
+    label.innerText = "Camera";
+
     tile.appendChild(v);
+    tile.appendChild(label);
     strip.appendChild(tile);
+
     peers[id].tile = tile;
 
     tile.onclick = () => setMain(id);
 
-    // first camera auto-main
     if (!mainVideo.srcObject) {
       setMain(id);
     }
@@ -168,14 +284,14 @@ function createPeer(id){
     });
 }
 
-/* SET MAIN FEED */
 function setMain(id){
   const peer = peers[id];
   if (!peer || !peer.stream) return;
 
   mainVideo.srcObject = peer.stream;
 
-  document.querySelectorAll(".tile")
+  document
+    .querySelectorAll(".camera-tile")
     .forEach(t => t.classList.remove("active"));
 
   peer.tile.classList.add("active");
