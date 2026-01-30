@@ -49,17 +49,15 @@ body{
   display:flex;
   align-items:center;
   justify-content:center;
+  background:#000;
   overflow:hidden;
 }
 
+/* 🔑 ABSOLUTELY NO SIZING HERE */
 video{
-  max-width:100%;
-  max-height:100%;
-  width:auto;
-  height:auto;
+  display:block;
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* 🔑 EXACT phone preview */
 }
 
 /* CONTROLS */
@@ -115,7 +113,6 @@ video{
 
   <div class="controls">
 
-    <!-- MIC -->
     <button id="micBtn" class="ctrl" onclick="toggleMic()">
       <svg viewBox="0 0 24 24">
         <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
@@ -123,14 +120,12 @@ video{
       </svg>
     </button>
 
-    <!-- CAMERA -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
       <svg viewBox="0 0 24 24">
         <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
       </svg>
     </button>
 
-    <!-- FLIP -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
         <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
@@ -138,7 +133,6 @@ video{
       </svg>
     </button>
 
-    <!-- LEAVE -->
     <button class="ctrl end" onclick="leave()">
       <svg viewBox="0 0 24 24">
         <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
@@ -160,14 +154,14 @@ const camBtn = document.getElementById("camBtn");
 let mediaStream;
 let micOn = true;
 let camOn = true;
-let facing = "environment"; // back camera default
+let facing = "environment";
 
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* ===== CAMERA (CAPTURE ONCE, SEND AS-IS) ===== */
+/* CAMERA — capture ONCE, send RAW */
 (async ()=>{
   mediaStream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
@@ -178,10 +172,8 @@ const pc = new RTCPeerConnection({
   mediaStream.getTracks().forEach(t => pc.addTrack(t, mediaStream));
 })();
 
-/* ===== JOIN ===== */
 socket.emit("join", streamId);
 
-/* ===== CONTROLS ===== */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
@@ -197,17 +189,14 @@ function toggleCam(){
 async function flipCamera(){
   facing = facing === "environment" ? "user" : "environment";
 
-  const newStream = await navigator.mediaDevices.getUserMedia({
+  const s = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
     audio:true
   });
 
-  video.srcObject = newStream;
-
+  video.srcObject = s;
   mediaStream.getTracks().forEach(t=>t.stop());
-  mediaStream = newStream;
-
-  // IMPORTANT: do NOT replace tracks, do NOT rotate, do NOT touch orientation
+  mediaStream = s;
 }
 
 function leave(){
@@ -217,7 +206,6 @@ function leave(){
   location.href = "index.html";
 }
 
-/* ===== WEBRTC ===== */
 pc.onicecandidate = e=>{
   if(e.candidate){
     socket.emit("signal",{ data:e.candidate });
