@@ -1,95 +1,135 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Camera • LIVE</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{margin:0;background:#0f1115;color:#fff;font-family:system-ui}
-video{width:100%;height:100vh;object-fit:cover}
-.controls{position:fixed;bottom:20px;left:0;right:0;display:flex;justify-content:center;gap:16px}
-button{width:56px;height:56px;border-radius:50%;border:none;background:#222;color:white;font-size:14px}
-.off{background:#b91c1c}
+:root{
+  --bg:#0f1115;
+  --card:#161922;
+  --border:#262b3d;
+  --red:#b91c1c;
+}
+body{margin:0;background:var(--bg);color:#fff;font-family:system-ui}
+.page{position:fixed;inset:0;display:flex;flex-direction:column}
+.header{height:56px;display:flex;align-items:center;justify-content:center}
+.preview{flex:1;display:flex;align-items:center;justify-content:center}
+video{
+  width:88%;
+  max-width:420px;
+  aspect-ratio:3/4;
+  object-fit:cover;
+  background:#000;
+  border-radius:18px;
+}
+.controls{
+  display:flex;
+  justify-content:center;
+  gap:20px;
+  padding:18px 0 24px;
+}
+.ctrl{
+  width:56px;height:56px;border-radius:50%;
+  background:var(--card);
+  border:2px solid var(--border);
+  color:white;
+}
+.ctrl.off{background:var(--red);border-color:var(--red)}
 </style>
 </head>
 
 <body>
+<div class="page">
+  <div class="header">Camera • LIVE</div>
 
-<video id="v" autoplay muted playsinline></video>
+  <div class="preview">
+    <video id="video" autoplay muted playsinline></video>
+  </div>
 
-<div class="controls">
-  <button id="mic">Mic</button>
-  <button id="cam">Cam</button>
-  <button id="flip">Flip</button>
+  <div class="controls">
+    <button id="mic" class="ctrl">Mic</button>
+    <button id="cam" class="ctrl">Cam</button>
+    <button id="flip" class="ctrl">Flip</button>
+    <button class="ctrl off" onclick="leave()">End</button>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const streamId = new URLSearchParams(location.search).get("stream");
-const v = document.getElementById("v");
+const video = document.getElementById("video");
+const socket = io();
 
+let pc;
 let stream;
 let facing = "user";
 
-const socket = io();
-const pc = new RTCPeerConnection({
-  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-});
-
-/* MEDIA */
+/* INIT */
 async function start(){
+  pc = new RTCPeerConnection({
+    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+  });
+
+  pc.onicecandidate = e=>{
+    if(e.candidate){
+      socket.emit("signal",{data:{candidate:e.candidate}});
+    }
+  };
+
   stream = await navigator.mediaDevices.getUserMedia({
     video:{facingMode:facing},
     audio:true
   });
-  v.srcObject = stream;
-  stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+  video.srcObject = stream;
+  stream.getTracks().forEach(t=>pc.addTrack(t,stream));
+
+  socket.emit("join",{room:streamId,role:"camera"});
+  socket.emit("camera-ready");
 }
+
 start();
 
-/* JOIN */
-socket.emit("join",{room:streamId,role:"camera"});
-
-/* WEBRTC */
-pc.onicecandidate = e => {
-  if (e.candidate) {
-    socket.emit("signal",{data:{candidate:e.candidate}});
-  }
-};
-
-socket.on("signal", async ({from,data}) => {
-  if (data.sdp) {
+/* SIGNAL */
+socket.on("signal", async ({from,data})=>{
+  if(data.sdp){
     await pc.setRemoteDescription(data.sdp);
-    if (data.sdp.type === "offer") {
+    if(data.sdp.type==="offer"){
       const ans = await pc.createAnswer();
       await pc.setLocalDescription(ans);
       socket.emit("signal",{to:from,data:{sdp:ans}});
     }
   }
-  if (data.candidate) {
+  if(data.candidate){
     await pc.addIceCandidate(data.candidate);
   }
 });
 
 /* CONTROLS */
-mic.onclick = () => {
+mic.onclick = ()=>{
   const t = stream.getAudioTracks()[0];
   t.enabled = !t.enabled;
-  mic.classList.toggle("off", !t.enabled);
+  mic.classList.toggle("off",!t.enabled);
 };
-
-cam.onclick = () => {
+cam.onclick = ()=>{
   const t = stream.getVideoTracks()[0];
   t.enabled = !t.enabled;
-  cam.classList.toggle("off", !t.enabled);
+  cam.classList.toggle("off",!t.enabled);
 };
-
-flip.onclick = async () => {
-  facing = facing === "user" ? "environment" : "user";
+flip.onclick = async ()=>{
+  facing = facing==="user"?"environment":"user";
   stream.getTracks().forEach(t=>t.stop());
+  pc.close();
   await start();
 };
+function leave(){
+  pc.close();
+  socket.disconnect();
+  stream.getTracks().forEach(t=>t.stop());
+  location.href="index.html";
+}
 </script>
 </body>
 </html>
