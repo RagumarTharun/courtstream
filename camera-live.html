@@ -2,67 +2,69 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Camera • LIVE</title>
+<title>Camera</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{margin:0;background:#000}
+body{margin:0;background:black}
 video{width:100vw;height:100vh;object-fit:cover}
 </style>
 </head>
-<body>
 
+<body>
 <video id="video" autoplay muted playsinline></video>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+console.log("CAMERA JS RUNNING");
+
 const streamId = new URLSearchParams(location.search).get("stream");
 const socket = io();
 const video = document.getElementById("video");
 
 let pc;
 let directorId;
-let stream;
 
-/* JOIN */
-socket.emit("join",{room:streamId,role:"camera"});
+socket.emit("join", {
+  room: streamId,
+  role: "camera"
+});
 
-/* SIGNAL */
-socket.on("signal", async ({from,data})=>{
-  if(data.sdp && data.sdp.type==="offer"){
+socket.on("signal", async ({ from, data }) => {
+  if (data.sdp && data.sdp.type === "offer") {
     directorId = from;
 
     pc = new RTCPeerConnection({
-      iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
 
-    pc.onicecandidate = e=>{
-      if(e.candidate){
-        socket.emit("signal",{
+    pc.onicecandidate = e => {
+      if (e.candidate) {
+        socket.emit("signal", {
           to: directorId,
-          data:{candidate:e.candidate}
+          data: { candidate: e.candidate }
         });
       }
     };
 
-    stream = await navigator.mediaDevices.getUserMedia({
-      video:true,
-      audio:true
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true
     });
 
     video.srcObject = stream;
-    stream.getTracks().forEach(t=>pc.addTrack(t,stream));
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
     await pc.setRemoteDescription(data.sdp);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-    socket.emit("signal",{
+    socket.emit("signal", {
       to: directorId,
-      data:{sdp:answer}
+      data: { sdp: answer }
     });
   }
 
-  if(data.candidate && pc){
+  if (data.candidate && pc) {
     await pc.addIceCandidate(data.candidate);
   }
 });
