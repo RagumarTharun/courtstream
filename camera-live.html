@@ -59,7 +59,7 @@ video{
   height:auto;
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* 🔑 same as phone.html */
+  object-fit:contain; /* 🔑 EXACT phone preview */
 }
 
 /* CONTROLS */
@@ -103,19 +103,16 @@ video{
 
 <div class="page">
 
-  <!-- HEADER -->
   <div class="header">
     <div class="header-title">
       Camera • <span class="badge">LIVE</span>
     </div>
   </div>
 
-  <!-- PREVIEW -->
   <div class="preview">
     <video id="video" autoplay muted playsinline></video>
   </div>
 
-  <!-- CONTROLS -->
   <div class="controls">
 
     <!-- MIC -->
@@ -155,7 +152,6 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* ===== STATE ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
@@ -164,14 +160,14 @@ const camBtn = document.getElementById("camBtn");
 let mediaStream;
 let micOn = true;
 let camOn = true;
-let facing = "environment"; // ✅ back camera default
+let facing = "environment"; // back camera default
 
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* ===== CAMERA (same behavior as phone.html) ===== */
+/* ===== CAMERA (CAPTURE ONCE, SEND AS-IS) ===== */
 (async ()=>{
   mediaStream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
@@ -179,7 +175,7 @@ const pc = new RTCPeerConnection({
   });
 
   video.srcObject = mediaStream;
-  mediaStream.getTracks().forEach(t=>pc.addTrack(t, mediaStream));
+  mediaStream.getTracks().forEach(t => pc.addTrack(t, mediaStream));
 })();
 
 /* ===== JOIN ===== */
@@ -211,10 +207,9 @@ async function flipCamera(){
   mediaStream.getTracks().forEach(t=>t.stop());
   mediaStream = newStream;
 
-  // director renegotiates naturally (old working behavior)
+  // IMPORTANT: do NOT replace tracks, do NOT rotate, do NOT touch orientation
 }
 
-/* ===== LEAVE ===== */
 function leave(){
   pc.close();
   socket.disconnect();
