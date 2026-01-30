@@ -6,12 +6,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body{margin:0;background:black}
-video{width:100vw;height:100vh;object-fit:contain}
+video{
+  width:100vw;
+  height:100vh;
+  object-fit:contain;
+  background:black;
+}
 </style>
 </head>
 
 <body>
-<video id="main" autoplay playsinline></video>
+
+<video id="main" autoplay muted playsinline></video>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -37,9 +43,17 @@ socket.on("peer-joined", async ({ id, role }) => {
 
   peers[id] = pc;
 
-  pc.ontrack = e => {
-    console.log("TRACK RECEIVED");
+  pc.ontrack = async (e) => {
+    console.log("🎥 TRACK RECEIVED");
+
     main.srcObject = e.streams[0];
+
+    try {
+      await main.play();
+      console.log("▶️ VIDEO PLAYING");
+    } catch (err) {
+      console.warn("Autoplay blocked:", err);
+    }
   };
 
   pc.onicecandidate = e => {
@@ -72,5 +86,6 @@ socket.on("signal", async ({ from, data }) => {
   }
 });
 </script>
+
 </body>
 </html>
