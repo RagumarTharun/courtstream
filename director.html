@@ -1,103 +1,71 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Director – CourtStream</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Director • LIVE</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
 <style>
-body{margin:0;background:#0f1115;color:#fff;font-family:system-ui}
-.page{display:flex;flex-direction:column;height:100vh}
-.header{height:56px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #262b3d}
-.main{flex:1;display:flex;align-items:center;justify-content:center;background:#000}
-.main video{width:100%;height:100%;object-fit:contain}
-.strip{display:flex;gap:12px;padding:12px;overflow-x:auto;border-top:1px solid #262b3d}
-.tile{min-width:140px;height:90px;background:#000;border-radius:10px;overflow:hidden;cursor:pointer;border:2px solid transparent}
-.tile.active{border-color:#3b82f6}
-.tile video{width:100%;height:100%;object-fit:cover}
+body{margin:0;background:#000;color:#fff;font-family:system-ui}
+#main{width:100vw;height:100vh;object-fit:contain}
 </style>
 </head>
 
 <body>
-<div class="page">
 
-<div class="header">Director • LIVE</div>
-
-<div class="main">
-  <video id="mainVideo" autoplay muted playsinline></video>
-</div>
-
-<div class="strip" id="strip"></div>
-
-</div>
+<video id="main" autoplay playsinline></video>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const streamId = new URLSearchParams(location.search).get("stream");
+const main = document.getElementById("main");
 const socket = io();
-
 const peers = {};
-const mainVideo = document.getElementById("mainVideo");
-const strip = document.getElementById("strip");
 
-/* JOIN */
 socket.emit("join",{room:streamId,role:"director"});
 
-/* CREATE PEER */
 function createPeer(id){
   const pc = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
 
-  pc.onicecandidate = e=>{
-    if(e.candidate){
+  pc.ontrack = e => {
+    main.srcObject = e.streams[0];
+  };
+
+  pc.onicecandidate = e => {
+    if (e.candidate) {
       socket.emit("signal",{to:id,data:{candidate:e.candidate}});
     }
   };
 
-  pc.ontrack = e=>{
-    if(peers[id].stream) return;
-    const stream = e.streams[0];
-    peers[id].stream = stream;
-
-    const tile = document.createElement("div");
-    tile.className="tile";
-    const v=document.createElement("video");
-    v.autoplay=true;v.playsInline=true;v.srcObject=stream;
-    tile.appendChild(v);
-
-    tile.onclick=()=>setMain(stream,tile);
-    strip.appendChild(tile);
-    peers[id].tile=tile;
-
-    if(!mainVideo.srcObject) setMain(stream,tile);
-  };
-
-  peers[id]={pc};
+  peers[id] = pc;
   return pc;
 }
 
-function setMain(stream,tile){
-  mainVideo.srcObject=stream;
-  document.querySelectorAll(".tile").forEach(t=>t.classList.remove("active"));
-  tile.classList.add("active");
-}
-
 /* CAMERA JOINED */
-socket.on("peer-joined", async ({id,role})=>{
-  if(role!=="camera") return;
-  const pc=createPeer(id);
-  const offer=await pc.createOffer();
+socket.on("peer-joined", async ({id,role}) => {
+  if (role !== "camera") return;
+  const pc = createPeer(id);
+  const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   socket.emit("signal",{to:id,data:{sdp:offer}});
 });
 
-/* SIGNALS */
-socket.on("signal", async ({from,data})=>{
-  const peer=peers[from];
-  if(!peer) return;
-  if(data.sdp) await peer.pc.setRemoteDescription(data.sdp);
-  if(data.candidate) await peer.pc.addIceCandidate(data.candidate);
+/* SIGNAL */
+socket.on("signal", async ({from,data}) => {
+  const pc = peers[from];
+  if (!pc) return;
+
+  if (data.sdp) await pc.setRemoteDescription(data.sdp);
+  if (data.candidate) await pc.addIceCandidate(data.candidate);
+});
+
+/* CAMERA LEFT */
+socket.on("peer-left", ({id}) => {
+  peers[id]?.close();
+  delete peers[id];
+  main.srcObject = null;
 });
 </script>
 </body>
