@@ -40,6 +40,7 @@ const peers = {};
 const mainVideo = document.getElementById("mainVideo");
 const strip = document.getElementById("strip");
 
+/* JOIN */
 socket.emit("join",{room:streamId,role:"director"});
 
 /* CREATE PEER */
@@ -62,9 +63,7 @@ function createPeer(id){
     const tile = document.createElement("div");
     tile.className="tile";
     const v=document.createElement("video");
-    v.autoplay=true;
-    v.playsInline=true;
-    v.srcObject=stream;
+    v.autoplay=true;v.playsInline=true;v.srcObject=stream;
     tile.appendChild(v);
 
     tile.onclick=()=>setMain(stream,tile);
@@ -87,7 +86,6 @@ function setMain(stream,tile){
 /* CAMERA JOINED */
 socket.on("peer-joined", async ({id,role})=>{
   if(role!=="camera") return;
-
   const pc=createPeer(id);
   const offer=await pc.createOffer();
   await pc.setLocalDescription(offer);
@@ -98,13 +96,8 @@ socket.on("peer-joined", async ({id,role})=>{
 socket.on("signal", async ({from,data})=>{
   const peer=peers[from];
   if(!peer) return;
-
-  if(data.sdp){
-    await peer.pc.setRemoteDescription(data.sdp);
-  }
-  if(data.candidate){
-    await peer.pc.addIceCandidate(data.candidate);
-  }
+  if(data.sdp) await peer.pc.setRemoteDescription(data.sdp);
+  if(data.candidate) await peer.pc.addIceCandidate(data.candidate);
 });
 </script>
 </body>
