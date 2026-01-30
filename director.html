@@ -5,87 +5,69 @@
 <title>Director</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{margin:0;background:black}
-video{
-  width:100vw;
-  height:100vh;
-  object-fit:contain;
-  background:black;
-}
+body{margin:0;background:#000;color:white}
+#main video{width:100vw;height:100vh;object-fit:contain}
 </style>
 </head>
 
 <body>
-
-<video id="main" autoplay muted playsinline></video>
+<div id="main">
+  <video id="program" autoplay muted playsinline></video>
+</div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-console.log("DIRECTOR JS RUNNING");
-
-const streamId = new URLSearchParams(location.search).get("stream");
 const socket = io();
-const main = document.getElementById("main");
+const streamId = new URLSearchParams(location.search).get("stream");
+const program = document.getElementById("program");
 
 const peers = {};
 
-socket.emit("join", {
-  room: streamId,
-  role: "director"
+/* JOIN */
+socket.emit("join", streamId);
+
+/* EXISTING PEERS */
+socket.on("existing-peers", list => {
+  list.forEach(p => createPeer(p.id));
 });
 
-socket.on("peer-joined", async ({ id, role }) => {
-  if (role !== "camera") return;
+/* NEW PEER */
+socket.on("peer-joined", p => {
+  createPeer(p.id);
+});
+
+async function createPeer(id){
+  if (peers[id]) return;
 
   const pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
 
   peers[id] = pc;
 
-  pc.ontrack = async (e) => {
+  pc.addTransceiver("video", { direction: "recvonly" });
+
+  pc.ontrack = e => {
     console.log("🎥 TRACK RECEIVED");
-
-    main.srcObject = e.streams[0];
-
-    try {
-      await main.play();
-      console.log("▶️ VIDEO PLAYING");
-    } catch (err) {
-      console.warn("Autoplay blocked:", err);
-    }
+    program.srcObject = e.streams[0];
   };
 
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      socket.emit("signal", {
-        to: id,
-        data: { candidate: e.candidate }
-      });
-    }
-  };
+  pc.onicecandidate = e =>
+    e.candidate && socket.emit("signal", { to:id, data:e.candidate });
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
+  socket.emit("signal", { to:id, data:offer });
+}
 
-  socket.emit("signal", {
-    to: id,
-    data: { sdp: offer }
-  });
-});
-
-socket.on("signal", async ({ from, data }) => {
+/* SIGNAL */
+socket.on("signal", async ({from,data})=>{
   const pc = peers[from];
   if (!pc) return;
 
-  if (data.sdp) {
-    await pc.setRemoteDescription(data.sdp);
-  }
-  if (data.candidate) {
-    await pc.addIceCandidate(data.candidate);
-  }
+  if (data.type === "answer") await pc.setRemoteDescription(data);
+  if (data.candidate) await pc.addIceCandidate(data);
 });
 </script>
-
 </body>
 </html>
