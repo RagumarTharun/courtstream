@@ -11,30 +11,43 @@
   --card:#161922;
   --border:#262b3d;
   --red:#b91c1c;
+  --icon:#e6e6eb;
+  --muted:#9aa0b4;
 }
+
 body{
   margin:0;
   background:var(--bg);
   color:#fff;
   font-family:system-ui;
 }
+
 .page{
   position:fixed;
   inset:0;
   display:flex;
   flex-direction:column;
 }
+
+/* HEADER */
 .header{
   height:56px;
   display:flex;
   align-items:center;
+  padding:0 16px;
 }
 .header-title{
   flex:1;
   text-align:center;
   font-size:15px;
+  font-weight:500;
 }
-.badge{ color:#22c55e; font-size:12px; }
+.badge{
+  font-size:12px;
+  color:#22c55e;
+}
+
+/* PREVIEW */
 .preview{
   flex:1;
   display:flex;
@@ -44,11 +57,13 @@ body{
 video{
   width:88%;
   max-width:420px;
-  aspect-ratio:3/4;
+  aspect-ratio:16/9;        /* ✅ landscape */
   object-fit:cover;
   background:#000;
   border-radius:18px;
 }
+
+/* CONTROLS */
 .controls{
   display:flex;
   justify-content:center;
@@ -69,8 +84,14 @@ video{
   background:var(--red);
   border-color:var(--red);
 }
+.ctrl svg{
+  width:24px;
+  height:24px;
+  fill:#fff;
+}
 .ctrl.end{
   background:var(--red);
+  border-color:var(--red);
 }
 </style>
 </head>
@@ -90,41 +111,74 @@ video{
   </div>
 
   <div class="controls">
-    <button id="micBtn" class="ctrl" onclick="toggleMic()">🎤</button>
-    <button id="camBtn" class="ctrl" onclick="toggleCam()">📷</button>
-    <button class="ctrl" onclick="flip()">🔄</button>
-    <button class="ctrl end" onclick="leave()">⏹</button>
+
+    <button id="micBtn" class="ctrl" onclick="toggleMic()">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
+        <path d="M19 11a7 7 0 01-14 0"/>
+      </svg>
+    </button>
+
+    <button id="camBtn" class="ctrl" onclick="toggleCam()">
+      <svg viewBox="0 0 24 24">
+        <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
+      </svg>
+    </button>
+
+    <button class="ctrl" onclick="flip()">
+      <svg viewBox="0 0 24 24">
+        <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
+        <path d="M17 17H7v-4l-4 5 4 5v-4h14v-6h-4v4z"/>
+      </svg>
+    </button>
+
+    <button class="ctrl end" onclick="leave()">
+      <svg viewBox="0 0 24 24">
+        <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
+        <path d="M3 5h8v14H3z"/>
+      </svg>
+    </button>
+
   </div>
 
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* =========================
+/* =====================
    STATE
-========================= */
+===================== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
-const socket = io();
+const micBtn = document.getElementById("micBtn");
+const camBtn = document.getElementById("camBtn");
 
 let mediaStream;
 let videoSender;
 let micOn = true;
 let camOn = true;
-let facing = "environment"; // ✅ BACK CAMERA DEFAULT
+let facing = "environment"; // ✅ back camera default
 
+const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* =========================
-   MEDIA
-========================= */
-async function startMedia(){
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ exact:facing } },
-    audio:true
-  });
+/* =====================
+   MEDIA (LANDSCAPE)
+===================== */
+async function startCamera(){
+  const constraints = {
+    video: {
+      facingMode: { ideal: facing },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      aspectRatio: 16 / 9
+    },
+    audio: true
+  };
+
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
   video.srcObject = stream;
 
@@ -134,38 +188,38 @@ async function startMedia(){
       if (track.kind === "video") videoSender = sender;
     });
   } else {
-    // replace tracks safely
     const newVideoTrack = stream.getVideoTracks()[0];
     await videoSender.replaceTrack(newVideoTrack);
-
     mediaStream.getTracks().forEach(t=>t.stop());
   }
 
   mediaStream = stream;
 }
-startMedia();
+startCamera();
 
-/* =========================
+/* =====================
    JOIN
-========================= */
+===================== */
 socket.emit("join", streamId);
 
-/* =========================
+/* =====================
    CONTROLS
-========================= */
+===================== */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
+  micBtn.classList.toggle("off", !micOn);
 }
 
 function toggleCam(){
   camOn = !camOn;
   mediaStream.getVideoTracks()[0].enabled = camOn;
+  camBtn.classList.toggle("off", !camOn);
 }
 
 async function flip(){
   facing = facing === "environment" ? "user" : "environment";
-  await startMedia(); // ✅ NO renegotiation needed
+  await startCamera(); // ✅ safe replaceTrack
 }
 
 function leave(){
@@ -175,9 +229,9 @@ function leave(){
   location.href = "index.html";
 }
 
-/* =========================
-   WEBRTC SIGNALING
-========================= */
+/* =====================
+   WEBRTC
+===================== */
 pc.onicecandidate = e=>{
   if(e.candidate){
     socket.emit("signal",{ data:e.candidate });
