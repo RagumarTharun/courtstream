@@ -1,27 +1,104 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Director</title>
+<title>Director – CourtStream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-body{margin:0;background:#000;color:white}
-#main video{width:100vw;height:100vh;object-fit:contain}
+:root{
+  --bg:#0f1115;
+  --border:#262b3d;
+  --blue:#3b82f6;
+}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:#fff;
+  font-family:system-ui;
+}
+
+.page{
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+}
+
+/* HEADER */
+.header{
+  height:52px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-bottom:1px solid var(--border);
+}
+
+/* MAIN FEED */
+.main{
+  flex:1;
+  background:#000;
+}
+.main video{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+}
+
+/* CAMERA STRIP */
+.strip{
+  display:flex;
+  gap:10px;
+  padding:10px;
+  overflow-x:auto;
+  border-top:1px solid var(--border);
+  background:#0b0d12;
+}
+
+.tile{
+  min-width:140px;
+  height:90px;
+  background:#000;
+  border-radius:10px;
+  overflow:hidden;
+  cursor:pointer;
+  border:2px solid transparent;
+}
+.tile.active{
+  border-color:var(--blue);
+}
+.tile video{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
 </style>
 </head>
 
 <body>
-<div id="main">
-  <video id="program" autoplay muted playsinline></video>
+
+<div class="page">
+
+  <div class="header">
+    Director • LIVE
+  </div>
+
+  <div class="main">
+    <video id="mainVideo" autoplay muted playsinline></video>
+  </div>
+
+  <div class="strip" id="strip"></div>
+
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket = io();
 const streamId = new URLSearchParams(location.search).get("stream");
-const program = document.getElementById("program");
+const socket = io();
 
-const peers = {};
+const peers = {}; // id -> { pc, stream, tile }
+const mainVideo = document.getElementById("mainVideo");
+const strip = document.getElementById("strip");
 
 /* JOIN */
 socket.emit("join", streamId);
@@ -31,43 +108,106 @@ socket.on("existing-peers", list => {
   list.forEach(p => createPeer(p.id));
 });
 
-/* NEW PEER */
+/* NEW CAMERA */
 socket.on("peer-joined", p => {
   createPeer(p.id);
 });
 
-async function createPeer(id){
+function createPeer(id){
   if (peers[id]) return;
 
   const pc = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
 
-  peers[id] = pc;
+  peers[id] = { pc };
 
-  pc.addTransceiver("video", { direction: "recvonly" });
+  // 🔑 critical line from your old working version
+  pc.addTransceiver("video", { direction:"recvonly" });
 
   pc.ontrack = e => {
-    console.log("🎥 TRACK RECEIVED");
-    program.srcObject = e.streams[0];
+    if (peers[id].stream) return;
+
+    const stream = e.streams[0];
+    peers[id].stream = stream;
+
+    const tile = document.createElement("div");
+    tile.className = "tile";
+
+    const v = document.createElement("video");
+    v.autoplay = true;
+    v.playsInline = true;
+    v.muted = true;
+    v.srcObject = stream;
+
+    tile.appendChild(v);
+    strip.appendChild(tile);
+    peers[id].tile = tile;
+
+    tile.onclick = () => setMain(id);
+
+    // first camera auto-main
+    if (!mainVideo.srcObject) {
+      setMain(id);
+    }
   };
 
-  pc.onicecandidate = e =>
-    e.candidate && socket.emit("signal", { to:id, data:e.candidate });
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit("signal", { to:id, data:e.candidate });
+    }
+  };
 
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  socket.emit("signal", { to:id, data:offer });
+  pc.createOffer()
+    .then(o => pc.setLocalDescription(o))
+    .then(() => {
+      socket.emit("signal", {
+        to:id,
+        data: pc.localDescription
+      });
+    });
+}
+
+/* SET MAIN FEED */
+function setMain(id){
+  const peer = peers[id];
+  if (!peer || !peer.stream) return;
+
+  mainVideo.srcObject = peer.stream;
+
+  document.querySelectorAll(".tile")
+    .forEach(t => t.classList.remove("active"));
+
+  peer.tile.classList.add("active");
 }
 
 /* SIGNAL */
 socket.on("signal", async ({from,data})=>{
-  const pc = peers[from];
-  if (!pc) return;
+  const peer = peers[from];
+  if (!peer) return;
 
-  if (data.type === "answer") await pc.setRemoteDescription(data);
-  if (data.candidate) await pc.addIceCandidate(data);
+  if (data.type === "answer") {
+    await peer.pc.setRemoteDescription(data);
+  }
+  if (data.candidate) {
+    await peer.pc.addIceCandidate(data);
+  }
+});
+
+/* CAMERA LEFT */
+socket.on("camera-left", ({id})=>{
+  const peer = peers[id];
+  if (!peer) return;
+
+  peer.pc.close();
+  peer.tile?.remove();
+  delete peers[id];
+
+  if (mainVideo.srcObject === peer.stream) {
+    mainVideo.srcObject = null;
+  }
 });
 </script>
+
 </body>
 </html>
