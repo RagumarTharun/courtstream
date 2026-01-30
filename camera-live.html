@@ -11,8 +11,9 @@
   --card:#161922;
   --border:#262b3d;
   --red:#b91c1c;
+  --icon:#e6e6eb;
+  --muted:#9aa0b4;
 }
-
 body{margin:0;background:var(--bg);color:#fff;font-family:system-ui}
 .page{position:fixed;inset:0;display:flex;flex-direction:column}
 .header{height:56px;display:flex;align-items:center;justify-content:center}
@@ -21,6 +22,7 @@ video{width:88%;max-width:420px;aspect-ratio:3/4;object-fit:cover;background:#00
 .controls{display:flex;justify-content:center;gap:24px;padding:18px 0 24px}
 .ctrl{width:56px;height:56px;border-radius:50%;border:2px solid var(--border);background:var(--card)}
 .ctrl.off,.ctrl.end{background:var(--red);border-color:var(--red)}
+.ctrl svg{width:24px;height:24px;fill:#fff}
 </style>
 </head>
 
@@ -51,17 +53,16 @@ let mediaStream;
 let facing = "user";
 let micOn = true;
 let camOn = true;
-
 let directorId = null;
-const pendingIce = [];
+let pendingIce = [];
 
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* CAMERA PREVIEW */
-async function startCamera(){
+/* PREVIEW ONLY */
+async function startPreview(){
   if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
   mediaStream = await navigator.mediaDevices.getUserMedia({
     video:{facingMode:facing},
@@ -69,7 +70,7 @@ async function startCamera(){
   });
   video.srcObject = mediaStream;
 }
-startCamera();
+startPreview();
 
 /* JOIN */
 socket.emit("join",{room:streamId,role:"camera"});
@@ -78,23 +79,20 @@ socket.emit("join",{room:streamId,role:"camera"});
 socket.on("signal", async ({from,data})=>{
   if(data.sdp && data.sdp.type==="offer"){
     directorId = from;
-
     await pc.setRemoteDescription(data.sdp);
 
-    mediaStream.getTracks().forEach(track=>{
-      pc.addTrack(track, mediaStream);
-    });
+    // ✅ add tracks AFTER offer
+    mediaStream.getTracks().forEach(t=>pc.addTrack(t,mediaStream));
 
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    socket.emit("signal",{to:from,data:{sdp:ans}});
 
-    socket.emit("signal",{to:from,data:{sdp:answer}});
-
-    // 🔑 flush ICE
+    // flush ICE
     pendingIce.forEach(c=>{
       socket.emit("signal",{to:directorId,data:{candidate:c}});
     });
-    pendingIce.length = 0;
+    pendingIce=[];
   }
 
   if(data.candidate){
@@ -115,15 +113,15 @@ pc.onicecandidate = e=>{
 /* CONTROLS */
 function toggleMic(){
   micOn=!micOn;
-  mediaStream.getAudioTracks()[0].enabled = micOn;
+  mediaStream.getAudioTracks()[0].enabled=micOn;
 }
 function toggleCam(){
   camOn=!camOn;
-  mediaStream.getVideoTracks()[0].enabled = camOn;
+  mediaStream.getVideoTracks()[0].enabled=camOn;
 }
 async function flip(){
   facing = facing==="user"?"environment":"user";
-  await startCamera();
+  await startPreview(); // ❌ DO NOT add tracks again
 }
 
 /* LEAVE */
