@@ -1,7 +1,186 @@
-<!-- YOUR FILE AS GIVEN -->
-<!-- ONLY ADDITIONS ARE MARKED 🔁 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CourtStream – Director</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+<style>
+:root{
+  --bg:#0f1115;
+  --panel:#161922;
+  --border:#262b3d;
+  --text:#e6e6eb;
+  --muted:#9aa0b4;
+  --red:#ef4444;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui;
+  height:100vh;
+}
+
+/* ===== LAYOUT ===== */
+.director{
+  display:grid;
+  grid-template-columns: 1fr 320px;
+  gap:14px;
+  padding:14px;
+  height:100%;
+}
+
+/* ===== PANELS ===== */
+.panel{
+  background:var(--panel);
+  border-radius:16px;
+  border:1px solid var(--border);
+}
+
+/* ===== MAIN PREVIEW ===== */
+.main-feed{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#000;
+  overflow:hidden;
+}
+
+/* Fixed preview size */
+.main-feed::before{
+  content:"";
+  display:block;
+  padding-top:56.25%;
+}
+
+.main-feed video{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  background:#000;
+  transform-origin:center center;
+}
+
+/* Placeholder */
+.placeholder{
+  position:absolute;
+  color:var(--muted);
+  font-size:14px;
+  z-index:2;
+}
+
+/* Top-left badge */
+.stream-badge{
+  position:absolute;
+  top:14px;
+  left:14px;
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:13px;
+}
+
+/* Record badge */
+.record-bar{
+  position:absolute;
+  bottom:14px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:13px;
+}
+.record-dot{
+  width:10px;
+  height:10px;
+  background:var(--red);
+  border-radius:50%;
+}
+
+/* ===== RIGHT CAMERA STRIPE ===== */
+.side-panel{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  padding:12px;
+  overflow-y:auto;
+}
+
+.side-title{
+  font-size:13px;
+  color:var(--muted);
+}
+
+.camera-slot{
+  height:140px;
+  background:#000;
+  border-radius:14px;
+  border:1px solid var(--border);
+  position:relative;
+  overflow:hidden;
+  cursor:pointer;
+  flex-shrink:0;
+}
+
+.camera-slot video{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  background:#000;
+  transform-origin:center center;
+}
+
+.camera-slot span{
+  position:absolute;
+  bottom:8px;
+  left:8px;
+  font-size:12px;
+  background:rgba(0,0,0,.6);
+  padding:4px 8px;
+  border-radius:999px;
+  color:#fff;
+}
+</style>
+</head>
+
+<body>
+
+<div class="director">
+
+  <!-- MAIN PREVIEW -->
+  <div class="panel main-feed">
+    <video id="mainVideo" autoplay muted playsinline></video>
+    <div id="placeholder" class="placeholder">Select a camera to preview</div>
+
+    <div class="stream-badge" id="streamBadge"></div>
+
+    <div class="record-bar">
+      <div class="record-dot"></div>
+      <div>00:00:00</div>
+    </div>
+  </div>
+
+  <!-- RIGHT CAMERA STRIPE -->
+  <div class="panel side-panel" id="cameraStrip">
+    <div class="side-title">Cameras</div>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
 <script>
+/* ===== STREAM INFO ===== */
 const params = new URLSearchParams(location.search);
 const streamId = params.get("stream");
 const streamName = params.get("name") || streamId;
@@ -9,34 +188,42 @@ const streamName = params.get("name") || streamId;
 document.getElementById("streamBadge").innerText =
   streamName + " • LIVE";
 
+/* ===== SOCKET / STATE ===== */
 const socket = io();
 const mainVideo = document.getElementById("mainVideo");
 const placeholder = document.getElementById("placeholder");
 const strip = document.getElementById("cameraStrip");
 
-const peers = {};
-const rotations = {}; // 🔁 socketId -> degrees
+const peers = {};      // socketId -> { pc, stream, slot }
+const rotations = {}; // socketId -> rotation degrees
 
+/* ===== JOIN ===== */
 socket.emit("join", streamId);
 
+/* ===== CAMERA JOINED ===== */
 socket.on("peer-joined", ({ id }) => {
   if (peers[id]) return;
   createPeer(id);
 });
 
+/* ===== CAMERA LEFT ===== */
 socket.on("peer-left", ({ id }) => {
   const p = peers[id];
   if (!p) return;
+
   p.pc.close();
   p.slot.remove();
   delete peers[id];
+  delete rotations[id];
 
   if (mainVideo.srcObject === p.stream) {
     mainVideo.srcObject = null;
+    mainVideo.style.transform = "";
     placeholder.style.display = "block";
   }
 });
 
+/* ===== CAMERA ROTATION (MANUAL) ===== */
 socket.on("camera-rotate", ({ from, rotation }) => {
   rotations[from] = rotation;
   const p = peers[from];
@@ -50,6 +237,7 @@ socket.on("camera-rotate", ({ from, rotation }) => {
   }
 });
 
+/* ===== CREATE PEER ===== */
 function createPeer(id){
   const pc = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
@@ -77,6 +265,8 @@ function createPeer(id){
     v.srcObject = stream;
     v.style.transform = `rotate(${rotations[id] || 0}deg)`;
 
+    v.onloadedmetadata = () => v.play().catch(()=>{});
+
     slot.prepend(v);
 
     slot.onclick = () => {
@@ -84,6 +274,8 @@ function createPeer(id){
       mainVideo.style.transform =
         `rotate(${rotations[id] || 0}deg)`;
       placeholder.style.display = "none";
+      mainVideo.onloadedmetadata = () =>
+        mainVideo.play().catch(()=>{});
     };
   };
 
@@ -100,11 +292,19 @@ function createPeer(id){
     });
 }
 
+/* ===== SIGNAL ===== */
 socket.on("signal", async ({ from, data }) => {
   const p = peers[from];
   if (!p) return;
 
-  if (data.type) await p.pc.setRemoteDescription(data);
-  if (data.candidate) await p.pc.addIceCandidate(data);
+  if (data.type) {
+    await p.pc.setRemoteDescription(data);
+  }
+  if (data.candidate) {
+    await p.pc.addIceCandidate(data);
+  }
 });
 </script>
+
+</body>
+</html>
