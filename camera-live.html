@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Camera • LIVE</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera Live – CourtStream</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
 <style>
 :root{
@@ -11,123 +11,124 @@
   --card:#161922;
   --border:#262b3d;
   --red:#b91c1c;
+  --icon:#e6e6eb;
+  --muted:#9aa0b4;
 }
 body{margin:0;background:var(--bg);color:#fff;font-family:system-ui}
 .page{position:fixed;inset:0;display:flex;flex-direction:column}
 .header{height:56px;display:flex;align-items:center;justify-content:center}
 .preview{flex:1;display:flex;align-items:center;justify-content:center}
-video{
-  width:88%;
-  max-width:420px;
-  aspect-ratio:3/4;
-  object-fit:cover;
-  background:#000;
-  border-radius:18px;
-}
-.controls{
-  display:flex;
-  justify-content:center;
-  gap:20px;
-  padding:18px 0 24px;
-}
-.ctrl{
-  width:56px;height:56px;border-radius:50%;
-  background:var(--card);
-  border:2px solid var(--border);
-  color:white;
-}
-.ctrl.off{background:var(--red);border-color:var(--red)}
+video{width:88%;max-width:420px;aspect-ratio:3/4;object-fit:cover;background:#000;border-radius:18px}
+.controls{display:flex;justify-content:center;gap:24px;padding:18px 0 24px}
+.ctrl{width:56px;height:56px;border-radius:50%;border:2px solid var(--border);background:var(--card)}
+.ctrl.off,.ctrl.end{background:var(--red);border-color:var(--red)}
+.ctrl svg{width:24px;height:24px;fill:#fff}
 </style>
 </head>
 
 <body>
 <div class="page">
-  <div class="header">Camera • LIVE</div>
 
-  <div class="preview">
-    <video id="video" autoplay muted playsinline></video>
-  </div>
+<div class="header">Camera • LIVE</div>
 
-  <div class="controls">
-    <button id="mic" class="ctrl">Mic</button>
-    <button id="cam" class="ctrl">Cam</button>
-    <button id="flip" class="ctrl">Flip</button>
-    <button class="ctrl off" onclick="leave()">End</button>
-  </div>
+<div class="preview">
+  <video id="video" autoplay muted playsinline></video>
+</div>
+
+<div class="controls">
+  <button id="micBtn" class="ctrl" onclick="toggleMic()"></button>
+  <button id="camBtn" class="ctrl" onclick="toggleCam()"></button>
+  <button class="ctrl" onclick="flip()"></button>
+  <button class="ctrl end" onclick="leave()"></button>
+</div>
+
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
-const socket = io();
 
-let pc;
-let stream;
+let mediaStream;
 let facing = "user";
+let micOn = true;
+let camOn = true;
+let directorId = null;
+let pendingIce = [];
 
-/* INIT */
-async function start(){
-  pc = new RTCPeerConnection({
-    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-  });
+const socket = io();
+const pc = new RTCPeerConnection({
+  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+});
 
-  pc.onicecandidate = e=>{
-    if(e.candidate){
-      socket.emit("signal",{data:{candidate:e.candidate}});
-    }
-  };
-
-  stream = await navigator.mediaDevices.getUserMedia({
+/* PREVIEW ONLY */
+async function startPreview(){
+  if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
+  mediaStream = await navigator.mediaDevices.getUserMedia({
     video:{facingMode:facing},
     audio:true
   });
-
-  video.srcObject = stream;
-  stream.getTracks().forEach(t=>pc.addTrack(t,stream));
-
-  socket.emit("join",{room:streamId,role:"camera"});
-  socket.emit("camera-ready");
+  video.srcObject = mediaStream;
 }
+startPreview();
 
-start();
+/* JOIN */
+socket.emit("join",{room:streamId,role:"camera"});
 
-/* SIGNAL */
+/* SIGNALS */
 socket.on("signal", async ({from,data})=>{
-  if(data.sdp){
+  if(data.sdp && data.sdp.type==="offer"){
+    directorId = from;
     await pc.setRemoteDescription(data.sdp);
-    if(data.sdp.type==="offer"){
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      socket.emit("signal",{to:from,data:{sdp:ans}});
-    }
+
+    // ✅ add tracks AFTER offer
+    mediaStream.getTracks().forEach(t=>pc.addTrack(t,mediaStream));
+
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    socket.emit("signal",{to:from,data:{sdp:ans}});
+
+    // flush ICE
+    pendingIce.forEach(c=>{
+      socket.emit("signal",{to:directorId,data:{candidate:c}});
+    });
+    pendingIce=[];
   }
+
   if(data.candidate){
     await pc.addIceCandidate(data.candidate);
   }
 });
 
+/* ICE */
+pc.onicecandidate = e=>{
+  if(!e.candidate) return;
+  if(directorId){
+    socket.emit("signal",{to:directorId,data:{candidate:e.candidate}});
+  } else {
+    pendingIce.push(e.candidate);
+  }
+};
+
 /* CONTROLS */
-mic.onclick = ()=>{
-  const t = stream.getAudioTracks()[0];
-  t.enabled = !t.enabled;
-  mic.classList.toggle("off",!t.enabled);
-};
-cam.onclick = ()=>{
-  const t = stream.getVideoTracks()[0];
-  t.enabled = !t.enabled;
-  cam.classList.toggle("off",!t.enabled);
-};
-flip.onclick = async ()=>{
+function toggleMic(){
+  micOn=!micOn;
+  mediaStream.getAudioTracks()[0].enabled=micOn;
+}
+function toggleCam(){
+  camOn=!camOn;
+  mediaStream.getVideoTracks()[0].enabled=camOn;
+}
+async function flip(){
   facing = facing==="user"?"environment":"user";
-  stream.getTracks().forEach(t=>t.stop());
-  pc.close();
-  await start();
-};
+  await startPreview(); // ❌ DO NOT add tracks again
+}
+
+/* LEAVE */
 function leave(){
   pc.close();
   socket.disconnect();
-  stream.getTracks().forEach(t=>t.stop());
+  mediaStream.getTracks().forEach(t=>t.stop());
   location.href="index.html";
 }
 </script>
