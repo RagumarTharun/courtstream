@@ -27,6 +27,7 @@ body{
   flex-direction:column;
 }
 
+/* HEADER */
 .header{
   height:56px;
   display:flex;
@@ -42,11 +43,13 @@ body{
   color:#22c55e;
 }
 
+/* PREVIEW */
 .preview{
   flex:1;
   display:flex;
   align-items:center;
   justify-content:center;
+  overflow:hidden;
 }
 
 video{
@@ -55,9 +58,11 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain;
+  object-fit:contain; /* ✅ NO CROPPING EVER */
+  transition:transform .2s ease;
 }
 
+/* CONTROLS */
 .controls{
   display:flex;
   justify-content:center;
@@ -76,7 +81,11 @@ video{
   justify-content:center;
 }
 
-.ctrl.off,
+.ctrl.off{
+  background:var(--red);
+  border-color:var(--red);
+}
+
 .ctrl.end{
   background:var(--red);
   border-color:var(--red);
@@ -94,16 +103,19 @@ video{
 
 <div class="page">
 
+  <!-- HEADER -->
   <div class="header">
     <div class="header-title">
       Camera • <span class="badge">LIVE</span>
     </div>
   </div>
 
+  <!-- PREVIEW -->
   <div class="preview">
     <video id="video" autoplay muted playsinline></video>
   </div>
 
+  <!-- CONTROLS -->
   <div class="controls">
 
     <!-- MIC -->
@@ -121,18 +133,19 @@ video{
       </svg>
     </button>
 
-    <!-- ROTATE (NEW, SAFE) -->
-    <button class="ctrl" onclick="rotateView()">
+    <!-- ROTATE -->
+    <button class="ctrl" onclick="rotateCamera()">
       <svg viewBox="0 0 24 24">
-        <path d="M12 6V3L8 7l4 4V8c2.8 0 5 2.2 5 5a5 5 0 01-5 5 5 5 0 01-4.6-3H6.3A7 7 0 0012 20a7 7 0 000-14z"/>
+        <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
+        <path d="M17 17H7v-4l-4 5 4 5v-4h14v-6h-4v4z"/>
       </svg>
     </button>
 
     <!-- FLIP -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
-        <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
-        <path d="M17 17H7v-4l-4 5 4 5v-4h14v-6h-4v4z"/>
+        <path d="M12 5v2a5 5 0 015 5h2a7 7 0 00-7-7z"/>
+        <path d="M12 19v-2a5 5 0 01-5-5H5a7 7 0 007 7z"/>
       </svg>
     </button>
 
@@ -150,6 +163,7 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+/* ===== STATE ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
@@ -159,28 +173,41 @@ let mediaStream;
 let videoSender;
 let micOn = true;
 let camOn = true;
-let facing = "environment";
-let rotation = 0;
+let facing = "environment"; // ✅ back camera default
+let rotation = 0;           // 🔑 rotation state
 
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-(async ()=>{
-  mediaStream = await navigator.mediaDevices.getUserMedia({
+/* ===== CAMERA ===== */
+async function startCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
     audio:true
   });
-  video.srcObject = mediaStream;
-  mediaStream.getTracks().forEach(t=>{
-    const s = pc.addTrack(t, mediaStream);
-    if (t.kind === "video") videoSender = s;
-  });
-})();
 
-socket.emit("join", streamId);
+  video.srcObject = stream;
 
+  if (!mediaStream) {
+    stream.getTracks().forEach(t=>{
+      const sender = pc.addTrack(t, stream);
+      if (t.kind === "video") videoSender = sender;
+    });
+  } else {
+    await videoSender.replaceTrack(stream.getVideoTracks()[0]);
+    mediaStream.getTracks().forEach(t=>t.stop());
+  }
+
+  mediaStream = stream;
+}
+startCamera();
+
+/* ===== JOIN ===== */
+socket.emit("join", { room: streamId, role:"camera" });
+
+/* ===== CONTROLS ===== */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
@@ -195,17 +222,14 @@ function toggleCam(){
 
 async function flipCamera(){
   facing = facing === "environment" ? "user" : "environment";
-  mediaStream.getTracks().forEach(t=>t.stop());
-  mediaStream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ ideal:facing } },
-    audio:true
-  });
-  video.srcObject = mediaStream;
-  await videoSender.replaceTrack(mediaStream.getVideoTracks()[0]);
+  await startCamera();
 }
 
-function rotateView(){
+function rotateCamera(){
   rotation = (rotation + 90) % 360;
+  video.style.transform = `rotate(${rotation}deg)`;
+
+  // 🔑 tell director to rotate this camera
   socket.emit("camera-rotate", { rotation });
 }
 
@@ -216,6 +240,7 @@ function leave(){
   location.href = "index.html";
 }
 
+/* ===== WEBRTC ===== */
 pc.onicecandidate = e=>{
   if(e.candidate){
     socket.emit("signal",{ data:e.candidate });
@@ -223,13 +248,11 @@ pc.onicecandidate = e=>{
 };
 
 socket.on("signal", async ({from,data})=>{
-  if(data.type){
+  if(data.type === "offer"){
     await pc.setRemoteDescription(data);
-    if(data.type==="offer"){
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      socket.emit("signal",{ to:from, data:pc.localDescription });
-    }
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    socket.emit("signal",{ to:from, data:pc.localDescription });
   }
   if(data.candidate){
     await pc.addIceCandidate(data);
