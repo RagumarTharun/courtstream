@@ -58,8 +58,8 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain;   /* 🔑 NEVER CROP */
-  transition:transform .2s ease;
+  object-fit:contain; /* NO CROPPING */
+  transition:transform .25s ease;
 }
 
 /* CONTROLS */
@@ -103,19 +103,16 @@ video{
 
 <div class="page">
 
-  <!-- HEADER -->
   <div class="header">
     <div class="header-title">
       Camera • <span class="badge">LIVE</span>
     </div>
   </div>
 
-  <!-- PREVIEW -->
   <div class="preview">
     <video id="video" autoplay muted playsinline></video>
   </div>
 
-  <!-- CONTROLS -->
   <div class="controls">
 
     <!-- MIC -->
@@ -126,18 +123,10 @@ video{
       </svg>
     </button>
 
-    <!-- CAMERA ON/OFF -->
+    <!-- CAMERA -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
       <svg viewBox="0 0 24 24">
         <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
-      </svg>
-    </button>
-
-    <!-- ROTATE VIEW -->
-    <button class="ctrl" onclick="rotateView()">
-      <svg viewBox="0 0 24 24">
-        <path d="M12 4v3l4-4-4-4v3A9 9 0 003 11h2a7 7 0 017-7z"/>
-        <path d="M12 20v-3l-4 4 4 4v-3a9 9 0 009-9h-2a7 7 0 01-7 7z"/>
       </svg>
     </button>
 
@@ -173,8 +162,7 @@ let mediaStream;
 let videoSender;
 let micOn = true;
 let camOn = true;
-let facing = "environment"; // back camera default
-let rotation = 0;
+let facing = "environment";
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -204,7 +192,7 @@ async function startCamera(){
 }
 startCamera();
 
-/* ===== JOIN (MUST MATCH DIRECTOR) ===== */
+/* ===== JOIN ===== */
 socket.emit("join", streamId);
 
 /* ===== CONTROLS ===== */
@@ -225,17 +213,31 @@ async function flipCamera(){
   await startCamera();
 }
 
-function rotateView(){
-  rotation = (rotation + 90) % 360;
-  video.style.transform = `rotate(${rotation}deg)`;
-}
-
 function leave(){
   pc.close();
   socket.disconnect();
   mediaStream.getTracks().forEach(t=>t.stop());
   location.href = "index.html";
 }
+
+/* ===== 🔑 AUTO ROTATE PREVIEW WITH PHONE ===== */
+function applyOrientation(){
+  let angle = 0;
+
+  if (screen.orientation && screen.orientation.angle !== undefined) {
+    angle = screen.orientation.angle;
+  } else if (window.orientation !== undefined) {
+    angle = window.orientation;
+  }
+
+  video.style.transform = `rotate(${angle}deg)`;
+}
+
+if (screen.orientation) {
+  screen.orientation.addEventListener("change", applyOrientation);
+}
+window.addEventListener("orientationchange", applyOrientation);
+applyOrientation();
 
 /* ===== WEBRTC ===== */
 pc.onicecandidate = e=>{
