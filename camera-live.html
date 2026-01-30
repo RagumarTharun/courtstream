@@ -49,23 +49,33 @@ body{
   display:flex;
   align-items:center;
   justify-content:center;
+  overflow:hidden;
 }
+
 video{
-  width:88%;
+  width:90vw;
   max-width:420px;
   aspect-ratio:16/9;
-  object-fit:cover;
   background:#000;
   border-radius:18px;
+  object-fit:cover;
+  transform-origin:center center;
+  transition:transform .2s ease;
+}
+
+/* ROTATION */
+.rotate-portrait video{
+  transform:rotate(90deg) scale(1.3);
 }
 
 /* CONTROLS */
 .controls{
   display:flex;
   justify-content:center;
-  gap:18px;
+  gap:24px;
   padding:18px 0 24px;
 }
+
 .ctrl{
   width:56px;
   height:56px;
@@ -76,14 +86,17 @@ video{
   align-items:center;
   justify-content:center;
 }
+
 .ctrl.off{
   background:var(--red);
   border-color:var(--red);
 }
+
 .ctrl.end{
   background:var(--red);
   border-color:var(--red);
 }
+
 .ctrl svg{
   width:24px;
   height:24px;
@@ -94,7 +107,7 @@ video{
 
 <body>
 
-<div class="page">
+<div class="page" id="page">
 
   <div class="header">
     <div class="header-title">
@@ -110,27 +123,33 @@ video{
 
     <!-- MIC -->
     <button id="micBtn" class="ctrl" onclick="toggleMic()">
-      🎤
+      <svg viewBox="0 0 24 24">
+        <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
+        <path d="M19 11a7 7 0 01-14 0"/>
+      </svg>
     </button>
 
     <!-- CAMERA -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
-      📷
+      <svg viewBox="0 0 24 24">
+        <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
+      </svg>
     </button>
 
-    <!-- FLIP CAMERA -->
+    <!-- FLIP -->
     <button class="ctrl" onclick="flipCamera()">
-      🔄
-    </button>
-
-    <!-- ORIENTATION -->
-    <button class="ctrl" onclick="toggleOrientation()">
-      ↕️
+      <svg viewBox="0 0 24 24">
+        <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
+        <path d="M17 17H7v-4l-4 5 4 5v-4h14v-6h-4v4z"/>
+      </svg>
     </button>
 
     <!-- LEAVE -->
     <button class="ctrl end" onclick="leave()">
-      ⏹
+      <svg viewBox="0 0 24 24">
+        <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
+        <path d="M3 5h8v14H3z"/>
+      </svg>
     </button>
 
   </div>
@@ -139,51 +158,38 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* =====================
-   STATE
-===================== */
+/* ===== STATE ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
+const page = document.getElementById("page");
 
 let mediaStream;
 let videoSender;
 let micOn = true;
 let camOn = true;
-let facing = "environment";      // ✅ back camera default
-let orientation = "landscape";   // landscape | portrait
+let facing = "environment"; // back camera default
 
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* =====================
-   CAMERA START
-===================== */
+/* ===== CAMERA ===== */
 async function startCamera(){
-  const isLandscape = orientation === "landscape";
-
-  const constraints = {
-    video: {
-      facingMode: { ideal: facing },
-      width: { ideal: isLandscape ? 1280 : 720 },
-      height:{ ideal: isLandscape ? 720  : 1280 },
-      aspectRatio: isLandscape ? 16/9 : 3/4
-    },
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:{ ideal:facing } },
     audio:true
-  };
+  });
 
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
   video.srcObject = stream;
 
   if (!mediaStream) {
-    stream.getTracks().forEach(track=>{
-      const sender = pc.addTrack(track, stream);
-      if (track.kind === "video") videoSender = sender;
+    stream.getTracks().forEach(t=>{
+      const sender = pc.addTrack(t, stream);
+      if (t.kind === "video") videoSender = sender;
     });
   } else {
-    const newVideoTrack = stream.getVideoTracks()[0];
-    await videoSender.replaceTrack(newVideoTrack);
+    await videoSender.replaceTrack(stream.getVideoTracks()[0]);
     mediaStream.getTracks().forEach(t=>t.stop());
   }
 
@@ -191,14 +197,10 @@ async function startCamera(){
 }
 startCamera();
 
-/* =====================
-   JOIN
-===================== */
+/* ===== JOIN ===== */
 socket.emit("join", streamId);
 
-/* =====================
-   CONTROLS
-===================== */
+/* ===== CONTROLS ===== */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
@@ -214,11 +216,6 @@ async function flipCamera(){
   await startCamera();
 }
 
-async function toggleOrientation(){
-  orientation = orientation === "landscape" ? "portrait" : "landscape";
-  await startCamera();
-}
-
 function leave(){
   pc.close();
   socket.disconnect();
@@ -226,9 +223,18 @@ function leave(){
   location.href = "index.html";
 }
 
-/* =====================
-   WEBRTC
-===================== */
+/* ===== ROTATE UI WITH PHONE ===== */
+function handleOrientation(){
+  if (window.matchMedia("(orientation: portrait)").matches) {
+    page.classList.add("rotate-portrait");
+  } else {
+    page.classList.remove("rotate-portrait");
+  }
+}
+window.addEventListener("orientationchange", handleOrientation);
+handleOrientation();
+
+/* ===== WEBRTC ===== */
 pc.onicecandidate = e=>{
   if(e.candidate){
     socket.emit("signal",{ data:e.candidate });
