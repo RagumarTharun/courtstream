@@ -4,29 +4,24 @@
 <meta charset="UTF-8">
 <title>Director • LIVE</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <style>
-body{margin:0;background:#000;color:white}
-video{
-  width:100vw;
-  height:100vh;
-  object-fit:contain;
-}
+body{margin:0;background:#000}
+video{width:100vw;height:100vh;object-fit:contain}
 </style>
 </head>
-
 <body>
+
 <video id="main" autoplay playsinline></video>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const streamId = new URLSearchParams(location.search).get("stream");
-const main = document.getElementById("main");
 const socket = io();
+const main = document.getElementById("main");
 
 const peers = {};
 
-/* JOIN AS DIRECTOR */
+/* JOIN */
 socket.emit("join",{room:streamId,role:"director"});
 
 /* CAMERA JOINED */
@@ -37,22 +32,28 @@ socket.on("peer-joined", async ({id,role})=>{
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
 
+  peers[id] = pc;
+
   pc.ontrack = e=>{
     main.srcObject = e.streams[0];
   };
 
   pc.onicecandidate = e=>{
     if(e.candidate){
-      socket.emit("signal",{to:id,data:{candidate:e.candidate}});
+      socket.emit("signal",{
+        to:id,
+        data:{candidate:e.candidate}
+      });
     }
   };
-
-  peers[id] = pc;
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  socket.emit("signal",{to:id,data:{sdp:offer}});
+  socket.emit("signal",{
+    to:id,
+    data:{sdp:offer}
+  });
 });
 
 /* SIGNAL */
