@@ -58,8 +58,7 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* ✅ NO CROPPING EVER */
-  transition:transform .2s ease;
+  object-fit:contain; /* ✅ EXACT phone preview */
 }
 
 /* CONTROLS */
@@ -126,22 +125,14 @@ video{
       </svg>
     </button>
 
-    <!-- CAMERA -->
+    <!-- CAMERA ON/OFF -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
       <svg viewBox="0 0 24 24">
         <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
       </svg>
     </button>
 
-    <!-- ROTATE -->
-    <button class="ctrl" onclick="rotateCamera()">
-      <svg viewBox="0 0 24 24">
-        <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
-        <path d="M17 17H7v-4l-4 5 4 5v-4h14v-6h-4v4z"/>
-      </svg>
-    </button>
-
-    <!-- FLIP -->
+    <!-- FLIP CAMERA (front/back) -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
         <path d="M12 5v2a5 5 0 015 5h2a7 7 0 00-7-7z"/>
@@ -174,7 +165,6 @@ let videoSender;
 let micOn = true;
 let camOn = true;
 let facing = "environment"; // ✅ back camera default
-let rotation = 0;           // 🔑 rotation state
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -204,8 +194,8 @@ async function startCamera(){
 }
 startCamera();
 
-/* ===== JOIN ===== */
-socket.emit("join", { room: streamId, role:"camera" });
+/* ===== JOIN (🔑 EXACTLY AS DIRECTOR EXPECTS) ===== */
+socket.emit("join", streamId);
 
 /* ===== CONTROLS ===== */
 function toggleMic(){
@@ -223,14 +213,6 @@ function toggleCam(){
 async function flipCamera(){
   facing = facing === "environment" ? "user" : "environment";
   await startCamera();
-}
-
-function rotateCamera(){
-  rotation = (rotation + 90) % 360;
-  video.style.transform = `rotate(${rotation}deg)`;
-
-  // 🔑 tell director to rotate this camera
-  socket.emit("camera-rotate", { rotation });
 }
 
 function leave(){
