@@ -6,8 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{margin:0;background:#000;color:white;font-family:system-ui}
-video{width:100vw;height:100vh;object-fit:contain}
+body{margin:0;background:#000;color:white}
+video{
+  width:100vw;
+  height:100vh;
+  object-fit:contain;
+}
 </style>
 </head>
 
@@ -19,14 +23,11 @@ video{width:100vw;height:100vh;object-fit:contain}
 const streamId = new URLSearchParams(location.search).get("stream");
 const main = document.getElementById("main");
 const socket = io();
+
 const peers = {};
 
+/* JOIN AS DIRECTOR */
 socket.emit("join",{room:streamId,role:"director"});
-
-/* CAMERA READY */
-socket.on("camera-ready", async ()=>{
-  // wait for camera peer-joined
-});
 
 /* CAMERA JOINED */
 socket.on("peer-joined", async ({id,role})=>{
@@ -46,10 +47,11 @@ socket.on("peer-joined", async ({id,role})=>{
     }
   };
 
-  peers[id]=pc;
+  peers[id] = pc;
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
+
   socket.emit("signal",{to:id,data:{sdp:offer}});
 });
 
@@ -57,15 +59,13 @@ socket.on("peer-joined", async ({id,role})=>{
 socket.on("signal", async ({from,data})=>{
   const pc = peers[from];
   if(!pc) return;
-  if(data.sdp) await pc.setRemoteDescription(data.sdp);
-  if(data.candidate) await pc.addIceCandidate(data.candidate);
-});
 
-/* LEAVE */
-socket.on("peer-left", ({id})=>{
-  peers[id]?.close();
-  delete peers[id];
-  main.srcObject=null;
+  if(data.sdp){
+    await pc.setRemoteDescription(data.sdp);
+  }
+  if(data.candidate){
+    await pc.addIceCandidate(data.candidate);
+  }
 });
 </script>
 </body>
