@@ -58,7 +58,8 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* ✅ EXACT phone preview */
+  object-fit:contain;   /* 🔑 NEVER CROP */
+  transition:transform .2s ease;
 }
 
 /* CONTROLS */
@@ -132,7 +133,15 @@ video{
       </svg>
     </button>
 
-    <!-- FLIP CAMERA (front/back) -->
+    <!-- ROTATE VIEW -->
+    <button class="ctrl" onclick="rotateView()">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 4v3l4-4-4-4v3A9 9 0 003 11h2a7 7 0 017-7z"/>
+        <path d="M12 20v-3l-4 4 4 4v-3a9 9 0 009-9h-2a7 7 0 01-7 7z"/>
+      </svg>
+    </button>
+
+    <!-- FLIP CAMERA -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
         <path d="M12 5v2a5 5 0 015 5h2a7 7 0 00-7-7z"/>
@@ -164,7 +173,8 @@ let mediaStream;
 let videoSender;
 let micOn = true;
 let camOn = true;
-let facing = "environment"; // ✅ back camera default
+let facing = "environment"; // back camera default
+let rotation = 0;
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -174,7 +184,7 @@ const pc = new RTCPeerConnection({
 /* ===== CAMERA ===== */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ ideal:facing } },
+    video:{ facingMode:{ exact:facing } },
     audio:true
   });
 
@@ -194,7 +204,7 @@ async function startCamera(){
 }
 startCamera();
 
-/* ===== JOIN (🔑 EXACTLY AS DIRECTOR EXPECTS) ===== */
+/* ===== JOIN (MUST MATCH DIRECTOR) ===== */
 socket.emit("join", streamId);
 
 /* ===== CONTROLS ===== */
@@ -213,6 +223,11 @@ function toggleCam(){
 async function flipCamera(){
   facing = facing === "environment" ? "user" : "environment";
   await startCamera();
+}
+
+function rotateView(){
+  rotation = (rotation + 90) % 360;
+  video.style.transform = `rotate(${rotation}deg)`;
 }
 
 function leave(){
