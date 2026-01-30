@@ -94,11 +94,19 @@ input {
 let allStreams = [];
 let currentUser = null;
 
+/* STREAMS */
+async function loadStreams(){
+  const res = await fetch("/api/streams");
+  allStreams = await res.json();
+  render();
+}
+
 /* AUTH */
 (async () => {
   try {
     const res = await fetch("/me", { credentials:"include" });
     if (!res.ok) throw 0;
+
     currentUser = await res.json();
 
     greeting.innerText = `Hello ${currentUser.email}`;
@@ -109,6 +117,9 @@ let currentUser = null;
       <button onclick="location.href='create.html'">+ Create Stream</button>
       <button class="secondary" onclick="logout()">Logout</button>
     `;
+
+    render(); // 🔑 RE-RENDER AFTER AUTH
+
   } catch {
     authActions.innerHTML = `
       <button onclick="alert('Login required')">+ Create Stream</button>
@@ -118,18 +129,18 @@ let currentUser = null;
   }
 })();
 
-/* STREAMS */
-async function loadStreams(){
-  const res = await fetch("/api/streams");
-  allStreams = await res.json();
-  render(allStreams);
-}
+/* RENDER */
+function render(){
+  const box = document.getElementById("streamList");
+  box.innerHTML = "";
 
-function render(list){
-  streamList.innerHTML = "";
-  emptyState.style.display = list.length ? "none" : "block";
+  if (!allStreams.length) {
+    emptyState.style.display = "block";
+    return;
+  }
+  emptyState.style.display = "none";
 
-  list.forEach(s => {
+  allStreams.forEach(s => {
     const row = document.createElement("div");
     row.className = "stream";
 
@@ -145,7 +156,7 @@ function render(list){
       </div>
     `;
 
-    streamList.appendChild(row);
+    box.appendChild(row);
   });
 }
 
