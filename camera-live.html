@@ -27,7 +27,6 @@ body{
   flex-direction:column;
 }
 
-/* HEADER */
 .header{
   height:56px;
   display:flex;
@@ -43,24 +42,22 @@ body{
   color:#22c55e;
 }
 
-/* PREVIEW */
 .preview{
   flex:1;
   display:flex;
   align-items:center;
   justify-content:center;
-  background:#000;
-  overflow:hidden;
 }
 
-/* 🔑 ABSOLUTELY NO SIZING HERE */
 video{
-  display:block;
+  width:90vw;
+  max-width:420px;
+  max-height:100%;
   background:#000;
   border-radius:18px;
+  object-fit:contain;
 }
 
-/* CONTROLS */
 .controls{
   display:flex;
   justify-content:center;
@@ -79,11 +76,7 @@ video{
   justify-content:center;
 }
 
-.ctrl.off{
-  background:var(--red);
-  border-color:var(--red);
-}
-
+.ctrl.off,
 .ctrl.end{
   background:var(--red);
   border-color:var(--red);
@@ -113,6 +106,7 @@ video{
 
   <div class="controls">
 
+    <!-- MIC -->
     <button id="micBtn" class="ctrl" onclick="toggleMic()">
       <svg viewBox="0 0 24 24">
         <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
@@ -120,12 +114,21 @@ video{
       </svg>
     </button>
 
+    <!-- CAMERA -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
       <svg viewBox="0 0 24 24">
         <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
       </svg>
     </button>
 
+    <!-- ROTATE (NEW, SAFE) -->
+    <button class="ctrl" onclick="rotateView()">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 6V3L8 7l4 4V8c2.8 0 5 2.2 5 5a5 5 0 01-5 5 5 5 0 01-4.6-3H6.3A7 7 0 0012 20a7 7 0 000-14z"/>
+      </svg>
+    </button>
+
+    <!-- FLIP -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
         <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
@@ -133,6 +136,7 @@ video{
       </svg>
     </button>
 
+    <!-- LEAVE -->
     <button class="ctrl end" onclick="leave()">
       <svg viewBox="0 0 24 24">
         <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
@@ -152,24 +156,27 @@ const micBtn = document.getElementById("micBtn");
 const camBtn = document.getElementById("camBtn");
 
 let mediaStream;
+let videoSender;
 let micOn = true;
 let camOn = true;
 let facing = "environment";
+let rotation = 0;
 
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* CAMERA — capture ONCE, send RAW */
 (async ()=>{
   mediaStream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
     audio:true
   });
-
   video.srcObject = mediaStream;
-  mediaStream.getTracks().forEach(t => pc.addTrack(t, mediaStream));
+  mediaStream.getTracks().forEach(t=>{
+    const s = pc.addTrack(t, mediaStream);
+    if (t.kind === "video") videoSender = s;
+  });
 })();
 
 socket.emit("join", streamId);
@@ -188,15 +195,18 @@ function toggleCam(){
 
 async function flipCamera(){
   facing = facing === "environment" ? "user" : "environment";
-
-  const s = await navigator.mediaDevices.getUserMedia({
+  mediaStream.getTracks().forEach(t=>t.stop());
+  mediaStream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
     audio:true
   });
+  video.srcObject = mediaStream;
+  await videoSender.replaceTrack(mediaStream.getVideoTracks()[0]);
+}
 
-  video.srcObject = s;
-  mediaStream.getTracks().forEach(t=>t.stop());
-  mediaStream = s;
+function rotateView(){
+  rotation = (rotation + 90) % 360;
+  socket.emit("camera-rotate", { rotation });
 }
 
 function leave(){
@@ -213,11 +223,13 @@ pc.onicecandidate = e=>{
 };
 
 socket.on("signal", async ({from,data})=>{
-  if(data.type === "offer"){
+  if(data.type){
     await pc.setRemoteDescription(data);
-    const ans = await pc.createAnswer();
-    await pc.setLocalDescription(ans);
-    socket.emit("signal",{ to:from, data:pc.localDescription });
+    if(data.type==="offer"){
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      socket.emit("signal",{ to:from, data:pc.localDescription });
+    }
   }
   if(data.candidate){
     await pc.addIceCandidate(data);
