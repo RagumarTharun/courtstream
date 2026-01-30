@@ -3,16 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <title>Director • LIVE</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{margin:0;background:#000;color:#fff;font-family:system-ui}
-#main{width:100vw;height:100vh;object-fit:contain}
+body{margin:0;background:#000;color:white;font-family:system-ui}
+video{width:100vw;height:100vh;object-fit:contain}
 </style>
 </head>
 
 <body>
-
 <video id="main" autoplay playsinline></video>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -24,48 +23,49 @@ const peers = {};
 
 socket.emit("join",{room:streamId,role:"director"});
 
-function createPeer(id){
+/* CAMERA READY */
+socket.on("camera-ready", async ()=>{
+  // wait for camera peer-joined
+});
+
+/* CAMERA JOINED */
+socket.on("peer-joined", async ({id,role})=>{
+  if(role!=="camera") return;
+
   const pc = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
 
-  pc.ontrack = e => {
+  pc.ontrack = e=>{
     main.srcObject = e.streams[0];
   };
 
-  pc.onicecandidate = e => {
-    if (e.candidate) {
+  pc.onicecandidate = e=>{
+    if(e.candidate){
       socket.emit("signal",{to:id,data:{candidate:e.candidate}});
     }
   };
 
-  peers[id] = pc;
-  return pc;
-}
+  peers[id]=pc;
 
-/* CAMERA JOINED */
-socket.on("peer-joined", async ({id,role}) => {
-  if (role !== "camera") return;
-  const pc = createPeer(id);
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   socket.emit("signal",{to:id,data:{sdp:offer}});
 });
 
 /* SIGNAL */
-socket.on("signal", async ({from,data}) => {
+socket.on("signal", async ({from,data})=>{
   const pc = peers[from];
-  if (!pc) return;
-
-  if (data.sdp) await pc.setRemoteDescription(data.sdp);
-  if (data.candidate) await pc.addIceCandidate(data.candidate);
+  if(!pc) return;
+  if(data.sdp) await pc.setRemoteDescription(data.sdp);
+  if(data.candidate) await pc.addIceCandidate(data.candidate);
 });
 
-/* CAMERA LEFT */
-socket.on("peer-left", ({id}) => {
+/* LEAVE */
+socket.on("peer-left", ({id})=>{
   peers[id]?.close();
   delete peers[id];
-  main.srcObject = null;
+  main.srcObject=null;
 });
 </script>
 </body>
