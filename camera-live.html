@@ -2,177 +2,134 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Camera – CourtStream</title>
+<title>Camera • LIVE</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  margin:0;
-  background:#0f1115;
-  color:#e6e6eb;
-  font-family:system-ui;
+:root{
+  --bg:#0f1115;
+  --card:#161922;
+  --border:#262b3d;
+  --red:#b91c1c;
 }
-
-.wrap{
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.box{
-  width:420px;
-  max-width:92vw;
-}
-
+body{margin:0;background:var(--bg);color:#fff;font-family:system-ui}
+.page{position:fixed;inset:0;display:flex;flex-direction:column}
+.header{height:56px;display:flex;align-items:center;justify-content:center}
+.preview{flex:1;display:flex;align-items:center;justify-content:center}
 video{
-  width:100%;
-  aspect-ratio:16/9;
+  width:88%;
+  max-width:420px;
+  aspect-ratio:3/4;
+  object-fit:cover;
   background:#000;
-  border-radius:16px;
+  border-radius:18px;
 }
-
 .controls{
   display:flex;
-  gap:10px;
-  margin-top:12px;
+  justify-content:center;
+  gap:20px;
+  padding:18px 0 24px;
 }
-
-button{
-  flex:1;
-  padding:10px;
-  border-radius:999px;
-  border:1px solid #262b3d;
-  background:#161922;
-  color:#e6e6eb;
-  font-size:14px;
+.ctrl{
+  width:56px;height:56px;border-radius:50%;
+  background:var(--card);
+  border:2px solid var(--border);
+  color:white;
 }
-
-button.primary{
-  background:#3b82f6;
-  border:none;
-}
+.ctrl.off{background:var(--red);border-color:var(--red)}
 </style>
 </head>
 
 <body>
+<div class="page">
+  <div class="header">Camera • LIVE</div>
 
-<div class="wrap">
-  <div class="box">
+  <div class="preview">
+    <video id="video" autoplay muted playsinline></video>
+  </div>
 
-    <video id="preview" autoplay muted playsinline></video>
-
-    <div class="controls">
-      <button onclick="toggleCam()">Camera</button>
-      <button onclick="toggleMic()">Mic</button>
-      <button onclick="flip()">Flip</button>
-    </div>
-
-    <button class="primary" style="margin-top:12px" onclick="leave()">
-      Leave Stream
-    </button>
-
+  <div class="controls">
+    <button id="mic" class="ctrl">Mic</button>
+    <button id="cam" class="ctrl">Cam</button>
+    <button id="flip" class="ctrl">Flip</button>
+    <button class="ctrl off" onclick="leave()">End</button>
   </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* ===============================
-   BASIC STATE
-================================ */
 const streamId = new URLSearchParams(location.search).get("stream");
-const video = document.getElementById("preview");
-
-let localStream;
-let camOn = true;
-let micOn = true;
-let facing = "environment";
-
+const video = document.getElementById("video");
 const socket = io();
-const pc = new RTCPeerConnection({
-  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-});
 
-/* ===============================
-   GET MEDIA
-================================ */
-async function startMedia(){
-  localStream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:facing },
+let pc;
+let stream;
+let facing = "user";
+
+/* INIT */
+async function start(){
+  pc = new RTCPeerConnection({
+    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+  });
+
+  pc.onicecandidate = e=>{
+    if(e.candidate){
+      socket.emit("signal",{data:{candidate:e.candidate}});
+    }
+  };
+
+  stream = await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:facing},
     audio:true
   });
 
-  video.srcObject = localStream;
+  video.srcObject = stream;
+  stream.getTracks().forEach(t=>pc.addTrack(t,stream));
 
-  localStream.getTracks().forEach(t=>{
-    pc.addTrack(t, localStream);
-  });
+  socket.emit("join",{room:streamId,role:"camera"});
+  socket.emit("camera-ready");
 }
 
-startMedia();
+start();
 
-/* ===============================
-   JOIN LOGIC (NO DUPLICATES)
-================================ */
-socket.emit("join", streamId);
-
-/* Director refreshed → re-announce */
-socket.on("director-ready", ()=>{
-  socket.emit("join", streamId);
-});
-
-/* ===============================
-   WEBRTC SIGNALING
-================================ */
-pc.onicecandidate = e=>{
-  if(e.candidate){
-    socket.emit("signal", { data:e.candidate });
+/* SIGNAL */
+socket.on("signal", async ({from,data})=>{
+  if(data.sdp){
+    await pc.setRemoteDescription(data.sdp);
+    if(data.sdp.type==="offer"){
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      socket.emit("signal",{to:from,data:{sdp:ans}});
+    }
   }
-};
-
-socket.on("signal", async ({from, data})=>{
-  if(data.type === "offer"){
-    await pc.setRemoteDescription(data);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socket.emit("signal", {
-      to: from,
-      data: pc.localDescription
-    });
-  }
-
   if(data.candidate){
-    await pc.addIceCandidate(data);
+    await pc.addIceCandidate(data.candidate);
   }
 });
 
-/* ===============================
-   CONTROLS
-================================ */
-function toggleCam(){
-  camOn = !camOn;
-  localStream.getVideoTracks()[0].enabled = camOn;
-}
-
-function toggleMic(){
-  micOn = !micOn;
-  localStream.getAudioTracks()[0].enabled = micOn;
-}
-
-async function flip(){
-  facing = facing === "user" ? "environment" : "user";
-  localStream.getTracks().forEach(t=>t.stop());
-  pc.getSenders().forEach(s=>pc.removeTrack(s));
-  await startMedia();
-}
-
+/* CONTROLS */
+mic.onclick = ()=>{
+  const t = stream.getAudioTracks()[0];
+  t.enabled = !t.enabled;
+  mic.classList.toggle("off",!t.enabled);
+};
+cam.onclick = ()=>{
+  const t = stream.getVideoTracks()[0];
+  t.enabled = !t.enabled;
+  cam.classList.toggle("off",!t.enabled);
+};
+flip.onclick = async ()=>{
+  facing = facing==="user"?"environment":"user";
+  stream.getTracks().forEach(t=>t.stop());
+  pc.close();
+  await start();
+};
 function leave(){
   pc.close();
   socket.disconnect();
-  localStream.getTracks().forEach(t=>t.stop());
-  location.href = "index.html";
+  stream.getTracks().forEach(t=>t.stop());
+  location.href="index.html";
 }
 </script>
-
 </body>
 </html>
