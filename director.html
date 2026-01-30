@@ -51,19 +51,21 @@ body{
   overflow:hidden;
 }
 
-/* Fixed preview size */
+/* Fixed preview size (does NOT change when camera connects) */
 .main-feed::before{
   content:"";
   display:block;
   padding-top:56.25%;
 }
 
+/* 🔑 CRITICAL FIX: contain, not cover */
 .main-feed video{
   position:absolute;
   inset:0;
   width:100%;
   height:100%;
-  object-fit:cover;
+  object-fit:contain;   /* ✅ NO CROPPING, NO ROTATION ILLUSION */
+  background:#000;
 }
 
 /* Placeholder */
@@ -112,7 +114,7 @@ body{
   flex-direction:column;
   gap:12px;
   padding:12px;
-  overflow-y:auto;
+  overflow-y:auto; /* ✅ scroll as cameras grow */
 }
 
 .side-title{
@@ -131,10 +133,12 @@ body{
   flex-shrink:0;
 }
 
+/* 🔑 SAME FIX HERE */
 .camera-slot video{
   width:100%;
   height:100%;
-  object-fit:cover;
+  object-fit:contain;  /* ✅ EXACTLY matches phone preview */
+  background:#000;
 }
 
 .camera-slot span{
@@ -195,7 +199,7 @@ socket.emit("join", streamId);
 
 /* CAMERA JOINED */
 socket.on("peer-joined", ({ id }) => {
-  if (peers[id]) return; // prevent duplicates
+  if (peers[id]) return;
   createPeer(id);
 });
 
