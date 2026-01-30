@@ -28,8 +28,8 @@ body{
 
 .director{
   display:grid;
-  grid-template-columns:1fr 300px;
-  grid-template-rows:1fr 120px;
+  grid-template-columns:1fr 320px;
+  grid-template-rows:1fr 140px;
   gap:14px;
   padding:14px;
   height:100%;
@@ -41,22 +41,31 @@ body{
   border:1px solid var(--border);
 }
 
-/* ===== MAIN FEED ===== */
+/* MAIN FEED */
 .main-feed{
   position:relative;
   display:flex;
   align-items:center;
   justify-content:center;
-  padding:10px;
 }
-
 .main-feed video{
   width:100%;
-  max-width:1200px;
   height:100%;
   object-fit:contain;
-  border-radius:12px;
+  border-radius:16px;
   background:#000;
+}
+
+/* PREVIEW INSTRUCTION */
+#previewHint{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+  color:var(--muted);
+  pointer-events:none;
 }
 
 /* TOP BAR */
@@ -69,7 +78,6 @@ body{
   justify-content:space-between;
   pointer-events:none;
 }
-
 .stream-info{
   pointer-events:auto;
   background:rgba(15,17,21,.85);
@@ -82,11 +90,11 @@ body{
 /* RECORD BAR (visual only) */
 .record-bar{
   position:absolute;
-  bottom:16px;
+  bottom:14px;
   left:50%;
   transform:translateX(-50%);
   display:flex;
-  gap:10px;
+  gap:12px;
   align-items:center;
   background:rgba(15,17,21,.85);
   border:1px solid var(--border);
@@ -94,72 +102,59 @@ body{
   border-radius:999px;
 }
 .record-dot{
-  width:12px;
-  height:12px;
-  border-radius:50%;
+  width:14px;height:14px;border-radius:50%;
   background:var(--red);
 }
 .timer{font-size:13px}
 
-/* ===== CAMERA STRIP ===== */
+/* CAMERA STRIP */
 .camera-strip{
   display:flex;
   gap:12px;
-  padding-top:6px;
 }
-
 .camera-tile{
   flex:1;
   background:#000;
-  border-radius:12px;
+  border-radius:14px;
   overflow:hidden;
   border:2px solid transparent;
   cursor:pointer;
   position:relative;
 }
-
 .camera-tile.active{
   border-color:var(--blue);
 }
-
 .camera-tile video{
   width:100%;
   height:100%;
   object-fit:cover;
 }
-
 .camera-label{
   position:absolute;
-  bottom:6px;
-  left:6px;
+  bottom:8px;
+  left:8px;
   background:rgba(0,0,0,.6);
-  padding:3px 8px;
+  padding:4px 8px;
   border-radius:999px;
-  font-size:11px;
+  font-size:12px;
 }
 
-/* ===== SIDE PANEL ===== */
+/* SIDE PANEL (visual only) */
 .side-panel{
   padding:14px;
   display:flex;
   flex-direction:column;
-  gap:12px;
+  gap:14px;
 }
-
 .side-title{
   font-size:14px;
   color:var(--muted);
 }
-
-.side-placeholder{
-  height:120px;
-  border:1px dashed var(--border);
-  border-radius:12px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:12px;
-  color:var(--muted);
+.side-camera{
+  height:140px;
+  background:#000;
+  border-radius:14px;
+  border:1px solid var(--border);
 }
 </style>
 </head>
@@ -172,8 +167,12 @@ body{
   <div class="panel main-feed">
     <video id="mainVideo" autoplay muted playsinline></video>
 
+    <div id="previewHint">
+      Select a camera below to preview
+    </div>
+
     <div class="top-bar">
-      <div class="stream-info">CourtStream • Live</div>
+      <div class="stream-info" id="streamTitle">LIVE</div>
     </div>
 
     <div class="record-bar">
@@ -182,15 +181,15 @@ body{
     </div>
   </div>
 
-  <!-- SIDE PANEL (visual only) -->
+  <!-- SIDE PANEL (visual placeholders only) -->
   <div class="panel side-panel">
     <div class="side-title">Additional Cameras</div>
-    <div class="side-placeholder">Waiting for camera…</div>
-    <div class="side-placeholder">Waiting for camera…</div>
-    <div class="side-placeholder">Waiting for camera…</div>
+    <div class="side-camera"></div>
+    <div class="side-camera"></div>
+    <div class="side-camera"></div>
   </div>
 
-  <!-- CAMERA STRIP (dynamic) -->
+  <!-- CAMERA STRIP -->
   <div class="camera-strip" id="strip"></div>
 
 </div>
@@ -203,6 +202,16 @@ const socket = io();
 const peers = {}; // id -> { pc, stream, tile }
 const mainVideo = document.getElementById("mainVideo");
 const strip = document.getElementById("strip");
+const previewHint = document.getElementById("previewHint");
+
+/* STREAM NAME */
+fetch("/api/streams")
+  .then(r=>r.json())
+  .then(list=>{
+    const s=list.find(x=>x.id===streamId);
+    if(s) document.getElementById("streamTitle").innerText =
+      `${s.name} • LIVE`;
+  });
 
 /* JOIN */
 socket.emit("join", streamId);
@@ -243,7 +252,7 @@ function createPeer(id){
     v.playsInline = true;
     v.srcObject = stream;
 
-    const label = document.createElement("div");
+    const label = document.createElement("span");
     label.className = "camera-label";
     label.innerText = "Camera";
 
@@ -254,10 +263,6 @@ function createPeer(id){
     peers[id].tile = tile;
 
     tile.onclick = () => setMain(id);
-
-    if (!mainVideo.srcObject) {
-      setMain(id);
-    }
   };
 
   pc.onicecandidate = e => {
@@ -269,10 +274,7 @@ function createPeer(id){
   pc.createOffer()
     .then(o => pc.setLocalDescription(o))
     .then(() => {
-      socket.emit("signal", {
-        to:id,
-        data: pc.localDescription
-      });
+      socket.emit("signal", { to:id, data: pc.localDescription });
     });
 }
 
@@ -281,6 +283,7 @@ function setMain(id){
   if (!peer || !peer.stream) return;
 
   mainVideo.srcObject = peer.stream;
+  previewHint.style.display = "none";
 
   document
     .querySelectorAll(".camera-tile")
@@ -313,6 +316,7 @@ socket.on("camera-left", ({id})=>{
 
   if (mainVideo.srcObject === peer.stream) {
     mainVideo.srcObject = null;
+    previewHint.style.display = "flex";
   }
 });
 </script>
