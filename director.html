@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <style>
-:root {
+:root{
   --bg:#0f1115;
   --panel:#161922;
   --border:#262b3d;
@@ -27,28 +27,29 @@ body{
 }
 
 .director{
-  display:grid;
-  grid-template-columns:1fr 320px;
-  grid-template-rows:1fr 140px;
+  display:flex;
+  flex-direction:column;
   gap:14px;
   padding:14px;
   height:100%;
 }
 
-.panel{
-  background:var(--panel);
-  border-radius:16px;
-  border:1px solid var(--border);
-}
+/* ===== MAIN PREVIEW (FIXED SIZE) ===== */
 
-/* MAIN FEED */
-.main-feed{
+.preview-wrapper{
   position:relative;
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:16px;
+  height:55vh;              /* 🔑 fixed height */
+  max-height:520px;
+  min-height:360px;
   display:flex;
   align-items:center;
   justify-content:center;
 }
-.main-feed video{
+
+.preview-wrapper video{
   width:100%;
   height:100%;
   object-fit:contain;
@@ -56,28 +57,30 @@ body{
   background:#000;
 }
 
-/* PREVIEW INSTRUCTION */
+/* Instruction overlay */
 #previewHint{
   position:absolute;
   inset:0;
   display:flex;
   align-items:center;
   justify-content:center;
-  font-size:14px;
   color:var(--muted);
+  font-size:14px;
   pointer-events:none;
 }
 
-/* TOP BAR */
+/* ===== TOP BAR ===== */
+
 .top-bar{
   position:absolute;
-  top:14px;
-  left:14px;
-  right:14px;
+  top:12px;
+  left:12px;
+  right:12px;
   display:flex;
   justify-content:space-between;
   pointer-events:none;
 }
+
 .stream-info{
   pointer-events:auto;
   background:rgba(15,17,21,.85);
@@ -87,14 +90,15 @@ body{
   font-size:13px;
 }
 
-/* RECORD BAR (visual only) */
+/* ===== RECORD BAR (VISUAL ONLY) ===== */
+
 .record-bar{
   position:absolute;
-  bottom:14px;
+  bottom:12px;
   left:50%;
   transform:translateX(-50%);
   display:flex;
-  gap:12px;
+  gap:10px;
   align-items:center;
   background:rgba(15,17,21,.85);
   border:1px solid var(--border);
@@ -102,16 +106,21 @@ body{
   border-radius:999px;
 }
 .record-dot{
-  width:14px;height:14px;border-radius:50%;
+  width:12px;
+  height:12px;
   background:var(--red);
+  border-radius:50%;
 }
 .timer{font-size:13px}
 
-/* CAMERA STRIP */
+/* ===== CAMERA STRIP (BELOW PREVIEW) ===== */
+
 .camera-strip{
   display:flex;
   gap:12px;
+  height:120px;
 }
+
 .camera-tile{
   flex:1;
   background:#000;
@@ -121,40 +130,25 @@ body{
   cursor:pointer;
   position:relative;
 }
+
 .camera-tile.active{
   border-color:var(--blue);
 }
+
 .camera-tile video{
   width:100%;
   height:100%;
   object-fit:cover;
 }
+
 .camera-label{
   position:absolute;
-  bottom:8px;
-  left:8px;
+  bottom:6px;
+  left:6px;
   background:rgba(0,0,0,.6);
   padding:4px 8px;
   border-radius:999px;
   font-size:12px;
-}
-
-/* SIDE PANEL (visual only) */
-.side-panel{
-  padding:14px;
-  display:flex;
-  flex-direction:column;
-  gap:14px;
-}
-.side-title{
-  font-size:14px;
-  color:var(--muted);
-}
-.side-camera{
-  height:140px;
-  background:#000;
-  border-radius:14px;
-  border:1px solid var(--border);
 }
 </style>
 </head>
@@ -163,8 +157,8 @@ body{
 
 <div class="director">
 
-  <!-- MAIN FEED -->
-  <div class="panel main-feed">
+  <!-- MAIN PREVIEW -->
+  <div class="preview-wrapper">
     <video id="mainVideo" autoplay muted playsinline></video>
 
     <div id="previewHint">
@@ -181,14 +175,6 @@ body{
     </div>
   </div>
 
-  <!-- SIDE PANEL (visual placeholders only) -->
-  <div class="panel side-panel">
-    <div class="side-title">Additional Cameras</div>
-    <div class="side-camera"></div>
-    <div class="side-camera"></div>
-    <div class="side-camera"></div>
-  </div>
-
   <!-- CAMERA STRIP -->
   <div class="camera-strip" id="strip"></div>
 
@@ -199,12 +185,12 @@ body{
 const streamId = new URLSearchParams(location.search).get("stream");
 const socket = io();
 
-const peers = {}; // id -> { pc, stream, tile }
+const peers = {};
 const mainVideo = document.getElementById("mainVideo");
 const strip = document.getElementById("strip");
 const previewHint = document.getElementById("previewHint");
 
-/* STREAM NAME */
+/* Stream name */
 fetch("/api/streams")
   .then(r=>r.json())
   .then(list=>{
@@ -216,107 +202,102 @@ fetch("/api/streams")
 /* JOIN */
 socket.emit("join", streamId);
 
-/* EXISTING PEERS */
-socket.on("existing-peers", list => {
-  list.forEach(p => createPeer(p.id));
+/* EXISTING */
+socket.on("existing-peers", list=>{
+  list.forEach(p=>createPeer(p.id));
 });
 
 /* NEW CAMERA */
-socket.on("peer-joined", p => {
+socket.on("peer-joined", p=>{
   createPeer(p.id);
 });
 
 function createPeer(id){
-  if (peers[id]) return;
+  if(peers[id]) return;
 
-  const pc = new RTCPeerConnection({
+  const pc=new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
 
-  peers[id] = { pc };
+  peers[id]={pc};
 
-  pc.addTransceiver("video", { direction:"recvonly" });
+  pc.addTransceiver("video",{direction:"recvonly"});
 
-  pc.ontrack = e => {
-    if (peers[id].stream) return;
+  pc.ontrack=e=>{
+    if(peers[id].stream) return;
+    peers[id].stream=e.streams[0];
 
-    const stream = e.streams[0];
-    peers[id].stream = stream;
+    const tile=document.createElement("div");
+    tile.className="camera-tile";
 
-    const tile = document.createElement("div");
-    tile.className = "camera-tile";
+    const v=document.createElement("video");
+    v.autoplay=true;
+    v.muted=true;
+    v.playsInline=true;
+    v.srcObject=peers[id].stream;
 
-    const v = document.createElement("video");
-    v.autoplay = true;
-    v.muted = true;
-    v.playsInline = true;
-    v.srcObject = stream;
-
-    const label = document.createElement("span");
-    label.className = "camera-label";
-    label.innerText = "Camera";
+    const label=document.createElement("div");
+    label.className="camera-label";
+    label.innerText="Camera";
 
     tile.appendChild(v);
     tile.appendChild(label);
     strip.appendChild(tile);
 
-    peers[id].tile = tile;
+    peers[id].tile=tile;
 
-    tile.onclick = () => setMain(id);
+    tile.onclick=()=>setMain(id);
   };
 
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      socket.emit("signal", { to:id, data:e.candidate });
+  pc.onicecandidate=e=>{
+    if(e.candidate){
+      socket.emit("signal",{to:id,data:e.candidate});
     }
   };
 
   pc.createOffer()
-    .then(o => pc.setLocalDescription(o))
-    .then(() => {
-      socket.emit("signal", { to:id, data: pc.localDescription });
-    });
+    .then(o=>pc.setLocalDescription(o))
+    .then(()=>socket.emit("signal",{to:id,data:pc.localDescription}));
 }
 
 function setMain(id){
-  const peer = peers[id];
-  if (!peer || !peer.stream) return;
+  const peer=peers[id];
+  if(!peer||!peer.stream) return;
 
-  mainVideo.srcObject = peer.stream;
-  previewHint.style.display = "none";
+  mainVideo.srcObject=peer.stream;
+  previewHint.style.display="none";
 
-  document
-    .querySelectorAll(".camera-tile")
-    .forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".camera-tile")
+    .forEach(t=>t.classList.remove("active"));
 
   peer.tile.classList.add("active");
 }
 
 /* SIGNAL */
-socket.on("signal", async ({from,data})=>{
-  const peer = peers[from];
-  if (!peer) return;
+socket.on("signal",async({from,data})=>{
+  const peer=peers[from];
+  if(!peer) return;
 
-  if (data.type === "answer") {
+  if(data.type==="answer"){
     await peer.pc.setRemoteDescription(data);
   }
-  if (data.candidate) {
+  if(data.candidate){
     await peer.pc.addIceCandidate(data);
   }
 });
 
-/* CAMERA LEFT */
-socket.on("camera-left", ({id})=>{
-  const peer = peers[id];
-  if (!peer) return;
+/* LEAVE */
+socket.on("camera-left",({id})=>{
+  const peer=peers[id];
+  if(!peer) return;
 
   peer.pc.close();
   peer.tile?.remove();
   delete peers[id];
 
-  if (mainVideo.srcObject === peer.stream) {
-    mainVideo.srcObject = null;
-    previewHint.style.display = "flex";
+  if(mainVideo.srcObject===peer.stream){
+    mainVideo.srcObject=null;
+    previewHint.style.display="flex";
   }
 });
 </script>
