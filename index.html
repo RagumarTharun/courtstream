@@ -81,11 +81,11 @@ input {
 
   <div id="authActions" style="margin-bottom:20px;"></div>
 
-  <input id="search" placeholder="Search streams" autocomplete="off" />
+  <input id="search" placeholder="Search sessions" autocomplete="off" />
 
   <div class="streams" id="streamList"></div>
   <div class="empty" id="emptyState" style="display:none;">
-    No streams found.
+    No sessions found.
   </div>
 
 </div>
@@ -110,11 +110,11 @@ async function loadStreams(){
     currentUser = await res.json();
 
     greeting.innerText = `Hello ${currentUser.email}`;
-    subtext.innerText = "Pick a stream to join or direct.";
+    subtext.innerText = "Pick a session to join or direct.";
     userInfo.innerText = currentUser.email;
 
     authActions.innerHTML = `
-      <button onclick="location.href='create.html'">+ Create Stream</button>
+      <button onclick="location.href='create.html'">+ Create Session</button>
       <button class="secondary" onclick="logout()">Logout</button>
     `;
 
