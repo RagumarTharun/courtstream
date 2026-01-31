@@ -59,7 +59,7 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* exact phone preview */
+  object-fit:contain;
 }
 
 /* CONTROLS */
@@ -104,7 +104,6 @@ video{
   padding:10px 14px;
   border-radius:12px;
   font-size:13px;
-  z-index:999;
 }
 </style>
 </head>
@@ -163,10 +162,10 @@ video{
 <!-- FOCUS UI -->
 <div id="focusBox">
   <div>🧠 Focus</div>
-  <div id="focusState" style="color:var(--green)">Analyzing…</div>
+  <div id="focusState" style="color:var(--muted)">Initializing…</div>
   <div style="margin-top:6px;color:var(--muted)">
     Focused: <span id="focusTime">0</span>s<br>
-    Away: <span id="awayTime">0</span>s
+    Not Focused: <span id="awayTime">0</span>s
   </div>
 </div>
 
@@ -174,26 +173,24 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* ===== WEBRTC STATE (UNCHANGED) ===== */
+/* ===== STATE ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
 const camBtn = document.getElementById("camBtn");
 
-let mediaStream = null;
-let videoSender = null;
+let mediaStream;
+let videoSender;
 let micOn = true;
 let camOn = true;
-
-/* ✅ FRONT CAMERA DEFAULT */
-let facing = "user";
+let facing = "user"; // ✅ FRONT CAMERA DEFAULT
 
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* CAMERA */
+/* ===== CAMERA ===== */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
@@ -241,7 +238,7 @@ function leave(){
   location.href = "index.html";
 }
 
-/* SIGNALING */
+/* WEBRTC */
 pc.onicecandidate = e=>{
   if(e.candidate){
     socket.emit("signal",{ data:e.candidate });
@@ -259,7 +256,7 @@ socket.on("signal", async ({from,data})=>{
   }
 });
 
-/* ===== FOCUS / ATTENTION LOGIC ===== */
+/* ===== ATTENTION / FOCUS LOGIC (FIXED) ===== */
 const canvas = document.getElementById("analyzer");
 const ctx = canvas.getContext("2d");
 
@@ -272,66 +269,41 @@ const focusTimeEl = document.getElementById("focusTime");
 const awayTimeEl = document.getElementById("awayTime");
 
 function analyzeFrame(){
+  // ✅ ALWAYS update UI — NEVER stuck
   if (!video.videoWidth || video.readyState < 2) {
     awaySeconds++;
-    focusState.innerText = "Not Focused (No Feed)";
+    focusState.innerText = "Not Focused";
     focusState.style.color = "var(--red)";
     awayTimeEl.innerText = awaySeconds;
     return;
   }
+
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = frame.data;
 
-  let diff = 0;
-  let brightness = 0;
-  let varianceSum = 0;
-
-  for (let i = 0; i < data.length; i += 4){
-    const gray = (data[i] + data[i+1] + data[i+2]) / 3;
-    brightness += gray;
-
-    if (lastFrame) {
-      diff += Math.abs(data[i] - lastFrame.data[i]);
+  if (lastFrame){
+    let diff = 0;
+    for (let i = 0; i < frame.data.length; i += 4){
+      diff += Math.abs(frame.data[i] - lastFrame.data[i]);
     }
-  }
 
-  brightness /= (data.length / 4);
+    const motion = diff / frame.data.length;
 
-  // Variance (detect frozen / empty frame)
-  for (let i = 0; i < data.length; i += 4){
-    const gray = (data[i] + data[i+1] + data[i+2]) / 3;
-    varianceSum += Math.pow(gray - brightness, 2);
-  }
-
-  const variance = varianceSum / (data.length / 4);
-  const motion = diff / data.length;
-
-  // 🔑 Thresholds (tuned for phones)
-  const DARK_THRESHOLD = 20;
-  const VARIANCE_THRESHOLD = 30;
-  const MOTION_THRESHOLD = 15;
-
-  if (brightness < DARK_THRESHOLD) {
-    awaySeconds++;
-    setNotFocused("Not Focused (Camera Covered)");
-  }
-  else if (variance < VARIANCE_THRESHOLD) {
-    awaySeconds++;
-    setNotFocused("Not Focused (User Away)");
-  }
-  else if (motion > MOTION_THRESHOLD) {
-    awaySeconds++;
-    setNotFocused("Not Focused (Distracted)");
-  }
-  else {
-    focusedSeconds++;
-    setFocused();
+    if (motion < 12){
+      focusedSeconds++;
+      focusState.innerText = "Focused";
+      focusState.style.color = "var(--green)";
+      focusTimeEl.innerText = focusedSeconds;
+    } else {
+      awaySeconds++;
+      focusState.innerText = "Not Focused";
+      focusState.style.color = "var(--red)";
+      awayTimeEl.innerText = awaySeconds;
+    }
   }
 
   lastFrame = frame;
 }
-
 
 setInterval(analyzeFrame, 1000);
 </script>
