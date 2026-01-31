@@ -11,27 +11,112 @@
   --card:#161922;
   --border:#262b3d;
   --red:#b91c1c;
+  --green:#22c55e;
+  --muted:#9aa0b4;
 }
-body{margin:0;background:var(--bg);color:#fff;font-family:system-ui}
-.page{position:fixed;inset:0;display:flex;flex-direction:column}
-.header{height:56px;display:flex;align-items:center}
-.header-title{flex:1;text-align:center;font-size:15px}
-.badge{font-size:12px;color:#22c55e}
-.preview{flex:1;display:flex;align-items:center;justify-content:center}
-video{width:90vw;max-width:420px;max-height:100%;background:#000;border-radius:18px;object-fit:contain}
-.controls{display:flex;justify-content:center;gap:24px;padding:18px 0 24px}
-.ctrl{width:56px;height:56px;border-radius:50%;border:2px solid var(--border);background:var(--card);display:flex;align-items:center;justify-content:center}
-.ctrl.off{background:var(--red);border-color:var(--red)}
-.ctrl.end{background:var(--red);border-color:var(--red)}
-.ctrl svg{width:24px;height:24px;fill:#fff}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:#fff;
+  font-family:system-ui;
+}
+
+.page{
+  position:fixed;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+}
+
+/* HEADER */
+.header{
+  height:56px;
+  display:flex;
+  align-items:center;
+}
+.header-title{
+  flex:1;
+  text-align:center;
+  font-size:15px;
+}
+.badge{
+  font-size:12px;
+  color:var(--green);
+}
+
+/* PREVIEW */
+.preview{
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+video{
+  width:90vw;
+  max-width:420px;
+  max-height:100%;
+  background:#000;
+  border-radius:18px;
+  object-fit:contain; /* 🔑 EXACT phone preview */
+}
+
+/* CONTROLS */
+.controls{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:18px 0 24px;
+}
+
+.ctrl{
+  width:56px;
+  height:56px;
+  border-radius:50%;
+  border:2px solid var(--border);
+  background:var(--card);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.ctrl.off{
+  background:var(--red);
+  border-color:var(--red);
+}
+.ctrl.end{
+  background:var(--red);
+  border-color:var(--red);
+}
+.ctrl svg{
+  width:24px;
+  height:24px;
+  fill:#fff;
+}
+
+/* ===== FOCUS BOX ===== */
+#focusBox{
+  position:fixed;
+  top:70px;
+  right:16px;
+  background:rgba(15,17,21,.95);
+  border:1px solid var(--border);
+  padding:10px 14px;
+  border-radius:12px;
+  font-size:13px;
+  z-index:999;
+}
 </style>
 </head>
 
 <body>
+
 <div class="page">
 
   <div class="header">
-    <div class="header-title">Camera • <span class="badge">LIVE</span></div>
+    <div class="header-title">
+      Camera • <span class="badge">LIVE</span>
+    </div>
   </div>
 
   <div class="preview">
@@ -39,16 +124,57 @@ video{width:90vw;max-width:420px;max-height:100%;background:#000;border-radius:1
   </div>
 
   <div class="controls">
-    <button id="micBtn" class="ctrl" onclick="toggleMic()">🎤</button>
-    <button id="camBtn" class="ctrl" onclick="toggleCam()">📷</button>
-    <button class="ctrl" onclick="flipCamera()">🔄</button>
-    <button class="ctrl end" onclick="leave()">⛔</button>
+
+    <!-- MIC -->
+    <button id="micBtn" class="ctrl" onclick="toggleMic()">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
+        <path d="M19 11a7 7 0 01-14 0"/>
+      </svg>
+    </button>
+
+    <!-- CAMERA -->
+    <button id="camBtn" class="ctrl" onclick="toggleCam()">
+      <svg viewBox="0 0 24 24">
+        <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
+      </svg>
+    </button>
+
+    <!-- FLIP CAMERA -->
+    <button class="ctrl" onclick="flipCamera()">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 5v2a5 5 0 015 5h2a7 7 0 00-7-7z"/>
+        <path d="M12 19v-2a5 5 0 01-5-5H5a7 7 0 007 7z"/>
+      </svg>
+    </button>
+
+    <!-- LEAVE -->
+    <button class="ctrl end" onclick="leave()">
+      <svg viewBox="0 0 24 24">
+        <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
+        <path d="M3 5h8v14H3z"/>
+      </svg>
+    </button>
+
   </div>
 
 </div>
 
+<!-- ===== FOCUS UI ===== -->
+<div id="focusBox">
+  <div>🧠 Focus</div>
+  <div id="focusState" style="color:var(--green)">Analyzing…</div>
+  <div style="margin-top:6px;color:var(--muted)">
+    Focused: <span id="focusTime">0</span>s<br>
+    Away: <span id="awayTime">0</span>s
+  </div>
+</div>
+
+<canvas id="analyzer" width="160" height="120" style="display:none"></canvas>
+
 <script src="/socket.io/socket.io.js"></script>
 <script>
+/* ===== STREAM / WEBRTC (UNCHANGED WORKING LOGIC) ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
@@ -58,7 +184,7 @@ let mediaStream;
 let videoSender;
 let micOn = true;
 let camOn = true;
-let facing = "environment";
+let facing = "environment"; // back camera default
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -129,6 +255,52 @@ socket.on("signal", async ({from,data})=>{
     await pc.addIceCandidate(data);
   }
 });
+
+/* ===== ATTENTION / MOTION ANALYSIS ===== */
+const canvas = document.getElementById("analyzer");
+const ctx = canvas.getContext("2d");
+
+let lastFrame = null;
+let focusedSeconds = 0;
+let awaySeconds = 0;
+
+const focusState = document.getElementById("focusState");
+const focusTimeEl = document.getElementById("focusTime");
+const awayTimeEl = document.getElementById("awayTime");
+
+function analyzeFrame(){
+  if (!video.videoWidth) return;
+
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  if (lastFrame){
+    let diff = 0;
+    for (let i=0;i<frame.data.length;i+=4){
+      diff += Math.abs(frame.data[i] - lastFrame.data[i]);
+    }
+    const motion = diff / frame.data.length;
+
+    const focused = motion < 15;
+
+    if (focused){
+      focusedSeconds++;
+      focusState.innerText = "Focused";
+      focusState.style.color = "var(--green)";
+    } else {
+      awaySeconds++;
+      focusState.innerText = "Distracted / Away";
+      focusState.style.color = "var(--red)";
+    }
+
+    focusTimeEl.innerText = focusedSeconds;
+    awayTimeEl.innerText = awaySeconds;
+  }
+
+  lastFrame = frame;
+}
+setInterval(analyzeFrame, 1000);
 </script>
+
 </body>
 </html>
