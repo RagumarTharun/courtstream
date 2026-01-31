@@ -11,8 +11,6 @@
   --card:#161922;
   --border:#262b3d;
   --red:#b91c1c;
-  --green:#22c55e;
-  --muted:#9aa0b4;
 }
 
 body{
@@ -42,7 +40,7 @@ body{
 }
 .badge{
   font-size:12px;
-  color:var(--green);
+  color:#22c55e;
 }
 
 /* PREVIEW */
@@ -59,7 +57,7 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* 🔑 EXACT phone preview */
+  object-fit:contain; /* ✅ EXACT feed, no crop, no rotate */
 }
 
 /* CONTROLS */
@@ -80,31 +78,21 @@ video{
   align-items:center;
   justify-content:center;
 }
+
 .ctrl.off{
   background:var(--red);
   border-color:var(--red);
 }
+
 .ctrl.end{
   background:var(--red);
   border-color:var(--red);
 }
+
 .ctrl svg{
   width:24px;
   height:24px;
   fill:#fff;
-}
-
-/* ===== FOCUS BOX ===== */
-#focusBox{
-  position:fixed;
-  top:70px;
-  right:16px;
-  background:rgba(15,17,21,.95);
-  border:1px solid var(--border);
-  padding:10px 14px;
-  border-radius:12px;
-  font-size:13px;
-  z-index:999;
 }
 </style>
 </head>
@@ -140,11 +128,11 @@ video{
       </svg>
     </button>
 
-    <!-- FLIP CAMERA -->
+    <!-- FLIP CAMERA (FIXED) -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
-        <path d="M12 5v2a5 5 0 015 5h2a7 7 0 00-7-7z"/>
-        <path d="M12 19v-2a5 5 0 01-5-5H5a7 7 0 007 7z"/>
+        <path d="M12 4a8 8 0 018 8h-2a6 6 0 00-6-6V4z"/>
+        <path d="M12 20a8 8 0 01-8-8h2a6 6 0 006 6v2z"/>
       </svg>
     </button>
 
@@ -160,146 +148,109 @@ video{
 
 </div>
 
-<!-- ===== FOCUS UI ===== -->
-<div id="focusBox">
-  <div>🧠 Focus</div>
-  <div id="focusState" style="color:var(--green)">Analyzing…</div>
-  <div style="margin-top:6px;color:var(--muted)">
-    Focused: <span id="focusTime">0</span>s<br>
-    Away: <span id="awayTime">0</span>s
-  </div>
-</div>
-
-<canvas id="analyzer" width="160" height="120" style="display:none"></canvas>
-
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* ===== STREAM / WEBRTC (UNCHANGED WORKING LOGIC) ===== */
+/* =====================
+   STATE
+===================== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
 const camBtn = document.getElementById("camBtn");
 
-let mediaStream;
-let videoSender;
+let mediaStream = null;
+let videoSender = null;
 let micOn = true;
 let camOn = true;
-let facing = "environment"; // back camera default
+
+/* ✅ FRONT CAMERA DEFAULT */
+let facing = "user";
 
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
+/* =====================
+   CAMERA START / SWITCH
+===================== */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ ideal:facing } },
-    audio:true
+    video: { facingMode: { ideal: facing } },
+    audio: true
   });
 
   video.srcObject = stream;
 
   if (!mediaStream) {
-    stream.getTracks().forEach(t=>{
-      const sender = pc.addTrack(t, stream);
-      if (t.kind === "video") videoSender = sender;
+    stream.getTracks().forEach(track => {
+      const sender = pc.addTrack(track, stream);
+      if (track.kind === "video") videoSender = sender;
     });
   } else {
     await videoSender.replaceTrack(stream.getVideoTracks()[0]);
-    mediaStream.getTracks().forEach(t=>t.stop());
+    mediaStream.getTracks().forEach(t => t.stop());
   }
 
   mediaStream = stream;
 }
+
+/* START CAMERA */
 startCamera();
 
-/* JOIN */
+/* =====================
+   JOIN ROOM
+===================== */
 socket.emit("join", streamId);
 
-/* CONTROLS */
+/* =====================
+   CONTROLS
+===================== */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
   micBtn.classList.toggle("off", !micOn);
 }
+
 function toggleCam(){
   camOn = !camOn;
   mediaStream.getVideoTracks()[0].enabled = camOn;
   camBtn.classList.toggle("off", !camOn);
 }
+
+/* ✅ FIXED FLIP LOGIC */
 async function flipCamera(){
-  facing = facing === "environment" ? "user" : "environment";
+  facing = facing === "user" ? "environment" : "user";
   await startCamera();
 }
+
 function leave(){
   pc.close();
   socket.disconnect();
-  mediaStream.getTracks().forEach(t=>t.stop());
+  mediaStream.getTracks().forEach(t => t.stop());
   location.href = "index.html";
 }
 
-/* WEBRTC */
-pc.onicecandidate = e=>{
-  if(e.candidate){
-    socket.emit("signal",{ data:e.candidate });
+/* =====================
+   WEBRTC
+===================== */
+pc.onicecandidate = e => {
+  if (e.candidate) {
+    socket.emit("signal", { data: e.candidate });
   }
 };
-socket.on("signal", async ({from,data})=>{
-  if(data.type === "offer"){
+
+socket.on("signal", async ({ from, data }) => {
+  if (data.type === "offer") {
     await pc.setRemoteDescription(data);
-    const ans = await pc.createAnswer();
-    await pc.setLocalDescription(ans);
-    socket.emit("signal",{ to:from, data:pc.localDescription });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit("signal", { to: from, data: pc.localDescription });
   }
-  if(data.candidate){
+  if (data.candidate) {
     await pc.addIceCandidate(data);
   }
 });
-
-/* ===== ATTENTION / MOTION ANALYSIS ===== */
-const canvas = document.getElementById("analyzer");
-const ctx = canvas.getContext("2d");
-
-let lastFrame = null;
-let focusedSeconds = 0;
-let awaySeconds = 0;
-
-const focusState = document.getElementById("focusState");
-const focusTimeEl = document.getElementById("focusTime");
-const awayTimeEl = document.getElementById("awayTime");
-
-function analyzeFrame(){
-  if (!video.videoWidth) return;
-
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-  if (lastFrame){
-    let diff = 0;
-    for (let i=0;i<frame.data.length;i+=4){
-      diff += Math.abs(frame.data[i] - lastFrame.data[i]);
-    }
-    const motion = diff / frame.data.length;
-
-    const focused = motion < 15;
-
-    if (focused){
-      focusedSeconds++;
-      focusState.innerText = "Focused";
-      focusState.style.color = "var(--green)";
-    } else {
-      awaySeconds++;
-      focusState.innerText = "Distracted / Away";
-      focusState.style.color = "var(--red)";
-    }
-
-    focusTimeEl.innerText = focusedSeconds;
-    awayTimeEl.innerText = awaySeconds;
-  }
-
-  lastFrame = frame;
-}
-setInterval(analyzeFrame, 1000);
 </script>
 
 </body>
