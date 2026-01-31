@@ -15,9 +15,7 @@
   --red:#ef4444;
   --green:#22c55e;
 }
-
 *{box-sizing:border-box}
-
 body{
   margin:0;
   background:var(--bg);
@@ -25,123 +23,61 @@ body{
   font-family:system-ui;
   height:100vh;
 }
-
 .director{
   display:grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns:1fr 320px;
   gap:14px;
   padding:14px;
   height:100%;
 }
-
 .panel{
   background:var(--panel);
   border-radius:16px;
   border:1px solid var(--border);
 }
-
-.main-feed{
-  position:relative;
-  background:#000;
-}
-.main-feed::before{
-  content:"";
-  display:block;
-  padding-top:56.25%;
-}
+.main-feed{position:relative;background:#000}
+.main-feed::before{content:"";display:block;padding-top:56.25%}
 .main-feed video{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-  object-fit:contain;
+  position:absolute;inset:0;width:100%;height:100%;object-fit:contain
 }
-
 .placeholder{
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--muted);
+  position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;color:var(--muted)
 }
-
 .stream-badge{
-  position:absolute;
-  top:14px;
-  left:14px;
+  position:absolute;top:14px;left:14px;
   background:rgba(0,0,0,.6);
-  padding:6px 12px;
-  border-radius:999px;
-  font-size:13px;
+  padding:6px 12px;border-radius:999px;font-size:13px
 }
-
 .side-panel{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  padding:12px;
-  overflow-y:auto;
+  display:flex;flex-direction:column;gap:12px;
+  padding:12px;overflow-y:auto
 }
-
 .camera-slot{
-  height:140px;
-  background:#000;
-  border-radius:14px;
-  border:1px solid var(--border);
-  position:relative;
-  cursor:pointer;
+  height:140px;background:#000;border-radius:14px;
+  border:1px solid var(--border);position:relative;cursor:pointer
 }
-
-.camera-slot video{
-  width:100%;
-  height:100%;
-  object-fit:contain;
-}
-
+.camera-slot video{width:100%;height:100%;object-fit:contain}
 .camera-slot span{
-  position:absolute;
-  bottom:8px;
-  left:8px;
-  font-size:12px;
-  background:rgba(0,0,0,.6);
-  padding:4px 8px;
-  border-radius:999px;
+  position:absolute;bottom:8px;left:8px;font-size:12px;
+  background:rgba(0,0,0,.6);padding:4px 8px;border-radius:999px
 }
-
 .focus-badge{
-  position:absolute;
-  top:8px;
-  right:8px;
-  font-size:11px;
-  padding:4px 8px;
-  border-radius:999px;
-  background:rgba(0,0,0,.6);
+  position:absolute;top:8px;right:8px;font-size:11px;
+  padding:4px 8px;border-radius:999px;background:rgba(0,0,0,.6)
 }
-.focused{ color:var(--green); }
-.not-focused{ color:var(--red); }
-
-/* ⏱ focus time */
+.focused{color:var(--green)}
+.not-focused{color:var(--red)}
 .focus-time{
-  position:absolute;
-  bottom:8px;
-  right:8px;
-  font-size:11px;
-  color:var(--muted);
-  background:rgba(0,0,0,.6);
-  padding:4px 8px;
-  border-radius:999px;
+  position:absolute;bottom:8px;right:8px;font-size:11px;
+  color:var(--muted);background:rgba(0,0,0,.6);
+  padding:4px 8px;border-radius:999px
 }
-
 .camera-slot.left::after{
-  content:"Student left";
-  position:absolute;
-  inset:0;
+  content:"Student left";position:absolute;inset:0;
   background:rgba(0,0,0,.6);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--muted);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted)
 }
 </style>
 </head>
@@ -149,153 +85,127 @@ body{
 <body>
 
 <div class="director">
-
   <div class="panel main-feed">
     <video id="mainVideo" autoplay muted playsinline></video>
     <div id="placeholder" class="placeholder">Select a camera</div>
     <div class="stream-badge" id="streamBadge"></div>
   </div>
-
   <div class="panel side-panel" id="cameraStrip"></div>
-
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* ===== STATE ===== */
-const params = new URLSearchParams(location.search);
-const streamId = params.get("stream");
-document.getElementById("streamBadge").innerText =
-  streamId + " • LIVE";
+const params=new URLSearchParams(location.search);
+const streamId=params.get("stream");
+document.getElementById("streamBadge").innerText=streamId+" • LIVE";
 
-const socket = io({ transports:["websocket"] });
-const strip = document.getElementById("cameraStrip");
-const mainVideo = document.getElementById("mainVideo");
-const placeholder = document.getElementById("placeholder");
+const socket=io({transports:["websocket"]});
+const strip=document.getElementById("cameraStrip");
+const mainVideo=document.getElementById("mainVideo");
+const placeholder=document.getElementById("placeholder");
 
-const peers = Object.create(null);
+const peers=Object.create(null);
 
-/* ===== JOIN ===== */
-socket.emit("join", streamId);
+/* JOIN */
+socket.emit("join",streamId);
 
-/* ===== EXISTING PEERS ===== */
-socket.on("existing-peers", list => {
-  list.forEach(({ id }) => {
-    if (!peers[id]) createPeer(id);
+/* EXISTING PEERS (NO DUPLICATES) */
+socket.on("existing-peers",list=>{
+  list.forEach(({id})=>{
+    if(!peers[id]) createPeer(id);
   });
 });
 
-/* ===== NEW PEER ===== */
-socket.on("peer-joined", ({ id }) => {
-  if (!peers[id]) createPeer(id);
+/* NEW PEER */
+socket.on("peer-joined",({id})=>{
+  if(!peers[id]) createPeer(id);
 });
 
-/* ===== PEER LEFT ===== */
-socket.on("peer-left", ({ id }) => {
-  const p = peers[id];
-  if (!p) return;
+/* ✅ FIXED: CAMERA LEFT */
+socket.on("camera-left",({id})=>{
+  const p=peers[id];
+  if(!p) return;
 
   p.pc.close();
   p.slot.classList.add("left");
 
-  if (mainVideo.srcObject === p.stream) {
-    mainVideo.srcObject = null;
-    placeholder.style.display = "flex";
+  if(mainVideo.srcObject===p.stream){
+    mainVideo.srcObject=null;
+    placeholder.style.display="flex";
   }
-
   delete peers[id];
 });
 
-/* ===== CREATE PEER ===== */
+/* CREATE PEER */
 function createPeer(id){
-  const pc = new RTCPeerConnection({
-    iceServers:[{ urls:"stun:stun.l.google.com:19302" }]
+  const pc=new RTCPeerConnection({
+    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
-  pc.addTransceiver("video", { direction:"recvonly" });
+  pc.addTransceiver("video",{direction:"recvonly"});
 
-  const slot = document.createElement("div");
-  slot.className = "camera-slot";
-  slot.innerHTML = `
+  const slot=document.createElement("div");
+  slot.className="camera-slot";
+  slot.innerHTML=`
     <span>Camera</span>
     <div class="focus-badge not-focused">Analyzing</div>
     <div class="focus-time">0s / 0s</div>
   `;
   strip.appendChild(slot);
 
-  const focusEl = slot.querySelector(".focus-badge");
-  const timeEl = slot.querySelector(".focus-time");
+  const focusEl=slot.querySelector(".focus-badge");
+  const timeEl=slot.querySelector(".focus-time");
 
-  peers[id] = {
-    pc,
-    slot,
-    focusEl,
-    timeEl,
-    stream:null,
-    focused:0,
-    away:0
-  };
+  peers[id]={pc,slot,focusEl,timeEl,stream:null,focused:0,away:0};
 
-  pc.ontrack = e => {
-    if (peers[id].stream) return;
+  pc.ontrack=e=>{
+    if(peers[id].stream) return;
+    const stream=e.streams[0];
+    peers[id].stream=stream;
 
-    const stream = e.streams[0];
-    peers[id].stream = stream;
-
-    const v = document.createElement("video");
-    v.autoplay = true;
-    v.muted = true;
-    v.playsInline = true;
-    v.srcObject = stream;
+    const v=document.createElement("video");
+    v.autoplay=true;v.muted=true;v.playsInline=true;
+    v.srcObject=stream;
     slot.prepend(v);
 
-    slot.onclick = () => {
-      mainVideo.srcObject = stream;
-      placeholder.style.display = "none";
+    slot.onclick=()=>{
+      mainVideo.srcObject=stream;
+      placeholder.style.display="none";
     };
   };
 
-  pc.onicecandidate = e => {
-    if (e.candidate)
-      socket.emit("signal",{ to:id, data:e.candidate });
+  pc.onicecandidate=e=>{
+    if(e.candidate)
+      socket.emit("signal",{to:id,data:e.candidate});
   };
 
   pc.createOffer()
-    .then(o => pc.setLocalDescription(o))
-    .then(() =>
-      socket.emit("signal",{ to:id, data:pc.localDescription })
-    );
+    .then(o=>pc.setLocalDescription(o))
+    .then(()=>socket.emit("signal",{to:id,data:pc.localDescription}));
 }
 
-/* ===== SIGNAL ===== */
-socket.on("signal", async ({ from, data }) => {
-  const p = peers[from];
-  if (!p) return;
-
-  if (data.type) await p.pc.setRemoteDescription(data);
-  if (data.candidate) await p.pc.addIceCandidate(data);
+/* SIGNAL */
+socket.on("signal",async({from,data})=>{
+  const p=peers[from];
+  if(!p) return;
+  if(data.type) await p.pc.setRemoteDescription(data);
+  if(data.candidate) await p.pc.addIceCandidate(data);
 });
 
-/* ===== FOCUS UPDATE =====
-   data = { focused, away, state }
-========================== */
-socket.on("focus-update", (data, from) => {
-  const p = peers[from];
-  if (!p) return;
+/* FOCUS UPDATE */
+socket.on("focus-update",(data,from)=>{
+  const p=peers[from];
+  if(!p) return;
 
-  p.focused = data.focused;
-  p.away = data.away;
+  p.focused=data.focused;
+  p.away=data.away;
 
-  const total = p.focused + p.away;
-  const pct = total ? Math.round((p.focused / total) * 100) : 0;
+  const total=p.focused+p.away;
+  const pct=total?Math.round((p.focused/total)*100):0;
 
-  p.focusEl.textContent = `${data.state} ${pct}%`;
-  p.focusEl.className =
-    "focus-badge " + (data.state === "Focused"
-      ? "focused"
-      : "not-focused");
-
-  p.timeEl.textContent =
-    `${p.focused}s / ${p.away}s`;
+  p.focusEl.textContent=`${data.state} ${pct}%`;
+  p.focusEl.className=
+    "focus-badge "+(data.state==="Focused"?"focused":"not-focused");
+  p.timeEl.textContent=`${p.focused}s / ${p.away}s`;
 });
 </script>
 
