@@ -25,7 +25,6 @@ body{
   height:100vh;
 }
 
-/* ===== LAYOUT ===== */
 .director{
   display:grid;
   grid-template-columns: 1fr 320px;
@@ -34,7 +33,6 @@ body{
   height:100%;
 }
 
-/* ===== PANELS ===== */
 .panel{
   background:var(--panel);
   border-radius:16px;
@@ -51,7 +49,6 @@ body{
   overflow:hidden;
 }
 
-/* Fixed preview size */
 .main-feed::before{
   content:"";
   display:block;
@@ -65,10 +62,8 @@ body{
   height:100%;
   object-fit:contain;
   background:#000;
-  transform-origin:center center;
 }
 
-/* Placeholder */
 .placeholder{
   position:absolute;
   color:var(--muted);
@@ -76,7 +71,6 @@ body{
   z-index:2;
 }
 
-/* Top-left badge */
 .stream-badge{
   position:absolute;
   top:14px;
@@ -88,7 +82,6 @@ body{
   font-size:13px;
 }
 
-/* Record badge */
 .record-bar{
   position:absolute;
   bottom:14px;
@@ -101,6 +94,7 @@ body{
   border-radius:999px;
   font-size:13px;
 }
+
 .record-dot{
   width:10px;
   height:10px;
@@ -108,7 +102,7 @@ body{
   border-radius:50%;
 }
 
-/* ===== RIGHT CAMERA STRIPE ===== */
+/* ===== CAMERA STRIP ===== */
 .side-panel{
   display:flex;
   flex-direction:column;
@@ -131,6 +125,9 @@ body{
   overflow:hidden;
   cursor:pointer;
   flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 
 .camera-slot video{
@@ -138,10 +135,9 @@ body{
   height:100%;
   object-fit:contain;
   background:#000;
-  transform-origin:center center;
 }
 
-.camera-slot span{
+.camera-slot .label{
   position:absolute;
   bottom:8px;
   left:8px;
@@ -149,7 +145,11 @@ body{
   background:rgba(0,0,0,.6);
   padding:4px 8px;
   border-radius:999px;
-  color:#fff;
+}
+
+.camera-slot .status{
+  color:var(--muted);
+  font-size:13px;
 }
 </style>
 </head>
@@ -171,7 +171,7 @@ body{
     </div>
   </div>
 
-  <!-- RIGHT CAMERA STRIPE -->
+  <!-- CAMERA STRIP -->
   <div class="panel side-panel" id="cameraStrip">
     <div class="side-title">Cameras</div>
   </div>
@@ -180,7 +180,6 @@ body{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* ===== STREAM INFO ===== */
 const params = new URLSearchParams(location.search);
 const streamId = params.get("stream");
 const streamName = params.get("name") || streamId;
@@ -188,56 +187,40 @@ const streamName = params.get("name") || streamId;
 document.getElementById("streamBadge").innerText =
   streamName + " • LIVE";
 
-/* ===== SOCKET / STATE ===== */
 const socket = io();
 const mainVideo = document.getElementById("mainVideo");
 const placeholder = document.getElementById("placeholder");
 const strip = document.getElementById("cameraStrip");
 
-const peers = {};      // socketId -> { pc, stream, slot }
-const rotations = {}; // socketId -> rotation degrees
+const peers = {}; // socketId -> { pc, stream, slot }
 
-/* ===== JOIN ===== */
+/* JOIN */
 socket.emit("join", streamId);
 
-/* ===== CAMERA JOINED ===== */
+/* CAMERA JOINED */
 socket.on("peer-joined", ({ id }) => {
   if (peers[id]) return;
   createPeer(id);
 });
 
-/* ===== CAMERA LEFT ===== */
+/* CAMERA LEFT */
 socket.on("peer-left", ({ id }) => {
   const p = peers[id];
   if (!p) return;
 
   p.pc.close();
-  p.slot.remove();
-  delete peers[id];
-  delete rotations[id];
+
+  // Clear video but keep slot
+  p.slot.innerHTML = `<div class="status">Student left</div>`;
+  p.stream = null;
 
   if (mainVideo.srcObject === p.stream) {
     mainVideo.srcObject = null;
-    mainVideo.style.transform = "";
     placeholder.style.display = "block";
   }
 });
 
-/* ===== CAMERA ROTATION (MANUAL) ===== */
-socket.on("camera-rotate", ({ from, rotation }) => {
-  rotations[from] = rotation;
-  const p = peers[from];
-  if (!p) return;
-
-  const v = p.slot.querySelector("video");
-  if (v) v.style.transform = `rotate(${rotation}deg)`;
-
-  if (mainVideo.srcObject === p.stream) {
-    mainVideo.style.transform = `rotate(${rotation}deg)`;
-  }
-});
-
-/* ===== CREATE PEER ===== */
+/* CREATE PEER */
 function createPeer(id){
   const pc = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
@@ -247,10 +230,10 @@ function createPeer(id){
 
   const slot = document.createElement("div");
   slot.className = "camera-slot";
-  slot.innerHTML = "<span>Camera</span>";
+  slot.innerHTML = `<div class="status">Connecting…</div>`;
   strip.appendChild(slot);
 
-  peers[id] = { pc, slot };
+  peers[id] = { pc, slot, stream:null };
 
   pc.ontrack = e => {
     if (peers[id].stream) return;
@@ -263,19 +246,19 @@ function createPeer(id){
     v.muted = true;
     v.playsInline = true;
     v.srcObject = stream;
-    v.style.transform = `rotate(${rotations[id] || 0}deg)`;
 
-    v.onloadedmetadata = () => v.play().catch(()=>{});
+    const label = document.createElement("div");
+    label.className = "label";
+    label.innerText = "Camera";
 
-    slot.prepend(v);
+    slot.innerHTML = "";
+    slot.appendChild(v);
+    slot.appendChild(label);
 
     slot.onclick = () => {
       mainVideo.srcObject = stream;
-      mainVideo.style.transform =
-        `rotate(${rotations[id] || 0}deg)`;
       placeholder.style.display = "none";
-      mainVideo.onloadedmetadata = () =>
-        mainVideo.play().catch(()=>{});
+      mainVideo.play().catch(()=>{});
     };
   };
 
@@ -292,7 +275,7 @@ function createPeer(id){
     });
 }
 
-/* ===== SIGNAL ===== */
+/* SIGNAL */
 socket.on("signal", async ({ from, data }) => {
   const p = peers[from];
   if (!p) return;
