@@ -145,8 +145,8 @@ const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
 const camBtn = document.getElementById("camBtn");
 
-let mediaStream;
-let videoSender;
+let mediaStream = null;
+let videoSender = null;
 let micOn = true;
 let camOn = true;
 let facing = "environment";
@@ -156,7 +156,7 @@ const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* CAMERA */
+/* ===== CAMERA ===== */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
@@ -179,40 +179,61 @@ async function startCamera(){
 }
 startCamera();
 
-/* JOIN — EXACTLY AS SERVER EXPECTS */
+/* ===== JOIN ===== */
 socket.emit("join", {
   room: streamId,
   role: "camera"
 });
 
-/* CONTROLS */
+/* ===== CONTROLS ===== */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
   micBtn.classList.toggle("off", !micOn);
 }
+
 function toggleCam(){
   camOn = !camOn;
   mediaStream.getVideoTracks()[0].enabled = camOn;
   camBtn.classList.toggle("off", !camOn);
 }
+
 async function flipCamera(){
   facing = facing === "environment" ? "user" : "environment";
   await startCamera();
 }
+
 function leave(){
-  pc.close();
-  socket.disconnect();
-  mediaStream.getTracks().forEach(t=>t.stop());
+  cleanup();
   location.href = "index.html";
 }
 
-/* WEBRTC */
+/* ===== CLEANUP (CRITICAL FIX) ===== */
+function cleanup(){
+  try{
+    pc.getSenders().forEach(s=>{
+      if (s.track) s.track.stop();
+    });
+    pc.close();
+  }catch{}
+
+  socket.disconnect();
+
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t=>t.stop());
+  }
+}
+
+/* Ensure refresh does NOT duplicate camera */
+window.addEventListener("beforeunload", cleanup);
+
+/* ===== WEBRTC ===== */
 pc.onicecandidate = e=>{
   if(e.candidate){
     socket.emit("signal",{ data:e.candidate });
   }
 };
+
 socket.on("signal", async ({from,data})=>{
   if(data.type === "offer"){
     await pc.setRemoteDescription(data);
