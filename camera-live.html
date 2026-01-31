@@ -274,10 +274,11 @@ const awayTimeEl = document.getElementById("awayTime");
 function analyzeFrame(){
   if (!video.videoWidth || video.readyState < 2) {
     awaySeconds++;
-    setNotFocused("Not Focused (No Feed)");
+    focusState.innerText = "Not Focused (No Feed)";
+    focusState.style.color = "var(--red)";
+    awayTimeEl.innerText = awaySeconds;
     return;
   }
-
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = frame.data;
