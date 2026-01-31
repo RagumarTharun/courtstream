@@ -121,6 +121,18 @@ body{
 .focused{ color:var(--green); }
 .not-focused{ color:var(--red); }
 
+/* ⏱ focus time */
+.focus-time{
+  position:absolute;
+  bottom:8px;
+  right:8px;
+  font-size:11px;
+  color:var(--muted);
+  background:rgba(0,0,0,.6);
+  padding:4px 8px;
+  border-radius:999px;
+}
+
 .camera-slot.left::after{
   content:"Student left";
   position:absolute;
@@ -150,12 +162,9 @@ body{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* =====================
-   STATE
-===================== */
+/* ===== STATE ===== */
 const params = new URLSearchParams(location.search);
 const streamId = params.get("stream");
-
 document.getElementById("streamBadge").innerText =
   streamId + " • LIVE";
 
@@ -166,30 +175,22 @@ const placeholder = document.getElementById("placeholder");
 
 const peers = Object.create(null);
 
-/* =====================
-   JOIN
-===================== */
+/* ===== JOIN ===== */
 socket.emit("join", streamId);
 
-/* =====================
-   EXISTING PEERS (NO DUPES)
-===================== */
+/* ===== EXISTING PEERS ===== */
 socket.on("existing-peers", list => {
   list.forEach(({ id }) => {
     if (!peers[id]) createPeer(id);
   });
 });
 
-/* =====================
-   NEW PEER
-===================== */
+/* ===== NEW PEER ===== */
 socket.on("peer-joined", ({ id }) => {
   if (!peers[id]) createPeer(id);
 });
 
-/* =====================
-   PEER LEFT
-===================== */
+/* ===== PEER LEFT ===== */
 socket.on("peer-left", ({ id }) => {
   const p = peers[id];
   if (!p) return;
@@ -205,14 +206,11 @@ socket.on("peer-left", ({ id }) => {
   delete peers[id];
 });
 
-/* =====================
-   CREATE PEER
-===================== */
+/* ===== CREATE PEER ===== */
 function createPeer(id){
   const pc = new RTCPeerConnection({
     iceServers:[{ urls:"stun:stun.l.google.com:19302" }]
   });
-
   pc.addTransceiver("video", { direction:"recvonly" });
 
   const slot = document.createElement("div");
@@ -220,15 +218,18 @@ function createPeer(id){
   slot.innerHTML = `
     <span>Camera</span>
     <div class="focus-badge not-focused">Analyzing</div>
+    <div class="focus-time">0s / 0s</div>
   `;
   strip.appendChild(slot);
 
   const focusEl = slot.querySelector(".focus-badge");
+  const timeEl = slot.querySelector(".focus-time");
 
   peers[id] = {
     pc,
     slot,
     focusEl,
+    timeEl,
     stream:null,
     focused:0,
     away:0
@@ -265,9 +266,7 @@ function createPeer(id){
     );
 }
 
-/* =====================
-   SIGNAL
-===================== */
+/* ===== SIGNAL ===== */
 socket.on("signal", async ({ from, data }) => {
   const p = peers[from];
   if (!p) return;
@@ -276,11 +275,9 @@ socket.on("signal", async ({ from, data }) => {
   if (data.candidate) await p.pc.addIceCandidate(data);
 });
 
-/* =====================
-   ✅ FOCUS UPDATE (FIXED)
-   expects:
-   { focused, away, state }
-===================== */
+/* ===== FOCUS UPDATE =====
+   data = { focused, away, state }
+========================== */
 socket.on("focus-update", (data, from) => {
   const p = peers[from];
   if (!p) return;
@@ -296,6 +293,9 @@ socket.on("focus-update", (data, from) => {
     "focus-badge " + (data.state === "Focused"
       ? "focused"
       : "not-focused");
+
+  p.timeEl.textContent =
+    `${p.focused}s / ${p.away}s`;
 });
 </script>
 
