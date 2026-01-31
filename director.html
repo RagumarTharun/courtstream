@@ -2,116 +2,94 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>CourtStream – Director</title>
+<title>Director</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-:root{
-  --bg:#0f1115;--panel:#161922;--border:#262b3d;
-  --text:#e6e6eb;--muted:#9aa0b4;
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui;height:100vh}
-.director{display:grid;grid-template-columns:1fr 320px;gap:14px;padding:14px;height:100%}
-.panel{background:var(--panel);border-radius:16px;border:1px solid var(--border)}
-.main-feed{position:relative;background:#000}
-.main-feed::before{content:"";display:block;padding-top:56.25%}
-.main-feed video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
-.placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted)}
-.side-panel{padding:12px;display:flex;flex-direction:column;gap:12px;overflow-y:auto}
-.camera-slot{height:140px;background:#000;border-radius:14px;border:1px solid var(--border);overflow:hidden;cursor:pointer}
-.camera-slot video{width:100%;height:100%;object-fit:contain}
+body{margin:0;background:#0f1115;color:#fff;font-family:system-ui}
+.main{display:grid;grid-template-columns:1fr 320px;height:100vh;gap:12px;padding:12px}
+video{width:100%;height:100%;object-fit:contain;background:#000}
+.slot{height:140px;background:#000;border-radius:12px;position:relative}
+.badge{position:absolute;top:8px;right:8px;font-size:11px;padding:4px 8px;border-radius:999px}
+.focused{background:#22c55e;color:#000}
+.not{background:#ef4444}
 </style>
 </head>
 
 <body>
-<div class="director">
 
-  <div class="panel main-feed">
-    <video id="mainVideo" autoplay muted playsinline></video>
-    <div id="placeholder" class="placeholder">Select a camera</div>
-  </div>
-
-  <div class="panel side-panel" id="strip"></div>
-
+<div class="main">
+  <video id="mainVideo" autoplay muted></video>
+  <div id="strip"></div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const streamId = new URLSearchParams(location.search).get("stream");
-const socket = io();
-const strip = document.getElementById("strip");
-const mainVideo = document.getElementById("mainVideo");
-const placeholder = document.getElementById("placeholder");
+const streamId=new URLSearchParams(location.search).get("stream");
+const socket=io();
+const strip=document.getElementById("strip");
+const mainVideo=document.getElementById("mainVideo");
 
-const peers = {};
+const peers={};
 
-/* JOIN */
-socket.emit("join", streamId);
+socket.emit("join",streamId);
 
-/* CAMERA JOINED */
-socket.on("peer-joined", ({id})=>{
-  if(peers[id]) return;
+socket.on("existing-peers",list=>{
+  list.forEach(p=>createPeer(p.id));
+});
 
-  const pc = new RTCPeerConnection({
-    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-  });
+socket.on("peer-joined",({id})=>{
+  if(!peers[id]) createPeer(id);
+});
+
+socket.on("camera-left",({id})=>{
+  const p=peers[id];
+  if(!p) return;
+  p.slot.querySelector("video").pause();
+  p.slot.querySelector(".badge").innerText="Left";
+});
+
+socket.on("focus-update",(data,id)=>{
+  const p=peers[id];
+  if(!p) return;
+  const total=data.focused+data.away;
+  const pct=total?Math.round((data.focused/total)*100):0;
+  p.badge.innerText=`${data.state} ${pct}%`;
+  p.badge.className=`badge ${data.state==="Focused"?"focused":"not"}`;
+});
+
+function createPeer(id){
+  const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
   pc.addTransceiver("video",{direction:"recvonly"});
 
-  const slot = document.createElement("div");
-  slot.className = "camera-slot";
+  const slot=document.createElement("div");
+  slot.className="slot";
+  const badge=document.createElement("div");
+  badge.className="badge";
+  badge.innerText="Analyzing";
+  slot.appendChild(badge);
   strip.appendChild(slot);
 
-  peers[id] = { pc, slot };
+  peers[id]={pc,slot,badge};
 
-  pc.ontrack = e=>{
-    if(peers[id].stream) return;
-    peers[id].stream = e.streams[0];
-
-    const v = document.createElement("video");
-    v.autoplay = true;
-    v.muted = true;
-    v.playsInline = true;
-    v.srcObject = e.streams[0];
-    slot.appendChild(v);
-
-    slot.onclick = ()=>{
-      mainVideo.srcObject = e.streams[0];
-      placeholder.style.display = "none";
-    };
+  pc.ontrack=e=>{
+    if(slot.querySelector("video")) return;
+    const v=document.createElement("video");
+    v.autoplay=true;v.muted=true;v.srcObject=e.streams[0];
+    slot.prepend(v);
+    slot.onclick=()=>mainVideo.srcObject=e.streams[0];
   };
 
-  pc.onicecandidate = e=>{
-    if(e.candidate){
-      socket.emit("signal",{to:id,data:e.candidate});
-    }
-  };
-
-  pc.createOffer()
-    .then(o=>pc.setLocalDescription(o))
+  pc.onicecandidate=e=>e.candidate&&socket.emit("signal",{to:id,data:e.candidate});
+  pc.createOffer().then(o=>pc.setLocalDescription(o))
     .then(()=>socket.emit("signal",{to:id,data:pc.localDescription}));
-});
 
-/* CAMERA LEFT */
-socket.on("peer-left", ({id})=>{
-  const p = peers[id];
-  if(!p) return;
-  p.pc.close();
-  p.slot.remove();
-  if(mainVideo.srcObject === p.stream){
-    mainVideo.srcObject = null;
-    placeholder.style.display = "flex";
-  }
-  delete peers[id];
-});
-
-/* SIGNAL */
-socket.on("signal", async ({from,data})=>{
-  const p = peers[from];
-  if(!p) return;
-  if(data.type) await p.pc.setRemoteDescription(data);
-  if(data.candidate) await p.pc.addIceCandidate(data);
-});
+  socket.on("signal",async({from,data})=>{
+    if(from!==id) return;
+    if(data.type) await pc.setRemoteDescription(data);
+    if(data.candidate) await pc.addIceCandidate(data);
+  });
+}
 </script>
 </body>
 </html>
