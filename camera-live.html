@@ -58,8 +58,7 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* NO CROPPING */
-  transition:transform .25s ease;
+  object-fit:contain; /* ✅ exact feed, no crop */
 }
 
 /* CONTROLS */
@@ -152,6 +151,13 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+/* ===== STABLE CAMERA ID ===== */
+let cameraId =
+  localStorage.getItem("courtstream-camera-id") ||
+  crypto.randomUUID();
+
+localStorage.setItem("courtstream-camera-id", cameraId);
+
 /* ===== STATE ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
@@ -162,7 +168,7 @@ let mediaStream;
 let videoSender;
 let micOn = true;
 let camOn = true;
-let facing = "environment";
+let facing = "environment"; // back camera default
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -172,7 +178,7 @@ const pc = new RTCPeerConnection({
 /* ===== CAMERA ===== */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ exact:facing } },
+    video:{ facingMode:{ ideal:facing } },  // ✅ SAFE
     audio:true
   });
 
@@ -193,7 +199,11 @@ async function startCamera(){
 startCamera();
 
 /* ===== JOIN ===== */
-socket.emit("join", streamId);
+socket.emit("join", {
+  room: streamId,
+  role: "camera",
+  cameraId
+});
 
 /* ===== CONTROLS ===== */
 function toggleMic(){
@@ -219,25 +229,6 @@ function leave(){
   mediaStream.getTracks().forEach(t=>t.stop());
   location.href = "index.html";
 }
-
-/* ===== 🔑 AUTO ROTATE PREVIEW WITH PHONE ===== */
-function applyOrientation(){
-  let angle = 0;
-
-  if (screen.orientation && screen.orientation.angle !== undefined) {
-    angle = screen.orientation.angle;
-  } else if (window.orientation !== undefined) {
-    angle = window.orientation;
-  }
-
-  video.style.transform = `rotate(${angle}deg)`;
-}
-
-if (screen.orientation) {
-  screen.orientation.addEventListener("change", applyOrientation);
-}
-window.addEventListener("orientationchange", applyOrientation);
-applyOrientation();
 
 /* ===== WEBRTC ===== */
 pc.onicecandidate = e=>{
