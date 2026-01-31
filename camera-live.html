@@ -272,36 +272,46 @@ const focusTimeEl = document.getElementById("focusTime");
 const awayTimeEl = document.getElementById("awayTime");
 
 function analyzeFrame(){
-  if (!video.videoWidth) return;
+  // ❌ No camera frame → user away
+  if (!video.videoWidth || video.readyState < 2) {
+    awaySeconds++;
+    focusState.innerText = "Not Focused";
+    focusState.style.color = "var(--red)";
+    awayTimeEl.innerText = awaySeconds;
+    return;
+  }
 
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
   if (lastFrame){
     let diff = 0;
-    for (let i=0;i<frame.data.length;i+=4){
+
+    for (let i = 0; i < frame.data.length; i += 4){
       diff += Math.abs(frame.data[i] - lastFrame.data[i]);
     }
 
     const motion = diff / frame.data.length;
+
+    // 🔑 Threshold
     const focused = motion < 15;
 
     if (focused){
       focusedSeconds++;
-      focusState.textContent = "Focused";
+      focusState.innerText = "Focused";
       focusState.style.color = "var(--green)";
+      focusTimeEl.innerText = focusedSeconds;
     } else {
       awaySeconds++;
-      focusState.textContent = "Distracted / Away";
+      focusState.innerText = "Not Focused";
       focusState.style.color = "var(--red)";
+      awayTimeEl.innerText = awaySeconds;
     }
-
-    focusTimeEl.textContent = focusedSeconds;
-    awayTimeEl.textContent = awaySeconds;
   }
 
   lastFrame = frame;
 }
+
 setInterval(analyzeFrame, 1000);
 </script>
 
