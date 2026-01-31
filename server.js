@@ -1,281 +1,199 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>CourtStream – Director</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+// =========================
+// CourtStream Server (FINAL, STABLE)
+// =========================
 
-<style>
-:root{
-  --bg:#0f1115;
-  --panel:#161922;
-  --border:#262b3d;
-  --text:#e6e6eb;
-  --muted:#9aa0b4;
-  --red:#ef4444;
-  --green:#22c55e;
-}
+const express = require("express");
+const http = require("http");
+const session = require("express-session");
+const sqlite3 = require("sqlite3").verbose();
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const { Server } = require("socket.io");
 
-*{box-sizing:border-box}
+const app = express();
+const server = http.createServer(app);
 
-body{
-  margin:0;
-  background:var(--bg);
-  color:var(--text);
-  font-family:system-ui;
-  height:100vh;
-}
-
-.director{
-  display:grid;
-  grid-template-columns: 1fr 320px;
-  gap:14px;
-  padding:14px;
-  height:100%;
-}
-
-.panel{
-  background:var(--panel);
-  border-radius:16px;
-  border:1px solid var(--border);
-}
-
-/* ===== MAIN FEED ===== */
-.main-feed{
-  position:relative;
-  background:#000;
-}
-.main-feed::before{
-  content:"";
-  display:block;
-  padding-top:56.25%;
-}
-.main-feed video{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-  object-fit:contain;
-}
-
-.placeholder{
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--muted);
-}
-
-.stream-badge{
-  position:absolute;
-  top:14px;
-  left:14px;
-  background:rgba(0,0,0,.6);
-  padding:6px 12px;
-  border-radius:999px;
-  font-size:13px;
-}
-
-/* ===== CAMERA STRIP ===== */
-.side-panel{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  padding:12px;
-  overflow-y:auto;
-}
-
-.camera-slot{
-  height:140px;
-  background:#000;
-  border-radius:14px;
-  border:1px solid var(--border);
-  position:relative;
-  cursor:pointer;
-}
-
-.camera-slot video{
-  width:100%;
-  height:100%;
-  object-fit:contain;
-}
-
-.camera-slot span{
-  position:absolute;
-  bottom:8px;
-  left:8px;
-  font-size:12px;
-  background:rgba(0,0,0,.6);
-  padding:4px 8px;
-  border-radius:999px;
-}
-
-.focus-badge{
-  position:absolute;
-  top:8px;
-  right:8px;
-  font-size:11px;
-  padding:4px 8px;
-  border-radius:999px;
-  background:rgba(0,0,0,.6);
-}
-.focused{ color:var(--green); }
-.not-focused{ color:var(--red); }
-
-.camera-slot.left::after{
-  content:"Student left";
-  position:absolute;
-  inset:0;
-  background:rgba(0,0,0,.6);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--muted);
-}
-</style>
-</head>
-
-<body>
-
-<div class="director">
-
-  <div class="panel main-feed">
-    <video id="mainVideo" autoplay muted playsinline></video>
-    <div id="placeholder" class="placeholder">Select a camera</div>
-    <div class="stream-badge" id="streamBadge"></div>
-  </div>
-
-  <div class="panel side-panel" id="cameraStrip"></div>
-
-</div>
-
-<script src="/socket.io/socket.io.js"></script>
-<script>
-/* ===== INIT ===== */
-const params = new URLSearchParams(location.search);
-const streamId = params.get("stream");
-
-document.getElementById("streamBadge").innerText =
-  streamId + " • LIVE";
-
-const socket = io({ transports:["websocket"] });
-const strip = document.getElementById("cameraStrip");
-const mainVideo = document.getElementById("mainVideo");
-const placeholder = document.getElementById("placeholder");
-
-const peers = Object.create(null);
-
-/* ===== JOIN ===== */
-socket.emit("join", streamId);
-
-/* ===== EXISTING PEERS (NO DUPLICATES) ===== */
-socket.on("existing-peers", list => {
-  list.forEach(({ id }) => {
-    if (!peers[id]) createPeer(id);
-  });
+/* =========================
+   SOCKET.IO
+========================= */
+const io = new Server(server, {
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  transports: ["websocket", "polling"]
 });
 
-/* ===== NEW PEER ===== */
-socket.on("peer-joined", ({ id }) => {
-  if (!peers[id]) createPeer(id);
+const PORT = 3000;
+
+/* =========================
+   DATABASE
+========================= */
+const db = new sqlite3.Database("db.sqlite");
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE,
+      password TEXT
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS streams (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE
+    )
+  `);
 });
 
-/* ===== PEER LEFT ===== */
-socket.on("camera-left", ({ id }) => {
-  const p = peers[id];
-  if (!p) return;
+/* =========================
+   MIDDLEWARE
+========================= */
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(__dirname));
 
-  p.pc.close();
-  p.slot.classList.add("left");
+app.use(
+  session({
+    name: "courtstream.sid",
+    secret: "courtstream-secret",
+    resave: false,
+    saveUninitialized: false
+  })
+);
 
-  if (mainVideo.srcObject === p.stream) {
-    mainVideo.srcObject = null;
-    placeholder.style.display = "flex";
+/* =========================
+   AUTH ROUTES (FIXED)
+========================= */
+
+/* REGISTER */
+app.post("/api/register", async (req, res) => {
+  let { email, password } = req.body;
+
+  if (!email || !password || password.length < 6) {
+    return res.status(400).json({ error: "invalid input" });
   }
 
-  delete peers[id];
+  email = email.trim().toLowerCase();
+  const hash = await bcrypt.hash(password, 10);
+
+  db.run(
+    "INSERT INTO users (email,password) VALUES (?,?)",
+    [email, hash],
+    err => {
+      if (err) return res.status(409).json({ error: "exists" });
+      res.sendStatus(200);
+    }
+  );
 });
 
-/* ===== CREATE PEER ===== */
-function createPeer(id){
-  const pc = new RTCPeerConnection({
-    iceServers:[{ urls:"stun:stun.l.google.com:19302" }]
+/* LOGIN */
+app.post("/api/login", async (req, res) => {
+  let { email, password } = req.body;
+  if (!email || !password) return res.sendStatus(401);
+
+  email = email.trim().toLowerCase();
+
+  db.get(
+    "SELECT * FROM users WHERE email=?",
+    [email],
+    async (_, user) => {
+      if (!user) return res.sendStatus(401);
+
+      const ok = await bcrypt.compare(password, user.password);
+      if (!ok) return res.sendStatus(401);
+
+      req.session.user = {
+        id: user.id,
+        email: user.email
+      };
+
+      res.sendStatus(200);
+    }
+  );
+});
+
+/* LOGOUT */
+app.post("/logout", (req, res) => {
+  req.session.destroy(() => res.sendStatus(200));
+});
+
+/* CURRENT USER */
+app.get("/me", (req, res) => {
+  if (!req.session.user) return res.sendStatus(401);
+  res.json(req.session.user);
+});
+
+/* =========================
+   STREAM API
+========================= */
+app.get("/api/streams", (_, res) => {
+  db.all("SELECT * FROM streams", [], (_, rows) => res.json(rows));
+});
+
+app.post("/api/streams", (req, res) => {
+  if (!req.session.user) return res.sendStatus(401);
+
+  const id = crypto.randomUUID();
+  const { name } = req.body;
+
+  if (!name || name.length < 3) {
+    return res.status(400).json({ error: "invalid name" });
+  }
+
+  db.run(
+    "INSERT INTO streams (id,name) VALUES (?,?)",
+    [id, name],
+    err => {
+      if (err) return res.status(409).json({ error: "exists" });
+      res.json({ id });
+    }
+  );
+});
+
+/* =========================
+   SOCKET.IO — WEBRTC + FOCUS
+========================= */
+io.on("connection", socket => {
+  console.log("🟢 Socket connected:", socket.id);
+
+  socket.on("join", room => {
+    socket.join(room);
+    socket.room = room;
+
+    const peers =
+      [...(io.sockets.adapter.rooms.get(room) || [])]
+        .filter(id => id !== socket.id);
+
+    socket.emit("existing-peers", peers.map(id => ({ id })));
+    socket.to(room).emit("peer-joined", { id: socket.id });
   });
 
-  pc.addTransceiver("video", { direction:"recvonly" });
+  socket.on("signal", ({ to, data }) => {
+    if (to && data) {
+      io.to(to).emit("signal", { from: socket.id, data });
+    }
+  });
 
-  const slot = document.createElement("div");
-  slot.className = "camera-slot";
-  slot.innerHTML = `
-    <span>Camera</span>
-    <div class="focus-badge not-focused">Analyzing</div>
-  `;
-  strip.appendChild(slot);
+  /* 🔑 FOCUS DATA RELAY (WORKING) */
+  socket.on("focus-update", data => {
+    if (socket.room) {
+      socket.to(socket.room).emit("focus-update", {
+        from: socket.id,
+        ...data
+      });
+    }
+  });
 
-  const focusEl = slot.querySelector(".focus-badge");
-
-  peers[id] = { pc, slot, focusEl, stream:null };
-
-  pc.ontrack = e => {
-    if (peers[id].stream) return;
-
-    const stream = e.streams[0];
-    peers[id].stream = stream;
-
-    const v = document.createElement("video");
-    v.autoplay = true;
-    v.muted = true;
-    v.playsInline = true;
-    v.srcObject = stream;
-
-    slot.prepend(v);
-
-    slot.onclick = () => {
-      mainVideo.srcObject = stream;
-      placeholder.style.display = "none";
-    };
-  };
-
-  pc.onicecandidate = e => {
-    if (e.candidate)
-      socket.emit("signal",{ to:id, data:e.candidate });
-  };
-
-  pc.createOffer()
-    .then(o => pc.setLocalDescription(o))
-    .then(() =>
-      socket.emit("signal",{ to:id, data:pc.localDescription })
-    );
-}
-
-/* ===== SIGNAL ===== */
-socket.on("signal", async ({ from, data }) => {
-  const p = peers[from];
-  if (!p) return;
-
-  if (data.type) await p.pc.setRemoteDescription(data);
-  if (data.candidate) await p.pc.addIceCandidate(data);
+  socket.on("disconnect", () => {
+    if (socket.room) {
+      socket.to(socket.room).emit("peer-left", { id: socket.id });
+    }
+  });
 });
 
-/* ===== ✅ FOCUS UPDATE (FIXED) ===== */
-socket.on("focus-update", data => {
-  const { from, state, focused, away } = data;
-  const p = peers[from];
-  if (!p) return;
-
-  const finalState = state || "Not Focused";
-
-  p.focusEl.textContent = finalState;
-  p.focusEl.className =
-    "focus-badge " +
-    (finalState === "Focused" ? "focused" : "not-focused");
-
-  // Tooltip with time (no UI change)
-  p.focusEl.title =
-    `Focused: ${focused || 0}s | Not Focused: ${away || 0}s`;
+/* =========================
+   START SERVER
+========================= */
+server.listen(PORT, "0.0.0.0", () => {
+  console.log("✅ CourtStream running on port", PORT);
 });
-</script>
-
-</body>
-</html>
