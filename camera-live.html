@@ -27,6 +27,7 @@ body{
   flex-direction:column;
 }
 
+/* HEADER */
 .header{
   height:56px;
   display:flex;
@@ -42,11 +43,13 @@ body{
   color:#22c55e;
 }
 
+/* PREVIEW */
 .preview{
   flex:1;
   display:flex;
   align-items:center;
   justify-content:center;
+  overflow:hidden;
 }
 
 video{
@@ -55,9 +58,11 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain;
+  object-fit:contain; /* NO CROPPING */
+  transition:transform .25s ease;
 }
 
+/* CONTROLS */
 .controls{
   display:flex;
   justify-content:center;
@@ -75,14 +80,17 @@ video{
   align-items:center;
   justify-content:center;
 }
+
 .ctrl.off{
   background:var(--red);
   border-color:var(--red);
 }
+
 .ctrl.end{
   background:var(--red);
   border-color:var(--red);
 }
+
 .ctrl svg{
   width:24px;
   height:24px;
@@ -107,6 +115,7 @@ video{
 
   <div class="controls">
 
+    <!-- MIC -->
     <button id="micBtn" class="ctrl" onclick="toggleMic()">
       <svg viewBox="0 0 24 24">
         <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
@@ -114,12 +123,14 @@ video{
       </svg>
     </button>
 
+    <!-- CAMERA -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
       <svg viewBox="0 0 24 24">
         <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
       </svg>
     </button>
 
+    <!-- FLIP CAMERA -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
         <path d="M12 5v2a5 5 0 015 5h2a7 7 0 00-7-7z"/>
@@ -127,6 +138,7 @@ video{
       </svg>
     </button>
 
+    <!-- LEAVE -->
     <button class="ctrl end" onclick="leave()">
       <svg viewBox="0 0 24 24">
         <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
@@ -140,13 +152,14 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+/* ===== STATE ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
 const camBtn = document.getElementById("camBtn");
 
-let mediaStream = null;
-let videoSender = null;
+let mediaStream;
+let videoSender;
 let micOn = true;
 let camOn = true;
 let facing = "environment";
@@ -159,7 +172,7 @@ const pc = new RTCPeerConnection({
 /* ===== CAMERA ===== */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ ideal:facing } },
+    video:{ facingMode:{ exact:facing } },
     audio:true
   });
 
@@ -180,10 +193,7 @@ async function startCamera(){
 startCamera();
 
 /* ===== JOIN ===== */
-socket.emit("join", {
-  room: streamId,
-  role: "camera"
-});
+socket.emit("join", streamId);
 
 /* ===== CONTROLS ===== */
 function toggleMic(){
@@ -204,28 +214,30 @@ async function flipCamera(){
 }
 
 function leave(){
-  cleanup();
+  pc.close();
+  socket.disconnect();
+  mediaStream.getTracks().forEach(t=>t.stop());
   location.href = "index.html";
 }
 
-/* ===== CLEANUP (CRITICAL FIX) ===== */
-function cleanup(){
-  try{
-    pc.getSenders().forEach(s=>{
-      if (s.track) s.track.stop();
-    });
-    pc.close();
-  }catch{}
+/* ===== 🔑 AUTO ROTATE PREVIEW WITH PHONE ===== */
+function applyOrientation(){
+  let angle = 0;
 
-  socket.disconnect();
-
-  if (mediaStream) {
-    mediaStream.getTracks().forEach(t=>t.stop());
+  if (screen.orientation && screen.orientation.angle !== undefined) {
+    angle = screen.orientation.angle;
+  } else if (window.orientation !== undefined) {
+    angle = window.orientation;
   }
+
+  video.style.transform = `rotate(${angle}deg)`;
 }
 
-/* Ensure refresh does NOT duplicate camera */
-window.addEventListener("beforeunload", cleanup);
+if (screen.orientation) {
+  screen.orientation.addEventListener("change", applyOrientation);
+}
+window.addEventListener("orientationchange", applyOrientation);
+applyOrientation();
 
 /* ===== WEBRTC ===== */
 pc.onicecandidate = e=>{
