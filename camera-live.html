@@ -59,7 +59,7 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain;
+  object-fit:contain; /* EXACT phone preview */
 }
 
 /* CONTROLS */
@@ -123,8 +123,6 @@ video{
   </div>
 
   <div class="controls">
-
-    <!-- MIC -->
     <button id="micBtn" class="ctrl" onclick="toggleMic()">
       <svg viewBox="0 0 24 24">
         <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
@@ -132,14 +130,13 @@ video{
       </svg>
     </button>
 
-    <!-- CAMERA -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
       <svg viewBox="0 0 24 24">
         <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
       </svg>
     </button>
 
-    <!-- FLIP CAMERA -->
+    <!-- CAMERA FLIP (FRONT ⇄ BACK) -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
         <path d="M12 5v2a5 5 0 015 5h2a7 7 0 00-7-7z"/>
@@ -147,14 +144,12 @@ video{
       </svg>
     </button>
 
-    <!-- LEAVE -->
     <button class="ctrl end" onclick="leave()">
       <svg viewBox="0 0 24 24">
         <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
         <path d="M3 5h8v14H3z"/>
       </svg>
     </button>
-
   </div>
 
 </div>
@@ -162,7 +157,7 @@ video{
 <!-- FOCUS UI -->
 <div id="focusBox">
   <div>🧠 Focus</div>
-  <div id="focusState" style="color:var(--muted)">Initializing…</div>
+  <div id="focusState" style="color:var(--green)">Initializing…</div>
   <div style="margin-top:6px;color:var(--muted)">
     Focused: <span id="focusTime">0</span>s<br>
     Not Focused: <span id="awayTime">0</span>s
@@ -173,7 +168,9 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* ===== STATE ===== */
+/* =====================
+   WEBRTC (UNCHANGED)
+===================== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
@@ -190,7 +187,6 @@ const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* ===== CAMERA ===== */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
@@ -238,7 +234,7 @@ function leave(){
   location.href = "index.html";
 }
 
-/* WEBRTC */
+/* SIGNALING */
 pc.onicecandidate = e=>{
   if(e.candidate){
     socket.emit("signal",{ data:e.candidate });
@@ -256,7 +252,9 @@ socket.on("signal", async ({from,data})=>{
   }
 });
 
-/* ===== ATTENTION / FOCUS LOGIC (FIXED) ===== */
+/* =====================
+   FOCUS DETECTION
+===================== */
 const canvas = document.getElementById("analyzer");
 const ctx = canvas.getContext("2d");
 
@@ -269,40 +267,49 @@ const focusTimeEl = document.getElementById("focusTime");
 const awayTimeEl = document.getElementById("awayTime");
 
 function analyzeFrame(){
-  // ✅ ALWAYS update UI — NEVER stuck
-  if (!video.videoWidth || video.readyState < 2) {
-    awaySeconds++;
-    focusState.innerText = "Not Focused";
-    focusState.style.color = "var(--red)";
-    awayTimeEl.innerText = awaySeconds;
+  if (!video.videoWidth || video.readyState < 2){
+    markNotFocused();
     return;
   }
 
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-  if (lastFrame){
-    let diff = 0;
-    for (let i = 0; i < frame.data.length; i += 4){
-      diff += Math.abs(frame.data[i] - lastFrame.data[i]);
-    }
+  let diff = 0;
+  let brightness = 0;
 
-    const motion = diff / frame.data.length;
+  for (let i = 0; i < frame.data.length; i += 4) {
+    diff += Math.abs(frame.data[i] - (lastFrame?.data[i] || frame.data[i]));
+    brightness += frame.data[i] + frame.data[i+1] + frame.data[i+2];
+  }
 
-    if (motion < 12){
-      focusedSeconds++;
-      focusState.innerText = "Focused";
-      focusState.style.color = "var(--green)";
-      focusTimeEl.innerText = focusedSeconds;
-    } else {
-      awaySeconds++;
-      focusState.innerText = "Not Focused";
-      focusState.style.color = "var(--red)";
-      awayTimeEl.innerText = awaySeconds;
-    }
+  const motion = diff / frame.data.length;
+  const avgBrightness = brightness / (frame.data.length * 3);
+
+  const cameraCovered = avgBrightness < 35;
+  const lowMotion = motion < 12;
+
+  if (cameraCovered || !lowMotion){
+    markNotFocused();
+  } else {
+    markFocused();
   }
 
   lastFrame = frame;
+}
+
+function markFocused(){
+  focusedSeconds++;
+  focusState.innerText = "Focused";
+  focusState.style.color = "var(--green)";
+  focusTimeEl.innerText = focusedSeconds;
+}
+
+function markNotFocused(){
+  awaySeconds++;
+  focusState.innerText = "Not Focused";
+  focusState.style.color = "var(--red)";
+  awayTimeEl.innerText = awaySeconds;
 }
 
 setInterval(analyzeFrame, 1000);
