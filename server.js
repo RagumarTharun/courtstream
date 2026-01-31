@@ -1,26 +1,31 @@
 // =========================
-// CourtStream Server (FINAL)
+// CourtStream Server (FINAL, UNIFIED & SAFE)
 // =========================
+
 const express = require("express");
 const http = require("http");
-const session = require("express-session");
-const sqlite3 = require("sqlite3").verbose();
-const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const session = require("express-session");
+const bcrypt = require("bcryptjs");
+const sqlite3 = require("sqlite3").verbose();
 const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
 
+/* =========================
+   SOCKET.IO
+========================= */
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET","POST"] }
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  transports: ["websocket", "polling"]
 });
 
 const PORT = 3000;
 
-/* ======================
+/* =========================
    DATABASE
-====================== */
+========================= */
 const db = new sqlite3.Database("db.sqlite");
 
 db.serialize(() => {
@@ -42,154 +47,138 @@ db.serialize(() => {
   `);
 });
 
-/* ======================
+/* =========================
    MIDDLEWARE
-====================== */
+========================= */
 app.use(express.json());
-app.use(express.urlencoded({ extended:true }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
-app.use(session({
-  name: "courtstream.sid",
-  secret: "courtstream-secret",
-  resave: false,
-  saveUninitialized: false
-}));
+app.use(
+  session({
+    name: "courtstream.sid",
+    secret: "courtstream-secret",
+    resave: false,
+    saveUninitialized: false
+  })
+);
 
-/* ======================
-   AUTH ROUTES (FIXED)
-====================== */
+/* =========================
+   AUTH ROUTES
+========================= */
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
 
-/* REGISTER */
-app.post("/api/register", async (req,res)=>{
-  let { email, password } = req.body;
+  db.get("SELECT * FROM users WHERE email=?", [email], async (_, user) => {
+    if (!user) return res.sendStatus(401);
+    if (!(await bcrypt.compare(password, user.password)))
+      return res.sendStatus(401);
 
-  if (!email || !password || password.length < 6) {
-    return res.status(400).json({ error:"invalid input" });
-  }
+    req.session.user = { id: user.id, email: user.email };
+    res.sendStatus(200);
+  });
+});
 
-  email = email.trim().toLowerCase();
-
+app.post("/api/register", async (req, res) => {
+  const { email, password } = req.body;
   const hash = await bcrypt.hash(password, 10);
 
   db.run(
     "INSERT INTO users (email,password) VALUES (?,?)",
     [email, hash],
     err => {
-      if (err) return res.status(409).json({ error:"exists" });
+      if (err) return res.status(409).json({ error: "exists" });
       res.sendStatus(200);
     }
   );
 });
 
-/* LOGIN */
-app.post("/api/login", async (req,res)=>{
-  let { email, password } = req.body;
-  if (!email || !password) return res.sendStatus(401);
-
-  email = email.trim().toLowerCase();
-
-  db.get(
-    "SELECT * FROM users WHERE email=?",
-    [email],
-    async (_, user) => {
-      if (!user) return res.sendStatus(401);
-
-      const ok = await bcrypt.compare(password, user.password);
-      if (!ok) return res.sendStatus(401);
-
-      req.session.user = {
-        id: user.id,
-        email: user.email
-      };
-
-      res.sendStatus(200);
-    }
-  );
+app.post("/logout", (req, res) => {
+  req.session.destroy(() => res.sendStatus(200));
 });
 
-/* LOGOUT */
-app.post("/logout",(req,res)=>{
-  req.session.destroy(()=>res.sendStatus(200));
-});
-
-/* CURRENT USER */
-app.get("/me",(req,res)=>{
+app.get("/me", (req, res) => {
   if (!req.session.user) return res.sendStatus(401);
   res.json(req.session.user);
 });
 
-/* ======================
-   STREAM API
-====================== */
-app.get("/api/streams", (_,res)=>{
+/* =========================
+   STREAM ROUTES
+========================= */
+app.get("/api/streams", (req, res) => {
   db.all(
     "SELECT * FROM streams ORDER BY created_at DESC",
     [],
-    (_,rows)=>res.json(rows)
+    (_, rows) => res.json(rows)
   );
 });
 
-app.post("/api/streams",(req,res)=>{
+app.post("/api/streams", (req, res) => {
   if (!req.session.user) return res.sendStatus(401);
 
-  const { name } = req.body;
-  if (!name || name.trim().length < 3)
-    return res.status(400).json({ error:"invalid name" });
-
   const id = crypto.randomUUID();
+  const { name } = req.body;
+
+  if (!name || name.length < 3)
+    return res.status(400).json({ error: "invalid name" });
 
   db.run(
     "INSERT INTO streams (id,name,creator) VALUES (?,?,?)",
-    [id, name.trim(), req.session.user.id],
-    err=>{
-      if (err) return res.status(409).json({ error:"exists" });
+    [id, name, req.session.user.id],
+    err => {
+      if (err) return res.status(409).json({ error: "exists" });
       res.json({ id });
     }
   );
 });
 
-/* ======================
-   SOCKET.IO (WEBRTC + FOCUS)
-====================== */
+/* =========================
+   SOCKET.IO — WEBRTC (FIXED)
+========================= */
 io.on("connection", socket => {
+  console.log("🟢 SOCKET CONNECTED:", socket.id);
 
   socket.on("join", room => {
     socket.join(room);
     socket.room = room;
 
-    const peers =
-      [...(io.sockets.adapter.rooms.get(room) || [])]
-      .filter(id => id !== socket.id);
+    const clients =
+      io.sockets.adapter.rooms.get(room) || new Set();
 
-    socket.emit("existing-peers", peers.map(id => ({ id })));
+    const others = [...clients].filter(id => id !== socket.id);
+
+    // ✅ Existing peers (director refresh fix)
+    socket.emit(
+      "existing-peers",
+      others.map(id => ({ id }))
+    );
+
+    // ✅ New peer joined
     socket.to(room).emit("peer-joined", { id: socket.id });
   });
 
-  socket.on("signal", ({to,data})=>{
-    if (to && data)
-      io.to(to).emit("signal",{ from:socket.id, data });
+  socket.on("signal", ({ to, data }) => {
+    if (!to || !data) return;
+    io.to(to).emit("signal", {
+      from: socket.id,
+      data
+    });
   });
 
-  /* 🔑 FOCUS DATA RELAY (UNCHANGED) */
-  socket.on("focus-update", data=>{
+  socket.on("disconnect", () => {
     if (!socket.room) return;
-    socket.to(socket.room).emit(
-      "focus-update",
-      { from: socket.id, ...data }
-    );
-  });
 
-  socket.on("disconnect", ()=>{
-    if (socket.room){
-      socket.to(socket.room).emit("camera-left",{ id:socket.id });
-    }
+    // ✅ COMPATIBILITY: support BOTH event names
+    socket.to(socket.room).emit("camera-left", { id: socket.id });
+    socket.to(socket.room).emit("peer-left", { id: socket.id });
+
+    console.log("🔴 SOCKET DISCONNECTED:", socket.id);
   });
 });
 
-/* ======================
-   START SERVER
-====================== */
-server.listen(PORT, ()=>{
+/* =========================
+   START
+========================= */
+server.listen(PORT, "0.0.0.0", () => {
   console.log("✅ CourtStream running on port", PORT);
 });
