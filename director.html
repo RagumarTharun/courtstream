@@ -39,14 +39,13 @@ body{
   border:1px solid var(--border);
 }
 
-/* ===== MAIN PREVIEW ===== */
+/* MAIN PREVIEW */
 .main-feed{
   position:relative;
   display:flex;
   align-items:center;
   justify-content:center;
   background:#000;
-  overflow:hidden;
 }
 
 .main-feed::before{
@@ -61,14 +60,12 @@ body{
   width:100%;
   height:100%;
   object-fit:contain;
-  background:#000;
 }
 
 .placeholder{
   position:absolute;
   color:var(--muted);
   font-size:14px;
-  z-index:2;
 }
 
 .stream-badge{
@@ -92,7 +89,6 @@ body{
   border:1px solid var(--border);
   padding:6px 12px;
   border-radius:999px;
-  font-size:13px;
 }
 
 .record-dot{
@@ -102,7 +98,7 @@ body{
   border-radius:50%;
 }
 
-/* ===== CAMERA STRIP ===== */
+/* CAMERA STRIP */
 .side-panel{
   display:flex;
   flex-direction:column;
@@ -124,7 +120,6 @@ body{
   position:relative;
   overflow:hidden;
   cursor:pointer;
-  flex-shrink:0;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -134,7 +129,6 @@ body{
   width:100%;
   height:100%;
   object-fit:contain;
-  background:#000;
 }
 
 .camera-slot .label{
@@ -158,7 +152,6 @@ body{
 
 <div class="director">
 
-  <!-- MAIN PREVIEW -->
   <div class="panel main-feed">
     <video id="mainVideo" autoplay muted playsinline></video>
     <div id="placeholder" class="placeholder">Select a camera to preview</div>
@@ -171,7 +164,6 @@ body{
     </div>
   </div>
 
-  <!-- CAMERA STRIP -->
   <div class="panel side-panel" id="cameraStrip">
     <div class="side-title">Cameras</div>
   </div>
@@ -182,46 +174,51 @@ body{
 <script>
 const params = new URLSearchParams(location.search);
 const streamId = params.get("stream");
-const streamName = params.get("name") || streamId;
-
-document.getElementById("streamBadge").innerText =
-  streamName + " • LIVE";
+document.getElementById("streamBadge").innerText = streamId + " • LIVE";
 
 const socket = io();
 const mainVideo = document.getElementById("mainVideo");
 const placeholder = document.getElementById("placeholder");
 const strip = document.getElementById("cameraStrip");
 
-const peers = {}; // socketId -> { pc, stream, slot }
+/*
+cameraId → {
+  socketId,
+  pc,
+  stream,
+  slot
+}
+*/
+const cameras = {};
 
 /* JOIN */
 socket.emit("join", streamId);
 
 /* CAMERA JOINED */
-socket.on("peer-joined", ({ id }) => {
-  if (peers[id]) return;
-  createPeer(id);
+socket.on("peer-joined", ({ id, cameraId }) => {
+  if (!cameraId) return;
+
+  // Reconnect case
+  if (cameras[cameraId]) {
+    cameras[cameraId].socketId = id;
+    cameras[cameraId].status("Reconnected");
+    return;
+  }
+
+  createCamera(cameraId, id);
 });
 
 /* CAMERA LEFT */
 socket.on("peer-left", ({ id }) => {
-  const p = peers[id];
-  if (!p) return;
+  const cam = Object.values(cameras).find(c => c.socketId === id);
+  if (!cam) return;
 
-  p.pc.close();
-
-  // Clear video but keep slot
-  p.slot.innerHTML = `<div class="status">Student left</div>`;
-  p.stream = null;
-
-  if (mainVideo.srcObject === p.stream) {
-    mainVideo.srcObject = null;
-    placeholder.style.display = "block";
-  }
+  cam.socketId = null;
+  cam.status("Student left");
 });
 
-/* CREATE PEER */
-function createPeer(id){
+/* CREATE CAMERA */
+function createCamera(cameraId, socketId){
   const pc = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
@@ -233,13 +230,21 @@ function createPeer(id){
   slot.innerHTML = `<div class="status">Connecting…</div>`;
   strip.appendChild(slot);
 
-  peers[id] = { pc, slot, stream:null };
+  cameras[cameraId] = {
+    socketId,
+    pc,
+    slot,
+    stream:null,
+    status(text){
+      slot.innerHTML = `<div class="status">${text}</div>`;
+    }
+  };
 
   pc.ontrack = e => {
-    if (peers[id].stream) return;
+    if (cameras[cameraId].stream) return;
 
     const stream = e.streams[0];
-    peers[id].stream = stream;
+    cameras[cameraId].stream = stream;
 
     const v = document.createElement("video");
     v.autoplay = true;
@@ -258,34 +263,29 @@ function createPeer(id){
     slot.onclick = () => {
       mainVideo.srcObject = stream;
       placeholder.style.display = "none";
-      mainVideo.play().catch(()=>{});
     };
   };
 
   pc.onicecandidate = e => {
     if (e.candidate) {
-      socket.emit("signal",{ to:id, data:e.candidate });
+      socket.emit("signal",{ to:socketId, data:e.candidate });
     }
   };
 
   pc.createOffer()
     .then(o => pc.setLocalDescription(o))
     .then(() => {
-      socket.emit("signal",{ to:id, data:pc.localDescription });
+      socket.emit("signal",{ to:socketId, data:pc.localDescription });
     });
 }
 
 /* SIGNAL */
 socket.on("signal", async ({ from, data }) => {
-  const p = peers[from];
-  if (!p) return;
+  const cam = Object.values(cameras).find(c => c.socketId === from);
+  if (!cam) return;
 
-  if (data.type) {
-    await p.pc.setRemoteDescription(data);
-  }
-  if (data.candidate) {
-    await p.pc.addIceCandidate(data);
-  }
+  if (data.type) await cam.pc.setRemoteDescription(data);
+  if (data.candidate) await cam.pc.addIceCandidate(data);
 });
 </script>
 
