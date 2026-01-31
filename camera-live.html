@@ -11,6 +11,7 @@
   --card:#161922;
   --border:#262b3d;
   --red:#b91c1c;
+  --green:#22c55e;
 }
 
 body{
@@ -32,15 +33,8 @@ body{
   height:56px;
   display:flex;
   align-items:center;
-}
-.header-title{
-  flex:1;
-  text-align:center;
+  justify-content:center;
   font-size:15px;
-}
-.badge{
-  font-size:12px;
-  color:#22c55e;
 }
 
 /* PREVIEW */
@@ -57,7 +51,15 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* ✅ EXACT feed, no crop, no rotate */
+  object-fit:contain;
+}
+
+/* TIMER */
+.timer{
+  text-align:center;
+  font-size:14px;
+  margin:8px 0;
+  color:var(--green);
 }
 
 /* CONTROLS */
@@ -101,15 +103,13 @@ video{
 
 <div class="page">
 
-  <div class="header">
-    <div class="header-title">
-      Camera • <span class="badge">LIVE</span>
-    </div>
-  </div>
+  <div class="header">Camera • LIVE</div>
 
   <div class="preview">
     <video id="video" autoplay muted playsinline></video>
   </div>
+
+  <div class="timer" id="focusTimer">Focused: 00:00</div>
 
   <div class="controls">
 
@@ -150,13 +150,14 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* =====================
+/* ======================
    STATE
-===================== */
+====================== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
 const camBtn = document.getElementById("camBtn");
+const focusEl = document.getElementById("focusTimer");
 
 let mediaStream = null;
 let videoSender = null;
@@ -166,46 +167,46 @@ let camOn = true;
 /* ✅ FRONT CAMERA DEFAULT */
 let facing = "user";
 
+/* ======================
+   WEBRTC
+====================== */
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* =====================
-   CAMERA START / SWITCH
-===================== */
+/* ======================
+   CAMERA START / FLIP
+====================== */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: facing } },
-    audio: true
+    video:{ facingMode:{ ideal:facing } },
+    audio:true
   });
 
   video.srcObject = stream;
 
   if (!mediaStream) {
-    stream.getTracks().forEach(track => {
-      const sender = pc.addTrack(track, stream);
-      if (track.kind === "video") videoSender = sender;
+    stream.getTracks().forEach(t=>{
+      const sender = pc.addTrack(t, stream);
+      if (t.kind === "video") videoSender = sender;
     });
   } else {
     await videoSender.replaceTrack(stream.getVideoTracks()[0]);
-    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream.getTracks().forEach(t=>t.stop());
   }
 
   mediaStream = stream;
 }
 
-/* START CAMERA */
 startCamera();
 
-/* =====================
-   JOIN ROOM
-===================== */
+/* JOIN ROOM */
 socket.emit("join", streamId);
 
-/* =====================
+/* ======================
    CONTROLS
-===================== */
+====================== */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
@@ -218,7 +219,7 @@ function toggleCam(){
   camBtn.classList.toggle("off", !camOn);
 }
 
-/* ✅ FIXED FLIP LOGIC */
+/* ✅ FLIP WORKS */
 async function flipCamera(){
   facing = facing === "user" ? "environment" : "user";
   await startCamera();
@@ -227,30 +228,66 @@ async function flipCamera(){
 function leave(){
   pc.close();
   socket.disconnect();
-  mediaStream.getTracks().forEach(t => t.stop());
+  mediaStream.getTracks().forEach(t=>t.stop());
   location.href = "index.html";
 }
 
-/* =====================
-   WEBRTC
-===================== */
-pc.onicecandidate = e => {
-  if (e.candidate) {
-    socket.emit("signal", { data: e.candidate });
+/* ======================
+   SIGNALING
+====================== */
+pc.onicecandidate = e=>{
+  if(e.candidate){
+    socket.emit("signal",{ data:e.candidate });
   }
 };
 
-socket.on("signal", async ({ from, data }) => {
-  if (data.type === "offer") {
+socket.on("signal", async ({from,data})=>{
+  if(data.type==="offer"){
     await pc.setRemoteDescription(data);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socket.emit("signal", { to: from, data: pc.localDescription });
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    socket.emit("signal",{to:from,data:pc.localDescription});
   }
-  if (data.candidate) {
+  if(data.candidate){
     await pc.addIceCandidate(data);
   }
 });
+
+/* ======================
+   FOCUS / ATTENTION TIMER
+====================== */
+let focusSeconds = 0;
+let lastMotion = Date.now();
+
+const canvas = document.createElement("canvas");
+const ctx = canvas.getContext("2d");
+canvas.width = 32;
+canvas.height = 32;
+
+let lastFrame = null;
+
+setInterval(()=>{
+  if (!video.videoWidth) return;
+
+  ctx.drawImage(video,0,0,32,32);
+  const frame = ctx.getImageData(0,0,32,32).data;
+
+  if (lastFrame) {
+    let diff = 0;
+    for (let i=0;i<frame.length;i+=4){
+      diff += Math.abs(frame[i]-lastFrame[i]);
+    }
+    if (diff > 3000) lastMotion = Date.now();
+  }
+  lastFrame = frame;
+
+  if (Date.now() - lastMotion < 3000){
+    focusSeconds++;
+    const m = String(Math.floor(focusSeconds/60)).padStart(2,"0");
+    const s = String(focusSeconds%60).padStart(2,"0");
+    focusEl.textContent = `Focused: ${m}:${s}`;
+  }
+},1000);
 </script>
 
 </body>
