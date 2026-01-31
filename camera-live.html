@@ -12,6 +12,7 @@
   --border:#262b3d;
   --red:#b91c1c;
   --green:#22c55e;
+  --muted:#9aa0b4;
 }
 
 body{
@@ -33,8 +34,15 @@ body{
   height:56px;
   display:flex;
   align-items:center;
-  justify-content:center;
+}
+.header-title{
+  flex:1;
+  text-align:center;
   font-size:15px;
+}
+.badge{
+  font-size:12px;
+  color:var(--green);
 }
 
 /* PREVIEW */
@@ -51,15 +59,7 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain;
-}
-
-/* TIMER */
-.timer{
-  text-align:center;
-  font-size:14px;
-  margin:8px 0;
-  color:var(--green);
+  object-fit:contain; /* exact phone preview */
 }
 
 /* CONTROLS */
@@ -80,21 +80,31 @@ video{
   align-items:center;
   justify-content:center;
 }
-
 .ctrl.off{
   background:var(--red);
   border-color:var(--red);
 }
-
 .ctrl.end{
   background:var(--red);
   border-color:var(--red);
 }
-
 .ctrl svg{
   width:24px;
   height:24px;
   fill:#fff;
+}
+
+/* FOCUS BOX */
+#focusBox{
+  position:fixed;
+  top:70px;
+  right:16px;
+  background:rgba(15,17,21,.95);
+  border:1px solid var(--border);
+  padding:10px 14px;
+  border-radius:12px;
+  font-size:13px;
+  z-index:999;
 }
 </style>
 </head>
@@ -103,13 +113,15 @@ video{
 
 <div class="page">
 
-  <div class="header">Camera • LIVE</div>
+  <div class="header">
+    <div class="header-title">
+      Camera • <span class="badge">LIVE</span>
+    </div>
+  </div>
 
   <div class="preview">
     <video id="video" autoplay muted playsinline></video>
   </div>
-
-  <div class="timer" id="focusTimer">Focused: 00:00</div>
 
   <div class="controls">
 
@@ -128,11 +140,11 @@ video{
       </svg>
     </button>
 
-    <!-- FLIP CAMERA (FIXED) -->
+    <!-- FLIP CAMERA -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
-        <path d="M12 4a8 8 0 018 8h-2a6 6 0 00-6-6V4z"/>
-        <path d="M12 20a8 8 0 01-8-8h2a6 6 0 006 6v2z"/>
+        <path d="M12 5v2a5 5 0 015 5h2a7 7 0 00-7-7z"/>
+        <path d="M12 19v-2a5 5 0 01-5-5H5a7 7 0 007 7z"/>
       </svg>
     </button>
 
@@ -148,16 +160,25 @@ video{
 
 </div>
 
+<!-- FOCUS UI -->
+<div id="focusBox">
+  <div>🧠 Focus</div>
+  <div id="focusState" style="color:var(--green)">Analyzing…</div>
+  <div style="margin-top:6px;color:var(--muted)">
+    Focused: <span id="focusTime">0</span>s<br>
+    Away: <span id="awayTime">0</span>s
+  </div>
+</div>
+
+<canvas id="analyzer" width="160" height="120" style="display:none"></canvas>
+
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* ======================
-   STATE
-====================== */
+/* ===== WEBRTC STATE (UNCHANGED) ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
 const camBtn = document.getElementById("camBtn");
-const focusEl = document.getElementById("focusTimer");
 
 let mediaStream = null;
 let videoSender = null;
@@ -167,17 +188,12 @@ let camOn = true;
 /* ✅ FRONT CAMERA DEFAULT */
 let facing = "user";
 
-/* ======================
-   WEBRTC
-====================== */
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* ======================
-   CAMERA START / FLIP
-====================== */
+/* CAMERA */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:{ ideal:facing } },
@@ -198,33 +214,26 @@ async function startCamera(){
 
   mediaStream = stream;
 }
-
 startCamera();
 
-/* JOIN ROOM */
+/* JOIN */
 socket.emit("join", streamId);
 
-/* ======================
-   CONTROLS
-====================== */
+/* CONTROLS */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
   micBtn.classList.toggle("off", !micOn);
 }
-
 function toggleCam(){
   camOn = !camOn;
   mediaStream.getVideoTracks()[0].enabled = camOn;
   camBtn.classList.toggle("off", !camOn);
 }
-
-/* ✅ FLIP WORKS */
 async function flipCamera(){
   facing = facing === "user" ? "environment" : "user";
   await startCamera();
 }
-
 function leave(){
   pc.close();
   socket.disconnect();
@@ -232,62 +241,68 @@ function leave(){
   location.href = "index.html";
 }
 
-/* ======================
-   SIGNALING
-====================== */
+/* SIGNALING */
 pc.onicecandidate = e=>{
   if(e.candidate){
     socket.emit("signal",{ data:e.candidate });
   }
 };
-
 socket.on("signal", async ({from,data})=>{
-  if(data.type==="offer"){
+  if(data.type === "offer"){
     await pc.setRemoteDescription(data);
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
-    socket.emit("signal",{to:from,data:pc.localDescription});
+    socket.emit("signal",{ to:from, data:pc.localDescription });
   }
   if(data.candidate){
     await pc.addIceCandidate(data);
   }
 });
 
-/* ======================
-   FOCUS / ATTENTION TIMER
-====================== */
-let focusSeconds = 0;
-let lastMotion = Date.now();
-
-const canvas = document.createElement("canvas");
+/* ===== FOCUS / ATTENTION LOGIC ===== */
+const canvas = document.getElementById("analyzer");
 const ctx = canvas.getContext("2d");
-canvas.width = 32;
-canvas.height = 32;
 
 let lastFrame = null;
+let focusedSeconds = 0;
+let awaySeconds = 0;
 
-setInterval(()=>{
+const focusState = document.getElementById("focusState");
+const focusTimeEl = document.getElementById("focusTime");
+const awayTimeEl = document.getElementById("awayTime");
+
+function analyzeFrame(){
   if (!video.videoWidth) return;
 
-  ctx.drawImage(video,0,0,32,32);
-  const frame = ctx.getImageData(0,0,32,32).data;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-  if (lastFrame) {
+  if (lastFrame){
     let diff = 0;
-    for (let i=0;i<frame.length;i+=4){
-      diff += Math.abs(frame[i]-lastFrame[i]);
+    for (let i=0;i<frame.data.length;i+=4){
+      diff += Math.abs(frame.data[i] - lastFrame.data[i]);
     }
-    if (diff > 3000) lastMotion = Date.now();
-  }
-  lastFrame = frame;
 
-  if (Date.now() - lastMotion < 3000){
-    focusSeconds++;
-    const m = String(Math.floor(focusSeconds/60)).padStart(2,"0");
-    const s = String(focusSeconds%60).padStart(2,"0");
-    focusEl.textContent = `Focused: ${m}:${s}`;
+    const motion = diff / frame.data.length;
+    const focused = motion < 15;
+
+    if (focused){
+      focusedSeconds++;
+      focusState.textContent = "Focused";
+      focusState.style.color = "var(--green)";
+    } else {
+      awaySeconds++;
+      focusState.textContent = "Distracted / Away";
+      focusState.style.color = "var(--red)";
+    }
+
+    focusTimeEl.textContent = focusedSeconds;
+    awayTimeEl.textContent = awaySeconds;
   }
-},1000);
+
+  lastFrame = frame;
+}
+setInterval(analyzeFrame, 1000);
 </script>
 
 </body>
