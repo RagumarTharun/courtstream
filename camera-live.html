@@ -27,7 +27,6 @@ body{
   flex-direction:column;
 }
 
-/* HEADER */
 .header{
   height:56px;
   display:flex;
@@ -43,13 +42,11 @@ body{
   color:#22c55e;
 }
 
-/* PREVIEW */
 .preview{
   flex:1;
   display:flex;
   align-items:center;
   justify-content:center;
-  overflow:hidden;
 }
 
 video{
@@ -58,10 +55,9 @@ video{
   max-height:100%;
   background:#000;
   border-radius:18px;
-  object-fit:contain; /* ✅ exact feed, no crop */
+  object-fit:contain;
 }
 
-/* CONTROLS */
 .controls{
   display:flex;
   justify-content:center;
@@ -79,17 +75,14 @@ video{
   align-items:center;
   justify-content:center;
 }
-
 .ctrl.off{
   background:var(--red);
   border-color:var(--red);
 }
-
 .ctrl.end{
   background:var(--red);
   border-color:var(--red);
 }
-
 .ctrl svg{
   width:24px;
   height:24px;
@@ -114,7 +107,6 @@ video{
 
   <div class="controls">
 
-    <!-- MIC -->
     <button id="micBtn" class="ctrl" onclick="toggleMic()">
       <svg viewBox="0 0 24 24">
         <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
@@ -122,14 +114,12 @@ video{
       </svg>
     </button>
 
-    <!-- CAMERA -->
     <button id="camBtn" class="ctrl" onclick="toggleCam()">
       <svg viewBox="0 0 24 24">
         <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
       </svg>
     </button>
 
-    <!-- FLIP CAMERA -->
     <button class="ctrl" onclick="flipCamera()">
       <svg viewBox="0 0 24 24">
         <path d="M12 5v2a5 5 0 015 5h2a7 7 0 00-7-7z"/>
@@ -137,7 +127,6 @@ video{
       </svg>
     </button>
 
-    <!-- LEAVE -->
     <button class="ctrl end" onclick="leave()">
       <svg viewBox="0 0 24 24">
         <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
@@ -151,14 +140,6 @@ video{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-/* ===== STABLE CAMERA ID ===== */
-let cameraId =
-  localStorage.getItem("courtstream-camera-id") ||
-  crypto.randomUUID();
-
-localStorage.setItem("courtstream-camera-id", cameraId);
-
-/* ===== STATE ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
@@ -168,17 +149,17 @@ let mediaStream;
 let videoSender;
 let micOn = true;
 let camOn = true;
-let facing = "environment"; // back camera default
+let facing = "environment";
 
 const socket = io();
 const pc = new RTCPeerConnection({
   iceServers:[{urls:"stun:stun.l.google.com:19302"}]
 });
 
-/* ===== CAMERA ===== */
+/* CAMERA */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ ideal:facing } },  // ✅ SAFE
+    video:{ facingMode:{ ideal:facing } },
     audio:true
   });
 
@@ -198,31 +179,27 @@ async function startCamera(){
 }
 startCamera();
 
-/* ===== JOIN ===== */
+/* JOIN — EXACTLY AS SERVER EXPECTS */
 socket.emit("join", {
   room: streamId,
-  role: "camera",
-  cameraId
+  role: "camera"
 });
 
-/* ===== CONTROLS ===== */
+/* CONTROLS */
 function toggleMic(){
   micOn = !micOn;
   mediaStream.getAudioTracks()[0].enabled = micOn;
   micBtn.classList.toggle("off", !micOn);
 }
-
 function toggleCam(){
   camOn = !camOn;
   mediaStream.getVideoTracks()[0].enabled = camOn;
   camBtn.classList.toggle("off", !camOn);
 }
-
 async function flipCamera(){
   facing = facing === "environment" ? "user" : "environment";
   await startCamera();
 }
-
 function leave(){
   pc.close();
   socket.disconnect();
@@ -230,13 +207,12 @@ function leave(){
   location.href = "index.html";
 }
 
-/* ===== WEBRTC ===== */
+/* WEBRTC */
 pc.onicecandidate = e=>{
   if(e.candidate){
     socket.emit("signal",{ data:e.candidate });
   }
 };
-
 socket.on("signal", async ({from,data})=>{
   if(data.type === "offer"){
     await pc.setRemoteDescription(data);
