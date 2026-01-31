@@ -1,136 +1,296 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Director</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<title>CourtStream – Director</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <style>
-body{margin:0;background:#0f1115;color:#fff;font-family:system-ui}
-.main{display:grid;grid-template-columns:1fr 320px;height:100vh;gap:12px;padding:12px}
-video{width:100%;height:100%;object-fit:contain;background:#000}
-.slot{height:140px;background:#000;border-radius:12px;position:relative;cursor:pointer}
-.badge{position:absolute;top:8px;right:8px;font-size:11px;padding:4px 8px;border-radius:999px}
-.focused{background:#22c55e;color:#000}
-.not{background:#ef4444}
+:root{
+  --bg:#0f1115;
+  --panel:#161922;
+  --border:#262b3d;
+  --text:#e6e6eb;
+  --muted:#9aa0b4;
+  --red:#ef4444;
+  --green:#22c55e;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui;
+  height:100vh;
+}
+
+/* ===== LAYOUT ===== */
+.director{
+  display:grid;
+  grid-template-columns: 1fr 320px;
+  gap:14px;
+  padding:14px;
+  height:100%;
+}
+
+/* ===== PANELS ===== */
+.panel{
+  background:var(--panel);
+  border-radius:16px;
+  border:1px solid var(--border);
+}
+
+/* ===== MAIN PREVIEW ===== */
+.main-feed{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#000;
+  overflow:hidden;
+}
+.main-feed::before{
+  content:"";
+  display:block;
+  padding-top:56.25%;
+}
+.main-feed video{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  background:#000;
+}
+.placeholder{
+  position:absolute;
+  color:var(--muted);
+  font-size:14px;
+}
+
+/* BADGES */
+.stream-badge{
+  position:absolute;
+  top:14px;
+  left:14px;
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:13px;
+}
+.record-bar{
+  position:absolute;
+  bottom:14px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:13px;
+}
+.record-dot{
+  width:10px;
+  height:10px;
+  background:var(--red);
+  border-radius:50%;
+}
+
+/* ===== CAMERA STRIPE ===== */
+.side-panel{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  padding:12px;
+  overflow-y:auto;
+}
+.side-title{
+  font-size:13px;
+  color:var(--muted);
+}
+.camera-slot{
+  height:140px;
+  background:#000;
+  border-radius:14px;
+  border:1px solid var(--border);
+  position:relative;
+  overflow:hidden;
+  cursor:pointer;
+}
+.camera-slot video{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+}
+.camera-slot span{
+  position:absolute;
+  bottom:8px;
+  left:8px;
+  font-size:12px;
+  background:rgba(0,0,0,.6);
+  padding:4px 8px;
+  border-radius:999px;
+  color:#fff;
+}
+
+/* ===== FOCUS BADGE ===== */
+.focus-badge{
+  position:absolute;
+  top:8px;
+  right:8px;
+  font-size:11px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(0,0,0,.65);
+}
+.focused{ color:var(--green); }
+.not-focused{ color:var(--red); }
+
+/* LEFT STATE */
+.camera-slot.left::after{
+  content:"Student left";
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.6);
+  color:var(--muted);
+  font-size:13px;
+}
 </style>
 </head>
 
 <body>
 
-<div class="main">
-  <video id="mainVideo" autoplay muted></video>
-  <div id="strip"></div>
+<div class="director">
+
+  <div class="panel main-feed">
+    <video id="mainVideo" autoplay muted playsinline></video>
+    <div id="placeholder" class="placeholder">Select a camera to preview</div>
+    <div class="stream-badge" id="streamBadge"></div>
+    <div class="record-bar">
+      <div class="record-dot"></div>
+      <div>LIVE</div>
+    </div>
+  </div>
+
+  <div class="panel side-panel" id="cameraStrip">
+    <div class="side-title">Cameras</div>
+  </div>
+
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const streamId = new URLSearchParams(location.search).get("stream");
-const socket = io();
-const strip = document.getElementById("strip");
+const params = new URLSearchParams(location.search);
+const streamId = params.get("stream");
+const streamName = params.get("name") || streamId;
+document.getElementById("streamBadge").innerText = streamName + " • LIVE";
+
+const socket = io({ transports:["websocket"] });
 const mainVideo = document.getElementById("mainVideo");
+const placeholder = document.getElementById("placeholder");
+const strip = document.getElementById("cameraStrip");
 
-const peers = {}; // socketId -> { pc, slot, badge }
+const peers = {}; // socketId -> { pc, stream, slot, focusEl }
 
-/* ===== JOIN ===== */
+/* JOIN */
 socket.emit("join", streamId);
 
-/* ===== CLEAN START (prevents duplicates on refresh) ===== */
-strip.innerHTML = "";
-Object.keys(peers).forEach(id => delete peers[id]);
-
-/* ===== EXISTING PEERS ===== */
+/* EXISTING PEERS (NO DUPLICATES) */
 socket.on("existing-peers", list => {
-  list.forEach(p => {
-    if (!peers[p.id]) createPeer(p.id);
+  list.forEach(({ id }) => {
+    if (!peers[id]) createPeer(id);
   });
 });
 
-/* ===== NEW CAMERA ===== */
+/* PEER JOIN */
 socket.on("peer-joined", ({ id }) => {
   if (!peers[id]) createPeer(id);
 });
 
-/* ===== CAMERA LEFT ===== */
-socket.on("camera-left", ({ id }) => {
+/* PEER LEFT */
+socket.on("peer-left", ({ id }) => {
   const p = peers[id];
   if (!p) return;
-
-  p.badge.innerText = "Left";
-  p.badge.className = "badge not";
-
-  const v = p.slot.querySelector("video");
-  if (v) v.pause();
+  p.pc.close();
+  p.slot.classList.add("left");
+  if (mainVideo.srcObject === p.stream) {
+    mainVideo.srcObject = null;
+    placeholder.style.display = "block";
+  }
+  delete peers[id];
 });
 
-/* ===== FOCUS UPDATE ===== */
-socket.on("focus-update", ({ state, focused, away }, from) => {
-  const p = peers[from];
-  if (!p) return;
-
-  const total = focused + away;
-  const pct = total ? Math.round((focused / total) * 100) : 0;
-
-  p.badge.innerText = `${state} ${pct}%`;
-  p.badge.className = `badge ${state === "Focused" ? "focused" : "not"}`;
-});
-
-/* ===== CREATE PEER ===== */
+/* CREATE PEER */
 function createPeer(id){
   const pc = new RTCPeerConnection({
-    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+    iceServers:[{ urls:"stun:stun.l.google.com:19302" }]
   });
-
   pc.addTransceiver("video", { direction:"recvonly" });
 
   const slot = document.createElement("div");
-  slot.className = "slot";
-
-  const badge = document.createElement("div");
-  badge.className = "badge";
-  badge.innerText = "Analyzing";
-
-  slot.appendChild(badge);
+  slot.className = "camera-slot";
+  slot.innerHTML = `
+    <span>Camera</span>
+    <div class="focus-badge not-focused">Analyzing</div>
+  `;
   strip.appendChild(slot);
 
-  peers[id] = { pc, slot, badge };
+  const focusEl = slot.querySelector(".focus-badge");
+
+  peers[id] = { pc, slot, focusEl };
 
   pc.ontrack = e => {
-    if (slot.querySelector("video")) return;
+    if (peers[id].stream) return;
+    const stream = e.streams[0];
+    peers[id].stream = stream;
 
     const v = document.createElement("video");
     v.autoplay = true;
     v.muted = true;
-    v.srcObject = e.streams[0];
-
+    v.playsInline = true;
+    v.srcObject = stream;
+    v.onloadedmetadata = () => v.play().catch(()=>{});
     slot.prepend(v);
 
     slot.onclick = () => {
-      mainVideo.srcObject = e.streams[0];
+      mainVideo.srcObject = stream;
+      placeholder.style.display = "none";
+      mainVideo.play().catch(()=>{});
     };
   };
 
   pc.onicecandidate = e => {
-    if (e.candidate) {
-      socket.emit("signal", { to:id, data:e.candidate });
-    }
+    if (e.candidate) socket.emit("signal",{ to:id, data:e.candidate });
   };
 
   pc.createOffer()
     .then(o => pc.setLocalDescription(o))
-    .then(() => socket.emit("signal", {
-      to:id,
-      data:pc.localDescription
-    }));
+    .then(() => socket.emit("signal",{ to:id, data:pc.localDescription }));
 }
 
-/* ===== SIGNAL HANDLING (ONCE, GLOBAL) ===== */
+/* SIGNAL */
 socket.on("signal", async ({ from, data }) => {
   const p = peers[from];
   if (!p) return;
-
   if (data.type) await p.pc.setRemoteDescription(data);
   if (data.candidate) await p.pc.addIceCandidate(data);
+});
+
+/* ===== FOCUS UPDATES FROM CAMERA ===== */
+socket.on("focus-update", ({ from, state }) => {
+  const p = peers[from];
+  if (!p) return;
+
+  p.focusEl.textContent = state;
+  p.focusEl.className =
+    "focus-badge " + (state === "Focused" ? "focused" : "not-focused");
 });
 </script>
 
