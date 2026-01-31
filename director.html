@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <style>
-/* (UNCHANGED UI – your exact styles) */
 :root{
   --bg:#0f1115;
   --panel:#161922;
@@ -15,7 +14,9 @@
   --muted:#9aa0b4;
   --red:#ef4444;
 }
+
 *{box-sizing:border-box}
+
 body{
   margin:0;
   background:var(--bg);
@@ -23,6 +24,7 @@ body{
   font-family:system-ui;
   height:100vh;
 }
+
 .director{
   display:grid;
   grid-template-columns:1fr 320px;
@@ -30,11 +32,14 @@ body{
   padding:14px;
   height:100%;
 }
+
 .panel{
   background:var(--panel);
   border-radius:16px;
   border:1px solid var(--border);
 }
+
+/* ===== MAIN PREVIEW ===== */
 .main-feed{
   position:relative;
   display:flex;
@@ -43,30 +48,60 @@ body{
   background:#000;
   overflow:hidden;
 }
+
 .main-feed::before{
   content:"";
   display:block;
   padding-top:56.25%;
 }
+
 .main-feed video{
   position:absolute;
   inset:0;
   width:100%;
   height:100%;
   object-fit:contain;
+  background:#000;
 }
+
 .placeholder{
   position:absolute;
   color:var(--muted);
+  font-size:14px;
+  z-index:2;
 }
+
 .stream-badge{
   position:absolute;
   top:14px;
   left:14px;
   background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
   padding:6px 12px;
   border-radius:999px;
+  font-size:13px;
 }
+
+.record-bar{
+  position:absolute;
+  bottom:14px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:13px;
+}
+.record-dot{
+  width:10px;
+  height:10px;
+  background:var(--red);
+  border-radius:50%;
+}
+
+/* ===== CAMERA STRIP ===== */
 .side-panel{
   display:flex;
   flex-direction:column;
@@ -74,19 +109,23 @@ body{
   padding:12px;
   overflow-y:auto;
 }
+
 .camera-slot{
   height:140px;
   background:#000;
   border-radius:14px;
   border:1px solid var(--border);
+  position:relative;
   overflow:hidden;
   cursor:pointer;
 }
+
 .camera-slot video{
   width:100%;
   height:100%;
   object-fit:contain;
 }
+
 .camera-slot span{
   position:absolute;
   bottom:8px;
@@ -95,6 +134,18 @@ body{
   background:rgba(0,0,0,.6);
   padding:4px 8px;
   border-radius:999px;
+  color:#fff;
+}
+
+.camera-slot .status{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.6);
+  font-size:13px;
+  color:#fff;
 }
 </style>
 </head>
@@ -107,6 +158,10 @@ body{
     <video id="mainVideo" autoplay muted playsinline></video>
     <div id="placeholder" class="placeholder">Select a camera to preview</div>
     <div class="stream-badge">LIVE</div>
+    <div class="record-bar">
+      <div class="record-dot"></div>
+      <div>00:00:00</div>
+    </div>
   </div>
 
   <div class="panel side-panel" id="cameraStrip"></div>
@@ -115,54 +170,54 @@ body{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const streamId = new URLSearchParams(location.search).get("stream");
+const params = new URLSearchParams(location.search);
+const streamId = params.get("stream");
 
 const socket = io();
 const mainVideo = document.getElementById("mainVideo");
 const placeholder = document.getElementById("placeholder");
 const strip = document.getElementById("cameraStrip");
 
-const peers = {}; // socketId -> { pc, stream, slot }
+const peers = {}; // socketId -> { pc, stream, slot, status }
 
 /* JOIN */
 socket.emit("join", streamId);
 
-/* 🔑 ACCEPT PEERS EVEN IF peer-joined NEVER FIRED */
+/* HANDLE LATE SIGNALS (refresh-safe) */
 socket.on("signal", async ({ from, data }) => {
+  if (!peers[from]) createPeer(from);
 
-  // Create peer lazily if missing
-  if (!peers[from]) {
-    createPeer(from);
-  }
+  const p = peers[from];
 
-  const peer = peers[from];
-
-  if (data.type) {
-    await peer.pc.setRemoteDescription(data);
-  }
-
-  if (data.candidate) {
-    await peer.pc.addIceCandidate(data);
-  }
+  if (data.type) await p.pc.setRemoteDescription(data);
+  if (data.candidate) await p.pc.addIceCandidate(data);
 });
 
-/* Still handle normal joins */
+/* CAMERA JOINED */
 socket.on("peer-joined", ({ id }) => {
   if (!peers[id]) createPeer(id);
 });
 
+/* CAMERA LEFT (do NOT delete slot) */
 socket.on("peer-left", ({ id }) => {
   const p = peers[id];
   if (!p) return;
+
   p.pc.close();
-  p.slot.remove();
-  delete peers[id];
+  p.pc = null;
+
+  if (p.stream) {
+    p.stream.getTracks().forEach(t => t.stop());
+  }
+
+  showStatus(p.slot, "Student left");
+
   if (mainVideo.srcObject === p.stream) {
-    mainVideo.srcObject = null;
-    placeholder.style.display = "block";
+    mainVideo.pause();
   }
 });
 
+/* CREATE PEER */
 function createPeer(id){
   const pc = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
@@ -175,21 +230,23 @@ function createPeer(id){
   slot.innerHTML = "<span>Camera</span>";
   strip.appendChild(slot);
 
-  peers[id] = { pc, slot };
+  peers[id] = { pc, slot, stream:null };
 
   pc.ontrack = e => {
-    if (peers[id].stream) return;
-
     const stream = e.streams[0];
     peers[id].stream = stream;
 
-    const v = document.createElement("video");
-    v.autoplay = true;
-    v.muted = true;
-    v.playsInline = true;
-    v.srcObject = stream;
+    let v = slot.querySelector("video");
+    if (!v) {
+      v = document.createElement("video");
+      v.autoplay = true;
+      v.muted = true;
+      v.playsInline = true;
+      slot.prepend(v);
+    }
 
-    slot.prepend(v);
+    v.srcObject = stream;
+    clearStatus(slot);
 
     slot.onclick = () => {
       mainVideo.srcObject = stream;
@@ -202,6 +259,26 @@ function createPeer(id){
       socket.emit("signal", { to:id, data:e.candidate });
     }
   };
+
+  pc.createOffer()
+    .then(o => pc.setLocalDescription(o))
+    .then(() => socket.emit("signal", { to:id, data:pc.localDescription }));
+}
+
+/* STATUS HELPERS */
+function showStatus(slot, text){
+  let s = slot.querySelector(".status");
+  if (!s) {
+    s = document.createElement("div");
+    s.className = "status";
+    slot.appendChild(s);
+  }
+  s.innerText = text;
+}
+
+function clearStatus(slot){
+  const s = slot.querySelector(".status");
+  if (s) s.remove();
 }
 </script>
 
