@@ -150,9 +150,14 @@ body{
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+/* =====================
+   STATE
+===================== */
 const params = new URLSearchParams(location.search);
 const streamId = params.get("stream");
-document.getElementById("streamBadge").innerText = streamId + " • LIVE";
+
+document.getElementById("streamBadge").innerText =
+  streamId + " • LIVE";
 
 const socket = io({ transports:["websocket"] });
 const strip = document.getElementById("cameraStrip");
@@ -161,22 +166,30 @@ const placeholder = document.getElementById("placeholder");
 
 const peers = Object.create(null);
 
-/* JOIN */
+/* =====================
+   JOIN
+===================== */
 socket.emit("join", streamId);
 
-/* ---- EXISTING PEERS (FIX DUPLICATES) ---- */
+/* =====================
+   EXISTING PEERS (NO DUPES)
+===================== */
 socket.on("existing-peers", list => {
   list.forEach(({ id }) => {
     if (!peers[id]) createPeer(id);
   });
 });
 
-/* ---- NEW PEER ---- */
+/* =====================
+   NEW PEER
+===================== */
 socket.on("peer-joined", ({ id }) => {
   if (!peers[id]) createPeer(id);
 });
 
-/* ---- PEER LEFT ---- */
+/* =====================
+   PEER LEFT
+===================== */
 socket.on("peer-left", ({ id }) => {
   const p = peers[id];
   if (!p) return;
@@ -192,11 +205,14 @@ socket.on("peer-left", ({ id }) => {
   delete peers[id];
 });
 
-/* ---- CREATE PEER ---- */
+/* =====================
+   CREATE PEER
+===================== */
 function createPeer(id){
   const pc = new RTCPeerConnection({
     iceServers:[{ urls:"stun:stun.l.google.com:19302" }]
   });
+
   pc.addTransceiver("video", { direction:"recvonly" });
 
   const slot = document.createElement("div");
@@ -209,7 +225,14 @@ function createPeer(id){
 
   const focusEl = slot.querySelector(".focus-badge");
 
-  peers[id] = { pc, slot, focusEl, stream:null };
+  peers[id] = {
+    pc,
+    slot,
+    focusEl,
+    stream:null,
+    focused:0,
+    away:0
+  };
 
   pc.ontrack = e => {
     if (peers[id].stream) return;
@@ -242,7 +265,9 @@ function createPeer(id){
     );
 }
 
-/* ---- SIGNAL ---- */
+/* =====================
+   SIGNAL
+===================== */
 socket.on("signal", async ({ from, data }) => {
   const p = peers[from];
   if (!p) return;
@@ -251,14 +276,26 @@ socket.on("signal", async ({ from, data }) => {
   if (data.candidate) await p.pc.addIceCandidate(data);
 });
 
-/* ---- FOCUS UPDATE (FIX STUCK ANALYZING) ---- */
-socket.on("focus-update", ({ from, state }) => {
+/* =====================
+   ✅ FOCUS UPDATE (FIXED)
+   expects:
+   { focused, away, state }
+===================== */
+socket.on("focus-update", (data, from) => {
   const p = peers[from];
   if (!p) return;
 
-  p.focusEl.textContent = state;
+  p.focused = data.focused;
+  p.away = data.away;
+
+  const total = p.focused + p.away;
+  const pct = total ? Math.round((p.focused / total) * 100) : 0;
+
+  p.focusEl.textContent = `${data.state} ${pct}%`;
   p.focusEl.className =
-    "focus-badge " + (state === "Focused" ? "focused" : "not-focused");
+    "focus-badge " + (data.state === "Focused"
+      ? "focused"
+      : "not-focused");
 });
 </script>
 
