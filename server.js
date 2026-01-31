@@ -14,13 +14,10 @@ const app = express();
 const server = http.createServer(app);
 
 /* =========================
-   SOCKET.IO (IMPORTANT)
+   SOCKET.IO
 ========================= */
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  },
+  cors: { origin: "*", methods: ["GET", "POST"] },
   transports: ["websocket", "polling"]
 });
 
@@ -67,22 +64,17 @@ app.use(
 );
 
 /* =========================
-   AUTH ROUTES (USED BY LOGIN / REGISTER)
+   AUTH ROUTES
 ========================= */
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
 
   db.get("SELECT * FROM users WHERE email=?", [email], async (_, user) => {
     if (!user) return res.sendStatus(401);
+    if (!(await bcrypt.compare(password, user.password)))
+      return res.sendStatus(401);
 
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.sendStatus(401);
-
-    req.session.user = {
-      id: user.id,
-      email: user.email
-    };
-
+    req.session.user = { id: user.id, email: user.email };
     res.sendStatus(200);
   });
 });
@@ -111,7 +103,7 @@ app.get("/me", (req, res) => {
 });
 
 /* =========================
-   STREAM ROUTES (INDEX / CREATE)
+   STREAM ROUTES
 ========================= */
 app.get("/api/streams", (req, res) => {
   db.all(
@@ -127,9 +119,8 @@ app.post("/api/streams", (req, res) => {
   const id = crypto.randomUUID();
   const { name } = req.body;
 
-  if (!name || name.length < 3) {
+  if (!name || name.length < 3)
     return res.status(400).json({ error: "invalid name" });
-  }
 
   db.run(
     "INSERT INTO streams (id,name,creator) VALUES (?,?,?)",
@@ -142,7 +133,7 @@ app.post("/api/streams", (req, res) => {
 });
 
 /* =========================
-   SOCKET.IO — WEBRTC (OLD WORKING LOGIC)
+   SOCKET.IO — WEBRTC (FIXED)
 ========================= */
 io.on("connection", socket => {
   console.log("🟢 SOCKET CONNECTED:", socket.id);
@@ -156,12 +147,13 @@ io.on("connection", socket => {
 
     const others = [...clients].filter(id => id !== socket.id);
 
-    // ✅ Send existing peers (critical)
+    // ✅ Existing peers (director refresh fix)
     socket.emit(
       "existing-peers",
       others.map(id => ({ id }))
     );
 
+    // ✅ New peer joined
     socket.to(room).emit("peer-joined", { id: socket.id });
   });
 
@@ -174,11 +166,13 @@ io.on("connection", socket => {
   });
 
   socket.on("disconnect", () => {
-    if (socket.room) {
-      socket.to(socket.room).emit("camera-left", {
-        id: socket.id
-      });
-    }
+    if (!socket.room) return;
+
+    // ✅ COMPATIBILITY: support BOTH event names
+    socket.to(socket.room).emit("camera-left", { id: socket.id });
+    socket.to(socket.room).emit("peer-left", { id: socket.id });
+
+    console.log("🔴 SOCKET DISCONNECTED:", socket.id);
   });
 });
 
