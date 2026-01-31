@@ -272,45 +272,65 @@ const focusTimeEl = document.getElementById("focusTime");
 const awayTimeEl = document.getElementById("awayTime");
 
 function analyzeFrame(){
-  // ❌ No camera frame → user away
   if (!video.videoWidth || video.readyState < 2) {
     awaySeconds++;
-    focusState.innerText = "Not Focused";
-    focusState.style.color = "var(--red)";
-    awayTimeEl.innerText = awaySeconds;
+    setNotFocused("Not Focused (No Feed)");
     return;
   }
 
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = frame.data;
 
-  if (lastFrame){
-    let diff = 0;
+  let diff = 0;
+  let brightness = 0;
+  let varianceSum = 0;
 
-    for (let i = 0; i < frame.data.length; i += 4){
-      diff += Math.abs(frame.data[i] - lastFrame.data[i]);
+  for (let i = 0; i < data.length; i += 4){
+    const gray = (data[i] + data[i+1] + data[i+2]) / 3;
+    brightness += gray;
+
+    if (lastFrame) {
+      diff += Math.abs(data[i] - lastFrame.data[i]);
     }
+  }
 
-    const motion = diff / frame.data.length;
+  brightness /= (data.length / 4);
 
-    // 🔑 Threshold
-    const focused = motion < 15;
+  // Variance (detect frozen / empty frame)
+  for (let i = 0; i < data.length; i += 4){
+    const gray = (data[i] + data[i+1] + data[i+2]) / 3;
+    varianceSum += Math.pow(gray - brightness, 2);
+  }
 
-    if (focused){
-      focusedSeconds++;
-      focusState.innerText = "Focused";
-      focusState.style.color = "var(--green)";
-      focusTimeEl.innerText = focusedSeconds;
-    } else {
-      awaySeconds++;
-      focusState.innerText = "Not Focused";
-      focusState.style.color = "var(--red)";
-      awayTimeEl.innerText = awaySeconds;
-    }
+  const variance = varianceSum / (data.length / 4);
+  const motion = diff / data.length;
+
+  // 🔑 Thresholds (tuned for phones)
+  const DARK_THRESHOLD = 20;
+  const VARIANCE_THRESHOLD = 30;
+  const MOTION_THRESHOLD = 15;
+
+  if (brightness < DARK_THRESHOLD) {
+    awaySeconds++;
+    setNotFocused("Not Focused (Camera Covered)");
+  }
+  else if (variance < VARIANCE_THRESHOLD) {
+    awaySeconds++;
+    setNotFocused("Not Focused (User Away)");
+  }
+  else if (motion > MOTION_THRESHOLD) {
+    awaySeconds++;
+    setNotFocused("Not Focused (Distracted)");
+  }
+  else {
+    focusedSeconds++;
+    setFocused();
   }
 
   lastFrame = frame;
 }
+
 
 setInterval(analyzeFrame, 1000);
 </script>
