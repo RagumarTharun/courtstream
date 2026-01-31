@@ -9,7 +9,7 @@
 body{margin:0;background:#0f1115;color:#fff;font-family:system-ui}
 .main{display:grid;grid-template-columns:1fr 320px;height:100vh;gap:12px;padding:12px}
 video{width:100%;height:100%;object-fit:contain;background:#000}
-.slot{height:140px;background:#000;border-radius:12px;position:relative}
+.slot{height:140px;background:#000;border-radius:12px;position:relative;cursor:pointer}
 .badge{position:absolute;top:8px;right:8px;font-size:11px;padding:4px 8px;border-radius:999px}
 .focused{background:#22c55e;color:#000}
 .not{background:#ef4444}
@@ -25,71 +25,114 @@ video{width:100%;height:100%;object-fit:contain;background:#000}
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const streamId=new URLSearchParams(location.search).get("stream");
-const socket=io();
-const strip=document.getElementById("strip");
-const mainVideo=document.getElementById("mainVideo");
+const streamId = new URLSearchParams(location.search).get("stream");
+const socket = io();
+const strip = document.getElementById("strip");
+const mainVideo = document.getElementById("mainVideo");
 
-const peers={};
+const peers = {}; // socketId -> { pc, slot, badge }
 
-socket.emit("join",streamId);
+/* ===== JOIN ===== */
+socket.emit("join", streamId);
 
-socket.on("existing-peers",list=>{
-  list.forEach(p=>createPeer(p.id));
+/* ===== CLEAN START (prevents duplicates on refresh) ===== */
+strip.innerHTML = "";
+Object.keys(peers).forEach(id => delete peers[id]);
+
+/* ===== EXISTING PEERS ===== */
+socket.on("existing-peers", list => {
+  list.forEach(p => {
+    if (!peers[p.id]) createPeer(p.id);
+  });
 });
 
-socket.on("peer-joined",({id})=>{
-  if(!peers[id]) createPeer(id);
+/* ===== NEW CAMERA ===== */
+socket.on("peer-joined", ({ id }) => {
+  if (!peers[id]) createPeer(id);
 });
 
-socket.on("camera-left",({id})=>{
-  const p=peers[id];
-  if(!p) return;
-  p.slot.querySelector("video").pause();
-  p.slot.querySelector(".badge").innerText="Left";
+/* ===== CAMERA LEFT ===== */
+socket.on("camera-left", ({ id }) => {
+  const p = peers[id];
+  if (!p) return;
+
+  p.badge.innerText = "Left";
+  p.badge.className = "badge not";
+
+  const v = p.slot.querySelector("video");
+  if (v) v.pause();
 });
 
-socket.on("focus-update",(data,id)=>{
-  const p=peers[id];
-  if(!p) return;
-  const total=data.focused+data.away;
-  const pct=total?Math.round((data.focused/total)*100):0;
-  p.badge.innerText=`${data.state} ${pct}%`;
-  p.badge.className=`badge ${data.state==="Focused"?"focused":"not"}`;
+/* ===== FOCUS UPDATE ===== */
+socket.on("focus-update", ({ state, focused, away }, from) => {
+  const p = peers[from];
+  if (!p) return;
+
+  const total = focused + away;
+  const pct = total ? Math.round((focused / total) * 100) : 0;
+
+  p.badge.innerText = `${state} ${pct}%`;
+  p.badge.className = `badge ${state === "Focused" ? "focused" : "not"}`;
 });
 
+/* ===== CREATE PEER ===== */
 function createPeer(id){
-  const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
-  pc.addTransceiver("video",{direction:"recvonly"});
+  const pc = new RTCPeerConnection({
+    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+  });
 
-  const slot=document.createElement("div");
-  slot.className="slot";
-  const badge=document.createElement("div");
-  badge.className="badge";
-  badge.innerText="Analyzing";
+  pc.addTransceiver("video", { direction:"recvonly" });
+
+  const slot = document.createElement("div");
+  slot.className = "slot";
+
+  const badge = document.createElement("div");
+  badge.className = "badge";
+  badge.innerText = "Analyzing";
+
   slot.appendChild(badge);
   strip.appendChild(slot);
 
-  peers[id]={pc,slot,badge};
+  peers[id] = { pc, slot, badge };
 
-  pc.ontrack=e=>{
-    if(slot.querySelector("video")) return;
-    const v=document.createElement("video");
-    v.autoplay=true;v.muted=true;v.srcObject=e.streams[0];
+  pc.ontrack = e => {
+    if (slot.querySelector("video")) return;
+
+    const v = document.createElement("video");
+    v.autoplay = true;
+    v.muted = true;
+    v.srcObject = e.streams[0];
+
     slot.prepend(v);
-    slot.onclick=()=>mainVideo.srcObject=e.streams[0];
+
+    slot.onclick = () => {
+      mainVideo.srcObject = e.streams[0];
+    };
   };
 
-  pc.onicecandidate=e=>e.candidate&&socket.emit("signal",{to:id,data:e.candidate});
-  pc.createOffer().then(o=>pc.setLocalDescription(o))
-    .then(()=>socket.emit("signal",{to:id,data:pc.localDescription}));
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit("signal", { to:id, data:e.candidate });
+    }
+  };
 
-  socket.on("signal",async({from,data})=>{
-    if(from!==id) return;
-    if(data.type) await pc.setRemoteDescription(data);
-    if(data.candidate) await pc.addIceCandidate(data);
-  });
+  pc.createOffer()
+    .then(o => pc.setLocalDescription(o))
+    .then(() => socket.emit("signal", {
+      to:id,
+      data:pc.localDescription
+    }));
 }
+
+/* ===== SIGNAL HANDLING (ONCE, GLOBAL) ===== */
+socket.on("signal", async ({ from, data }) => {
+  const p = peers[from];
+  if (!p) return;
+
+  if (data.type) await p.pc.setRemoteDescription(data);
+  if (data.candidate) await p.pc.addIceCandidate(data);
+});
 </script>
+
 </body>
 </html>
