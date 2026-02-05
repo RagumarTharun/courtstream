@@ -183,10 +183,29 @@ body{
 /* ===== STREAM INFO ===== */
 const params = new URLSearchParams(location.search);
 const streamId = params.get("stream");
-const streamName = params.get("name") || streamId;
+const streamName = params.get("name");
 
-document.getElementById("streamBadge").innerText =
-  streamName + " • LIVE";
+async function updateStreamBadge(){
+  let name = streamName;
+
+  if (!name && streamId) {
+    try {
+      const res = await fetch("/api/streams");
+      if (res.ok) {
+        const streams = await res.json();
+        const match = streams.find(s => s.id === streamId);
+        if (match) name = match.name;
+      }
+    } catch {
+      // fallback below
+    }
+  }
+
+  const label = name || streamId || "Unknown Stream";
+  document.getElementById("streamBadge").innerText =
+    label + " • LIVE";
+}
+updateStreamBadge();
 
 /* ===== SOCKET / STATE ===== */
 const socket = io();
@@ -200,6 +219,14 @@ const rotations = {}; // socketId -> rotation degrees
 /* ===== JOIN ===== */
 socket.emit("join", streamId);
 
+/* ===== EXISTING CAMERAS ===== */
+socket.on("existing-peers", peersList => {
+  if (!Array.isArray(peersList)) return;
+  peersList.forEach(({ id }) => {
+    if (id && !peers[id]) createPeer(id);
+  });
+});
+
 /* ===== CAMERA JOINED ===== */
 socket.on("peer-joined", ({ id }) => {
   if (peers[id]) return;
@@ -207,7 +234,7 @@ socket.on("peer-joined", ({ id }) => {
 });
 
 /* ===== CAMERA LEFT ===== */
-socket.on("peer-left", ({ id }) => {
+function removePeer(id){
   const p = peers[id];
   if (!p) return;
 
@@ -221,6 +248,14 @@ socket.on("peer-left", ({ id }) => {
     mainVideo.style.transform = "";
     placeholder.style.display = "block";
   }
+}
+
+socket.on("peer-left", ({ id }) => {
+  removePeer(id);
+});
+
+socket.on("camera-left", ({ id }) => {
+  removePeer(id);
 });
 
 /* ===== CAMERA ROTATION (MANUAL) ===== */
