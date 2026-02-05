@@ -1,305 +1,194 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Camera Live – CourtStream</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta charset="UTF-8" />
+<title>CourtStream</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <style>
-:root{
-  --bg:#0f1115;
-  --card:#161922;
-  --border:#262b3d;
-  --red:#b91c1c;
-}
-
-body{
-  margin:0;
-  background:var(--bg);
-  color:#fff;
+body {
+  background:#0f1115;
+  color:#eee;
   font-family:system-ui;
+  margin:0;
+}
+.container {
+  max-width:720px;
+  margin:60px auto;
+  padding:20px;
+}
+.header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.muted { color:#aaa; margin-bottom:24px; }
+.user { color:#aaa; font-size:14px; }
+
+button {
+  padding:8px 12px;
+  border-radius:8px;
+  border:none;
+  background:#ff3b3b;
+  color:white;
+  cursor:pointer;
+  font-size:14px;
+}
+button.secondary { background:#333; }
+
+input {
+  width:100%;
+  padding:14px;
+  border-radius:10px;
+  border:none;
+  font-size:16px;
+  margin-bottom:16px;
 }
 
-.page{
-  position:fixed;
-  inset:0;
+.streams {
   display:flex;
   flex-direction:column;
+  gap:10px;
 }
-
-/* HEADER */
-.header{
-  height:56px;
+.stream {
+  padding:14px;
+  background:#161922;
+  border-radius:10px;
   display:flex;
+  justify-content:space-between;
   align-items:center;
 }
-.header-title{
-  flex:1;
-  text-align:center;
-  font-size:15px;
-}
-.badge{
-  font-size:12px;
-  color:#22c55e;
-}
-
-/* PREVIEW */
-.preview{
-  flex:1;
+.stream-actions {
   display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
+  gap:8px;
 }
-
-video{
-  width:90vw;
-  max-width:420px;
-  max-height:100%;
-  background:#000;
-  border-radius:18px;
-  object-fit:contain; /* NO CROPPING */
-  transition:transform .25s ease;
-}
-
-/* CONTROLS */
-.controls{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:18px 0 24px;
-}
-
-.ctrl{
-  width:56px;
-  height:56px;
-  border-radius:50%;
-  border:2px solid var(--border);
-  background:var(--card);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.ctrl.off{
-  background:var(--red);
-  border-color:var(--red);
-}
-
-.ctrl.end{
-  background:var(--red);
-  border-color:var(--red);
-}
-
-.ctrl svg{
-  width:24px;
-  height:24px;
-  fill:#fff;
-}
+.empty { color:#888; margin-top:20px; }
 </style>
 </head>
 
 <body>
-
-<div class="page">
+<div class="container">
 
   <div class="header">
-    <div class="header-title">
-      <span id="streamTitle">Camera</span>
-      <span id="liveBadge" class="badge" style="display:none;">LIVE</span>
+    <div>
+      <h1 id="greeting">Welcome to CourtStream</h1>
+      <div class="muted" id="subtext">
+        Discover live sports streams or create your own.
+      </div>
     </div>
+    <div class="user" id="userInfo"></div>
   </div>
 
-  <div class="preview">
-    <video id="video" autoplay muted playsinline></video>
-  </div>
+  <div id="authActions" style="margin-bottom:20px;"></div>
 
-  <div class="controls">
+  <input id="search" placeholder="Search streams" autocomplete="off" />
 
-    <!-- MIC -->
-    <button id="micBtn" class="ctrl" onclick="toggleMic()">
-      <svg viewBox="0 0 24 24">
-        <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z"/>
-        <path d="M19 11a7 7 0 01-14 0"/>
-      </svg>
-    </button>
-
-    <!-- CAMERA -->
-    <button id="camBtn" class="ctrl" onclick="toggleCam()">
-      <svg viewBox="0 0 24 24">
-        <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z"/>
-      </svg>
-    </button>
-
-    <!-- FLIP CAMERA -->
-    <button class="ctrl" onclick="flipCamera()">
-      <svg viewBox="0 0 24 24">
-        <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
-        <path d="M17 17H7v-4l-4 5 4 5v-4h14v-6h-4v4z"/>
-      </svg>
-    </button>
-
-    <!-- LEAVE -->
-    <button class="ctrl end" onclick="leave()">
-      <svg viewBox="0 0 24 24">
-        <path d="M21 7.5l-3.5-2v4H10v3h7.5v4z"/>
-        <path d="M3 5h8v14H3z"/>
-      </svg>
-    </button>
-
+  <div class="streams" id="streamList"></div>
+  <div class="empty" id="emptyState" style="display:none;">
+    No streams found.
   </div>
 
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
 <script>
-/* ===== STATE ===== */
-const streamId = new URLSearchParams(location.search).get("stream");
-const streamName = new URLSearchParams(location.search).get("name");
-const video = document.getElementById("video");
-const micBtn = document.getElementById("micBtn");
-const camBtn = document.getElementById("camBtn");
-const streamTitle = document.getElementById("streamTitle");
-const liveBadge = document.getElementById("liveBadge");
+let allStreams = [];
+let currentUser = null;
 
-let mediaStream;
-let videoSender;
-let micOn = true;
-let camOn = true;
-let facing = "environment";
-let directorId = null;
-let isLive = false;
+/* STREAMS */
+async function loadStreams(){
+  const res = await fetch("/api/streams");
+  allStreams = await res.json();
+  render();
+}
 
-const socket = io();
-const pc = new RTCPeerConnection({
-  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-});
+/* AUTH */
+(async () => {
+  try {
+    const res = await fetch("/me", { credentials:"include" });
+    if (!res.ok) throw 0;
 
-/* ===== CAMERA ===== */
-async function startCamera(){
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ ideal:facing } },
-    audio:true
+    currentUser = await res.json();
+
+    greeting.innerText = `Hello ${currentUser.email}`;
+    subtext.innerText = "Pick a stream to join or direct.";
+    userInfo.innerText = currentUser.email;
+
+    authActions.innerHTML = `
+      <button onclick="location.href='create.html'">+ Create Stream</button>
+      <button class="secondary" onclick="logout()">Logout</button>
+    `;
+
+    render(); // 🔑 RE-RENDER AFTER AUTH
+
+  } catch {
+    authActions.innerHTML = `
+      <button onclick="alert('Login required')">+ Create Stream</button>
+      <button class="secondary" onclick="location.href='login.html'">Login</button>
+      <button class="secondary" onclick="location.href='register.html'">Register</button>
+    `;
+  }
+})();
+
+/* RENDER */
+function render(){
+  const box = document.getElementById("streamList");
+  box.innerHTML = "";
+
+  if (!allStreams.length) {
+    emptyState.style.display = "block";
+    return;
+  }
+  emptyState.style.display = "none";
+
+  allStreams.forEach(s => {
+    const row = document.createElement("div");
+    row.className = "stream";
+
+    row.innerHTML = `
+      <strong>${s.name}</strong>
+      <div class="stream-actions">
+        <button class="secondary" onclick="viewStream('${s.id}')">View</button>
+        <button class="secondary" onclick="camStream('${s.id}')">Cam</button>
+        ${
+          currentUser && s.creator === currentUser.id
+            ? `<button onclick="direct('${s.id}')">Direct</button>`
+            : ""
+        }
+      </div>
+    `;
+
+    box.appendChild(row);
   });
-
-  video.srcObject = stream;
-
-  if (!mediaStream) {
-    stream.getTracks().forEach(t=>{
-      const sender = pc.addTrack(t, stream);
-      if (t.kind === "video") videoSender = sender;
-    });
-  } else {
-    await videoSender.replaceTrack(stream.getVideoTracks()[0]);
-    mediaStream.getTracks().forEach(t=>t.stop());
-  }
-
-  mediaStream = stream;
-}
-startCamera();
-
-/* ===== JOIN ===== */
-socket.emit("join", streamId);
-
-/* ===== CONTROLS ===== */
-function toggleMic(){
-  micOn = !micOn;
-  mediaStream.getAudioTracks()[0].enabled = micOn;
-  micBtn.classList.toggle("off", !micOn);
 }
 
-function toggleCam(){
-  camOn = !camOn;
-  mediaStream.getVideoTracks()[0].enabled = camOn;
-  camBtn.classList.toggle("off", !camOn);
+function viewStream(id){
+  location.href = `viewer.html?stream=${id}`;
+}
+function camStream(id){
+  const stream = allStreams.find(s => s.id === id);
+  const name = stream ? encodeURIComponent(stream.name) : "";
+  const nameParam = name ? `&name=${name}` : "";
+  location.href = `camera-live.html?stream=${id}${nameParam}`;
+}
+function direct(id){
+  const stream = allStreams.find(s => s.id === id);
+  const name = stream ? encodeURIComponent(stream.name) : "";
+  const nameParam = name ? `&name=${name}` : "";
+  location.href = `director.html?stream=${id}${nameParam}`;
 }
 
-async function flipCamera(){
-  facing = facing === "environment" ? "user" : "environment";
-  await startCamera();
-}
-
-function leave(){
-  pc.close();
-  socket.disconnect();
-  mediaStream.getTracks().forEach(t=>t.stop());
-  location.href = "index.html";
-}
-
-/* ===== 🔑 AUTO ROTATE PREVIEW WITH PHONE ===== */
-function applyOrientation(){
-  let angle = 0;
-
-  if (screen.orientation && screen.orientation.angle !== undefined) {
-    angle = screen.orientation.angle;
-  } else if (window.orientation !== undefined) {
-    angle = window.orientation;
-  }
-
-  video.style.transform = `rotate(${angle}deg)`;
-}
-
-if (screen.orientation) {
-  screen.orientation.addEventListener("change", applyOrientation);
-}
-window.addEventListener("orientationchange", applyOrientation);
-applyOrientation();
-
-/* ===== STREAM TITLE ===== */
-async function updateStreamTitle(){
-  let name = streamName;
-
-  if (!name && streamId) {
-    try {
-      const res = await fetch("/api/streams");
-      if (res.ok) {
-        const streams = await res.json();
-        const match = streams.find(s => s.id === streamId);
-        if (match) name = match.name;
-      }
-    } catch {
-      // fallback below
-    }
-  }
-
-  streamTitle.innerText = name || "Camera";
-}
-updateStreamTitle();
-
-function setLive(on){
-  isLive = !!on;
-  liveBadge.style.display = isLive ? "inline-block" : "none";
-}
-
-/* ===== WEBRTC ===== */
-pc.onicecandidate = e=>{
-  if(e.candidate){
-    if (directorId) {
-      socket.emit("signal",{ to:directorId, data:e.candidate });
-    }
-  }
+search.oninput = e => {
+  const q = e.target.value.toLowerCase();
+  render(allStreams.filter(s => s.name.toLowerCase().includes(q)));
 };
 
-socket.on("signal", async ({from,data})=>{
-  if(data.type === "offer"){
-    directorId = from;
-    await pc.setRemoteDescription(data);
-    const ans = await pc.createAnswer();
-    await pc.setLocalDescription(ans);
-    socket.emit("signal",{ to:from, data:pc.localDescription });
-  }
-  if(data.candidate){
-    await pc.addIceCandidate(data);
-  }
-});
+async function logout(){
+  await fetch("/logout",{method:"POST",credentials:"include"});
+  location.reload();
+}
 
-socket.on("control", ({ data }) => {
-  if (!data || !data.type) return;
-  if (data.type === "live") {
-    setLive(!!data.on);
-  }
-});
+loadStreams();
 </script>
-
 </body>
 </html>
+
