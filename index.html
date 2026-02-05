@@ -147,7 +147,8 @@ function render(){
     row.innerHTML = `
       <strong>${s.name}</strong>
       <div class="stream-actions">
-        <button class="secondary" onclick="join('${s.id}')">Join</button>
+        <button class="secondary" onclick="viewStream('${s.id}')">View</button>
+        <button class="secondary" onclick="camStream('${s.id}')">Cam</button>
         ${
           currentUser && s.creator === currentUser.id
             ? `<button onclick="direct('${s.id}')">Direct</button>`
@@ -160,8 +161,14 @@ function render(){
   });
 }
 
-function join(id){
-  location.href = `join.html?stream=${id}`;
+function viewStream(id){
+  location.href = `viewer.html?stream=${id}`;
+}
+function camStream(id){
+  const stream = allStreams.find(s => s.id === id);
+  const name = stream ? encodeURIComponent(stream.name) : "";
+  const nameParam = name ? `&name=${name}` : "";
+  location.href = `camera-live.html?stream=${id}${nameParam}`;
 }
 function direct(id){
   const stream = allStreams.find(s => s.id === id);
