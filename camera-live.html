@@ -131,14 +131,6 @@ video{
       </svg>
     </button>
 
-    <!-- FLIP CAMERA -->
-    <button class="ctrl" onclick="flipCamera()">
-      <svg viewBox="0 0 24 24">
-        <path d="M7 7h10v4l4-5-4-5v4H3v6h4V7z"/>
-        <path d="M17 17H7v-4l-4 5 4 5v-4h14v-6h-4v4z"/>
-      </svg>
-    </button>
-
     <!-- LEAVE -->
     <button class="ctrl end" onclick="leave()">
       <svg viewBox="0 0 24 24">
@@ -280,21 +272,6 @@ function toggleCam(){
   camOn = !camOn;
   mediaStream.getVideoTracks()[0].enabled = camOn;
   camBtn.classList.toggle("off", !camOn);
-}
-
-async function flipCamera(){
-  await loadVideoDevices();
-
-  if (videoDevices.length > 1) {
-    currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
-    const label = (videoDevices[currentDeviceIndex].label || "").toLowerCase();
-    if (label.includes("front") || label.includes("user")) facing = "user";
-    if (label.includes("back") || label.includes("rear") || label.includes("environment")) facing = "environment";
-  } else {
-    facing = facing === "environment" ? "user" : "environment";
-  }
-
-  await startCamera();
 }
 
 function leave(){
