@@ -163,6 +163,7 @@ let videoSender;
 let micOn = true;
 let camOn = true;
 let facing = "environment";
+let directorId = null;
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -242,12 +243,15 @@ applyOrientation();
 /* ===== WEBRTC ===== */
 pc.onicecandidate = e=>{
   if(e.candidate){
-    socket.emit("signal",{ data:e.candidate });
+    if (directorId) {
+      socket.emit("signal",{ to:directorId, data:e.candidate });
+    }
   }
 };
 
 socket.on("signal", async ({from,data})=>{
   if(data.type === "offer"){
+    directorId = from;
     await pc.setRemoteDescription(data);
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
