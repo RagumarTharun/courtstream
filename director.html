@@ -215,6 +215,7 @@ const strip = document.getElementById("cameraStrip");
 
 const peers = {};      // socketId -> { pc, stream, slot }
 const rotations = {}; // socketId -> rotation degrees
+let currentLiveId = null;
 
 /* ===== JOIN ===== */
 socket.emit("join", streamId);
@@ -311,6 +312,8 @@ function createPeer(id){
       placeholder.style.display = "none";
       mainVideo.onloadedmetadata = () =>
         mainVideo.play().catch(()=>{});
+
+      setLiveCamera(id);
     };
   };
 
@@ -325,6 +328,18 @@ function createPeer(id){
     .then(() => {
       socket.emit("signal",{ to:id, data:pc.localDescription });
     });
+}
+
+function setLiveCamera(id){
+  if (!id || !peers[id]) return;
+  currentLiveId = id;
+
+  Object.keys(peers).forEach(peerId => {
+    socket.emit("control", {
+      to: peerId,
+      data: { type: "live", on: peerId === id }
+    });
+  });
 }
 
 /* ===== SIGNAL ===== */
