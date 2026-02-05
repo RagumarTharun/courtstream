@@ -171,6 +171,7 @@ let directorId = null;
 let isLive = false;
 let videoDevices = [];
 let currentDeviceIndex = 0;
+let hasPickedDefault = false;
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -193,17 +194,61 @@ async function loadVideoDevices(){
   }
 }
 
+function pickDefaultBackCamera(){
+  if (!videoDevices.length) return;
+
+  const backIndex = videoDevices.findIndex(d => {
+    const label = (d.label || "").toLowerCase();
+    return label.includes("back") || label.includes("rear") || label.includes("environment");
+  });
+
+  if (backIndex >= 0) {
+    currentDeviceIndex = backIndex;
+    facing = "environment";
+  }
+}
+
+async function getStreamWithFallback(){
+  const constraintsByPriority = [];
+
+  if (videoDevices.length) {
+    constraintsByPriority.push({
+      video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } },
+      audio: true
+    });
+  }
+
+  constraintsByPriority.push({
+    video: { facingMode: { exact: facing } },
+    audio: true
+  });
+
+  constraintsByPriority.push({
+    video: { facingMode: { ideal: facing } },
+    audio: true
+  });
+
+  let lastError;
+  for (const constraints of constraintsByPriority) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError;
+}
+
 async function startCamera(){
   await loadVideoDevices();
 
-  const videoConstraint = videoDevices.length
-    ? { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } }
-    : { facingMode: { ideal: facing } };
+  if (!hasPickedDefault) {
+    pickDefaultBackCamera();
+    hasPickedDefault = true;
+  }
 
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: videoConstraint,
-    audio: true
-  });
+  const stream = await getStreamWithFallback();
 
   video.srcObject = stream;
 
@@ -242,6 +287,9 @@ async function flipCamera(){
 
   if (videoDevices.length > 1) {
     currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+    const label = (videoDevices[currentDeviceIndex].label || "").toLowerCase();
+    if (label.includes("front") || label.includes("user")) facing = "user";
+    if (label.includes("back") || label.includes("rear") || label.includes("environment")) facing = "environment";
   } else {
     facing = facing === "environment" ? "user" : "environment";
   }
