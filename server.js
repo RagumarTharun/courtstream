@@ -173,6 +173,14 @@ io.on("connection", socket => {
     });
   });
 
+  socket.on("control", ({ to, data }) => {
+    if (!to || !data) return;
+    io.to(to).emit("control", {
+      from: socket.id,
+      data
+    });
+  });
+
   socket.on("disconnect", () => {
     if (socket.room) {
       const payload = { id: socket.id };
