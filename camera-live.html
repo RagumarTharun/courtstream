@@ -105,7 +105,8 @@ video{
 
   <div class="header">
     <div class="header-title">
-      Camera • <span class="badge">LIVE</span>
+      <span id="streamTitle">Camera</span>
+      <span id="liveBadge" class="badge" style="display:none;">LIVE</span>
     </div>
   </div>
 
@@ -154,9 +155,12 @@ video{
 <script>
 /* ===== STATE ===== */
 const streamId = new URLSearchParams(location.search).get("stream");
+const streamName = new URLSearchParams(location.search).get("name");
 const video = document.getElementById("video");
 const micBtn = document.getElementById("micBtn");
 const camBtn = document.getElementById("camBtn");
+const streamTitle = document.getElementById("streamTitle");
+const liveBadge = document.getElementById("liveBadge");
 
 let mediaStream;
 let videoSender;
@@ -164,6 +168,7 @@ let micOn = true;
 let camOn = true;
 let facing = "environment";
 let directorId = null;
+let isLive = false;
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -173,7 +178,7 @@ const pc = new RTCPeerConnection({
 /* ===== CAMERA ===== */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ exact:facing } },
+    video:{ facingMode:{ ideal:facing } },
     audio:true
   });
 
@@ -240,6 +245,32 @@ if (screen.orientation) {
 window.addEventListener("orientationchange", applyOrientation);
 applyOrientation();
 
+/* ===== STREAM TITLE ===== */
+async function updateStreamTitle(){
+  let name = streamName;
+
+  if (!name && streamId) {
+    try {
+      const res = await fetch("/api/streams");
+      if (res.ok) {
+        const streams = await res.json();
+        const match = streams.find(s => s.id === streamId);
+        if (match) name = match.name;
+      }
+    } catch {
+      // fallback below
+    }
+  }
+
+  streamTitle.innerText = name || "Camera";
+}
+updateStreamTitle();
+
+function setLive(on){
+  isLive = !!on;
+  liveBadge.style.display = isLive ? "inline-block" : "none";
+}
+
 /* ===== WEBRTC ===== */
 pc.onicecandidate = e=>{
   if(e.candidate){
@@ -259,6 +290,13 @@ socket.on("signal", async ({from,data})=>{
   }
   if(data.candidate){
     await pc.addIceCandidate(data);
+  }
+});
+
+socket.on("control", ({ data }) => {
+  if (!data || !data.type) return;
+  if (data.type === "live") {
+    setLive(!!data.on);
   }
 });
 </script>
