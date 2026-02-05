@@ -175,9 +175,9 @@ io.on("connection", socket => {
 
   socket.on("disconnect", () => {
     if (socket.room) {
-      socket.to(socket.room).emit("camera-left", {
-        id: socket.id
-      });
+      const payload = { id: socket.id };
+      socket.to(socket.room).emit("camera-left", payload);
+      socket.to(socket.room).emit("peer-left", payload);
     }
   });
 });
