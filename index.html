@@ -164,7 +164,10 @@ function join(id){
   location.href = `join.html?stream=${id}`;
 }
 function direct(id){
-  location.href = `director.html?stream=${id}`;
+  const stream = allStreams.find(s => s.id === id);
+  const name = stream ? encodeURIComponent(stream.name) : "";
+  const nameParam = name ? `&name=${name}` : "";
+  location.href = `director.html?stream=${id}${nameParam}`;
 }
 
 search.oninput = e => {
