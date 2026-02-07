@@ -12,7 +12,6 @@
   --border:#262b3d;
   --text:#e6e6eb;
   --muted:#9aa0b4;
-  --red:#ef4444;
 }
 
 *{box-sizing:border-box}
@@ -44,7 +43,6 @@ body{
   overflow:hidden;
 }
 
-/* Fixed preview size */
 .player::before{
   content:"";
   display:block;
@@ -60,7 +58,6 @@ body{
   background:#000;
 }
 
-/* Badge */
 .stream-badge{
   position:absolute;
   top:14px;
@@ -72,7 +69,6 @@ body{
   font-size:13px;
 }
 
-/* Live badge */
 .live-badge{
   position:absolute;
   top:14px;
@@ -85,7 +81,6 @@ body{
   color:#22c55e;
 }
 
-/* Controls */
 .controls{
   position:absolute;
   bottom:14px;
@@ -129,6 +124,7 @@ const streamId = params.get("stream");
 const streamName = params.get("name");
 const video = document.getElementById("v");
 const badge = document.getElementById("streamBadge");
+let directorId = null;
 
 async function updateStreamBadge(){
   let name = streamName;
@@ -192,19 +188,18 @@ pc.ontrack = e => {
 };
 
 pc.onicecandidate = e => {
-  if (e.candidate) {
-    socket.emit("signal", { data: { candidate: e.candidate } });
+  if (e.candidate && directorId) {
+    socket.emit("signal", { to: directorId, data: e.candidate });
   }
 };
 
 socket.on("signal", async ({from,data})=>{
-  if(data.sdp){
-    await pc.setRemoteDescription(data.sdp);
-    if(data.sdp.type==="offer"){
-      const ans=await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      socket.emit("signal",{to:from,data:{sdp:ans}});
-    }
+  if(data.type === "offer"){
+    directorId = from;
+    await pc.setRemoteDescription(data);
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    socket.emit("signal",{to:from,data:pc.localDescription});
   }
   if(data.candidate) await pc.addIceCandidate(data.candidate);
 });
