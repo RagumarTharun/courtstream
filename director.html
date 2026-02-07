@@ -178,6 +178,8 @@ body{
 
 </div>
 
+<canvas id="programCanvas" width="1280" height="720" style="display:none;"></canvas>
+
 <script src="/socket.io/socket.io.js"></script>
 <script>
 /* ===== STREAM INFO ===== */
@@ -212,12 +214,16 @@ const socket = io();
 const mainVideo = document.getElementById("mainVideo");
 const placeholder = document.getElementById("placeholder");
 const strip = document.getElementById("cameraStrip");
+const programCanvas = document.getElementById("programCanvas");
+const programCtx = programCanvas.getContext("2d");
 
 const peers = {};      // camera socketId -> { pc, stream, slot }
 const viewers = {};    // viewer socketId -> { pc, sender }
 const rotations = {}; // socketId -> rotation degrees
 let currentLiveId = null;
 let programStream = null;
+let programRotation = 0;
+let programLoopRunning = false;
 
 /* ===== JOIN ===== */
 socket.emit("join", { room: streamId, role: "director" });
@@ -378,6 +384,7 @@ function createPeer(id){
 function setLiveCamera(id){
   if (!id || !peers[id]) return;
   currentLiveId = id;
+  programRotation = rotations[id] || 0;
 
   Object.keys(peers).forEach(peerId => {
     socket.emit("control", {
@@ -386,6 +393,7 @@ function setLiveCamera(id){
     });
   });
 
+  startProgramLoop();
   updateViewerFeeds();
 }
 
@@ -444,12 +452,47 @@ function updateViewerFeeds(){
 
 function getProgramTrack(){
   if (!programStream) {
-    if (!mainVideo) return null;
-    if (!mainVideo.captureStream) return null;
-    programStream = mainVideo.captureStream();
+    if (!programCanvas || !programCanvas.captureStream) return null;
+    programStream = programCanvas.captureStream(30);
   }
   const tracks = programStream.getVideoTracks();
   return tracks && tracks[0] ? tracks[0] : null;
+}
+
+function startProgramLoop(){
+  if (programLoopRunning) return;
+  programLoopRunning = true;
+
+  const draw = () => {
+    const w = programCanvas.width;
+    const h = programCanvas.height;
+
+    programCtx.fillStyle = "#000";
+    programCtx.fillRect(0, 0, w, h);
+
+    if (mainVideo.readyState >= 2 && mainVideo.videoWidth > 0 && mainVideo.videoHeight > 0) {
+      const vw = mainVideo.videoWidth;
+      const vh = mainVideo.videoHeight;
+      const scale = Math.min(w / vw, h / vh);
+      const dw = vw * scale;
+      const dh = vh * scale;
+
+      programCtx.save();
+      programCtx.translate(w / 2, h / 2);
+      programCtx.rotate((programRotation * Math.PI) / 180);
+      programCtx.drawImage(mainVideo, -dw / 2, -dh / 2, dw, dh);
+      programCtx.restore();
+    }
+
+    if (!programStream) {
+      programStream = programCanvas.captureStream(30);
+      updateViewerFeeds();
+    }
+
+    requestAnimationFrame(draw);
+  };
+
+  requestAnimationFrame(draw);
 }
 
 /* ===== SIGNAL ===== */
