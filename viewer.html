@@ -195,16 +195,31 @@ pc.onicecandidate = e => {
 };
 
 socket.on("signal", async ({from,data})=>{
-  if(data.type === "offer"){
+  if (!data) return;
+
+  if (data.type === "offer") {
     directorId = from;
     await pc.setRemoteDescription(data);
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
     socket.emit("signal",{to:from,data:pc.localDescription});
+    return;
   }
-  if(data.candidate || data.type === "candidate" || data.sdp === undefined){
-    const candidate = data.candidate ? data.candidate : data;
-    if (candidate) await pc.addIceCandidate(candidate);
+
+  if (data.type === "answer") {
+    await pc.setRemoteDescription(data);
+    return;
+  }
+
+  if (data.candidate !== undefined) {
+    if (data.candidate) {
+      await pc.addIceCandidate(data.candidate);
+    }
+    return;
+  }
+
+  if (data.candidate === undefined && data.type === undefined) {
+    await pc.addIceCandidate(data);
   }
 });
 </script>
