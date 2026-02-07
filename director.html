@@ -217,7 +217,7 @@ const peers = {};      // camera socketId -> { pc, stream, slot }
 const viewers = {};    // viewer socketId -> { pc, sender }
 const rotations = {}; // socketId -> rotation degrees
 let currentLiveId = null;
-let currentLiveStream = null;
+let programStream = null;
 
 /* ===== JOIN ===== */
 socket.emit("join", { room: streamId, role: "director" });
@@ -378,7 +378,6 @@ function createPeer(id){
 function setLiveCamera(id){
   if (!id || !peers[id]) return;
   currentLiveId = id;
-  currentLiveStream = peers[id].stream || null;
 
   Object.keys(peers).forEach(peerId => {
     socket.emit("control", {
@@ -418,9 +417,8 @@ function createViewerPeer(id){
   const transceiver = pc.addTransceiver("video", { direction: "sendonly" });
   viewers[id] = { pc, sender: transceiver.sender };
 
-  if (currentLiveStream && currentLiveStream.getVideoTracks()[0]) {
-    transceiver.sender.replaceTrack(currentLiveStream.getVideoTracks()[0]);
-  }
+  const track = getProgramTrack();
+  if (track) transceiver.sender.replaceTrack(track);
 
   pc.onicecandidate = e => {
     if (e.candidate) {
@@ -436,14 +434,22 @@ function createViewerPeer(id){
 }
 
 function updateViewerFeeds(){
-  const track = currentLiveStream && currentLiveStream.getVideoTracks
-    ? currentLiveStream.getVideoTracks()[0]
-    : null;
+  const track = getProgramTrack();
 
   Object.values(viewers).forEach(v => {
     if (!v.sender) return;
     v.sender.replaceTrack(track || null);
   });
+}
+
+function getProgramTrack(){
+  if (!programStream) {
+    if (!mainVideo) return null;
+    if (!mainVideo.captureStream) return null;
+    programStream = mainVideo.captureStream();
+  }
+  const tracks = programStream.getVideoTracks();
+  return tracks && tracks[0] ? tracks[0] : null;
 }
 
 /* ===== SIGNAL ===== */
