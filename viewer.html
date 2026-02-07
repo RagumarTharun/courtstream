@@ -120,7 +120,7 @@ body{
 
 <div class="viewer">
   <div class="player">
-    <video id="v" autoplay playsinline></video>
+    <video id="v" autoplay muted playsinline></video>
 
     <div class="stream-badge" id="streamBadge">CourtStream • LIVE</div>
     <div class="live-badge">LIVE</div>
@@ -217,6 +217,8 @@ setDebug("Viewer: joined room\nwaiting offer...");
 pc.ontrack = e => {
   trackCount += 1;
   video.srcObject = e.streams[0];
+  video.muted = true;
+  video.onloadedmetadata = () => video.play().catch(()=>{});
   setDebug(
     `conn:${pc.connectionState}\nice:${pc.iceConnectionState}\ntracks:${trackCount}\ntrack received`
   );
