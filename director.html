@@ -231,6 +231,7 @@ let programRotation = 0;
 let programLoopRunning = false;
 let programTrackReady = false;
 let viewerTrack = null;
+const pendingViewers = new Set();
 
 /* ===== JOIN ===== */
 socket.emit("join", { room: streamId, role: "director" });
@@ -241,7 +242,7 @@ socket.on("existing-peers", peersList => {
   peersList.forEach(({ id, role }) => {
     if (!id) return;
     if (role === "viewer") {
-      if (!viewers[id]) createViewerPeer(id);
+      if (!viewers[id]) queueOrCreateViewer(id);
       return;
     }
     if (!peers[id]) createPeer(id);
@@ -253,7 +254,7 @@ socket.on("peer-joined", ({ id, role }) => {
   if (!id) return;
   if (role === "viewer") {
     if (viewers[id]) return;
-    createViewerPeer(id);
+    queueOrCreateViewer(id);
     return;
   }
   if (peers[id]) return;
@@ -262,7 +263,7 @@ socket.on("peer-joined", ({ id, role }) => {
 
 socket.on("viewer-ready", ({ id }) => {
   if (!id) return;
-  if (!viewers[id]) createViewerPeer(id);
+  if (!viewers[id]) queueOrCreateViewer(id);
 });
 
 /* ===== PEER LEFT ===== */
@@ -420,10 +421,14 @@ function setLiveCamera(id){
   startProgramLoop();
   updateViewerFeeds();
   setTimeout(updateViewerFeeds, 500);
+  flushPendingViewers();
 }
 
 /* ===== VIEWERS ===== */
 function createViewerPeer(id){
+  const track = getViewerTrack();
+  if (!track) return;
+
   const pc = new RTCPeerConnection({
     iceServers: [
       {
@@ -447,14 +452,9 @@ function createViewerPeer(id){
     ]
   });
 
-  const transceiver = pc.addTransceiver("video", { direction: "sendonly" });
-  viewers[id] = { pc, sender: transceiver.sender };
-
-  startProgramLoop();
-  const track = getViewerTrack();
-  if (track) {
-    transceiver.sender.replaceTrack(track);
-  }
+  const stream = new MediaStream([track]);
+  const sender = pc.addTrack(track, stream);
+  viewers[id] = { pc, sender };
 
   pc.onicecandidate = e => {
     if (e.candidate) {
@@ -467,6 +467,25 @@ function createViewerPeer(id){
     .then(() => {
       socket.emit("signal",{ to:id, data:pc.localDescription });
     });
+}
+
+function queueOrCreateViewer(id){
+  const track = getViewerTrack();
+  if (track) {
+    createViewerPeer(id);
+  } else {
+    pendingViewers.add(id);
+  }
+}
+
+function flushPendingViewers(){
+  if (!pendingViewers.size) return;
+  const track = getViewerTrack();
+  if (!track) return;
+  Array.from(pendingViewers).forEach(id => {
+    pendingViewers.delete(id);
+    if (!viewers[id]) createViewerPeer(id);
+  });
 }
 
 function updateViewerFeeds(){
