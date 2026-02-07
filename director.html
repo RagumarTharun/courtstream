@@ -253,6 +253,11 @@ socket.on("peer-joined", ({ id, role }) => {
   createPeer(id);
 });
 
+socket.on("viewer-ready", ({ id }) => {
+  if (!id) return;
+  if (!viewers[id]) createViewerPeer(id);
+});
+
 /* ===== PEER LEFT ===== */
 function removePeer(id){
   const p = peers[id];
@@ -425,7 +430,7 @@ function createViewerPeer(id){
   const transceiver = pc.addTransceiver("video", { direction: "sendonly" });
   viewers[id] = { pc, sender: transceiver.sender };
 
-  const track = getProgramTrack();
+  const track = getViewerTrack();
   if (track) transceiver.sender.replaceTrack(track);
 
   pc.onicecandidate = e => {
@@ -442,12 +447,20 @@ function createViewerPeer(id){
 }
 
 function updateViewerFeeds(){
-  const track = getProgramTrack();
+  const track = getViewerTrack();
 
   Object.values(viewers).forEach(v => {
     if (!v.sender) return;
     v.sender.replaceTrack(track || null);
   });
+}
+
+function getViewerTrack(){
+  const live = currentLiveId && peers[currentLiveId]
+    ? peers[currentLiveId].stream
+    : null;
+  const liveTrack = live && live.getVideoTracks ? live.getVideoTracks()[0] : null;
+  return liveTrack || getProgramTrack();
 }
 
 function getProgramTrack(){
@@ -514,3 +527,5 @@ socket.on("signal", async ({ from, data }) => {
 
 </body>
 </html>
+
+
