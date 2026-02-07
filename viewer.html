@@ -99,6 +99,20 @@ body{
   cursor:pointer;
   font-size:12px;
 }
+
+.debug{
+  position:absolute;
+  bottom:14px;
+  left:14px;
+  background:rgba(15,17,21,.85);
+  border:1px solid var(--border);
+  padding:8px 10px;
+  border-radius:10px;
+  font-size:11px;
+  color:var(--muted);
+  max-width:70%;
+  white-space:pre-line;
+}
 </style>
 </head>
 
@@ -114,6 +128,8 @@ body{
     <div class="controls">
       <button class="ctrl-btn" onclick="toggleFullscreen()">Fullscreen</button>
     </div>
+
+    <div class="debug" id="debug">Viewer: init</div>
   </div>
 </div>
 
@@ -124,7 +140,13 @@ const streamId = params.get("stream");
 const streamName = params.get("name");
 const video = document.getElementById("v");
 const badge = document.getElementById("streamBadge");
+const debug = document.getElementById("debug");
 let directorId = null;
+let trackCount = 0;
+
+function setDebug(msg){
+  debug.innerText = msg;
+}
 
 async function updateStreamBadge(){
   let name = streamName;
@@ -181,11 +203,23 @@ const pc = new RTCPeerConnection({
   ]
 });
 
+pc.onconnectionstatechange = () => {
+  setDebug(
+    `conn:${pc.connectionState}\nice:${pc.iceConnectionState}\ntracks:${trackCount}`
+  );
+};
+pc.oniceconnectionstatechange = pc.onconnectionstatechange;
+
 socket.emit("join", { room: streamId, role: "viewer" });
 socket.emit("viewer-ready", { room: streamId });
+setDebug("Viewer: joined room\nwaiting offer...");
 
 pc.ontrack = e => {
+  trackCount += 1;
   video.srcObject = e.streams[0];
+  setDebug(
+    `conn:${pc.connectionState}\nice:${pc.iceConnectionState}\ntracks:${trackCount}\ntrack received`
+  );
 };
 
 pc.onicecandidate = e => {
@@ -199,6 +233,7 @@ socket.on("signal", async ({from,data})=>{
 
   if (data.type === "offer") {
     directorId = from;
+    setDebug("Offer received\ncreating answer...");
     await pc.setRemoteDescription(data);
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
@@ -211,10 +246,8 @@ socket.on("signal", async ({from,data})=>{
     return;
   }
 
-  // Ignore legacy SDP-wrapped messages
   if (data.sdp) return;
 
-  // Candidate can arrive as {candidate: ...} or as raw candidate init
   const candidateInit = data.candidate !== undefined ? data.candidate : data;
   if (!candidateInit) return;
   if (typeof candidateInit !== "object") return;
