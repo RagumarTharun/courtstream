@@ -147,9 +147,20 @@ app.post("/api/streams", (req, res) => {
 io.on("connection", socket => {
   console.log("🟢 SOCKET CONNECTED:", socket.id);
 
-  socket.on("join", room => {
+  socket.on("join", payload => {
+    let room = payload;
+    let role = null;
+
+    if (payload && typeof payload === "object") {
+      room = payload.room;
+      role = payload.role || null;
+    }
+
+    if (!room) return;
+
     socket.join(room);
     socket.room = room;
+    socket.role = role;
 
     const clients =
       io.sockets.adapter.rooms.get(room) || new Set();
@@ -159,10 +170,16 @@ io.on("connection", socket => {
     // ✅ Send existing peers (critical)
     socket.emit(
       "existing-peers",
-      others.map(id => ({ id }))
+      others.map(id => {
+        const s = io.sockets.sockets.get(id);
+        return { id, role: s && s.role ? s.role : null };
+      })
     );
 
-    socket.to(room).emit("peer-joined", { id: socket.id });
+    socket.to(room).emit("peer-joined", {
+      id: socket.id,
+      role: socket.role || null
+    });
   });
 
   socket.on("signal", ({ to, data }) => {
