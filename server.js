@@ -198,6 +198,11 @@ io.on("connection", socket => {
     });
   });
 
+  socket.on("viewer-ready", ({ room }) => {
+    if (!room) return;
+    socket.to(room).emit("viewer-ready", { id: socket.id });
+  });
+
   socket.on("disconnect", () => {
     if (socket.room) {
       const payload = { id: socket.id };
