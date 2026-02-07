@@ -167,7 +167,26 @@ let hasPickedDefault = false;
 
 const socket = io();
 const pc = new RTCPeerConnection({
-  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+  iceServers: [
+    {
+      urls: [
+        "stun:stun.cloudflare.com:3478",
+        "stun:stun.cloudflare.com:53"
+      ]
+    },
+    {
+      urls: [
+        "turn:turn.cloudflare.com:3478?transport=udp",
+        "turn:turn.cloudflare.com:3478?transport=tcp",
+        "turns:turn.cloudflare.com:5349?transport=tcp",
+        "turn:turn.cloudflare.com:53?transport=udp",
+        "turn:turn.cloudflare.com:80?transport=tcp",
+        "turns:turn.cloudflare.com:443?transport=tcp"
+      ],
+      username: "g07ef1b745ad2a747da14d563e4bfbd538f21945297c2fad25578fb243c68286",
+      credential: "3882b29cc1772be95d469efdb14ccd45ed1b79ec8c52d9e0d8070720e093b43d"
+    }
+  ]
 });
 
 /* ===== CAMERA ===== */
