@@ -202,7 +202,10 @@ socket.on("signal", async ({from,data})=>{
     await pc.setLocalDescription(ans);
     socket.emit("signal",{to:from,data:pc.localDescription});
   }
-  if(data.candidate) await pc.addIceCandidate(data.candidate);
+  if(data.candidate || data.type === "candidate" || data.sdp === undefined){
+    const candidate = data.candidate ? data.candidate : data;
+    if (candidate) await pc.addIceCandidate(candidate);
+  }
 });
 </script>
 </body>
