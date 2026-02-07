@@ -229,6 +229,7 @@ let currentLiveId = null;
 let programStream = null;
 let programRotation = 0;
 let programLoopRunning = false;
+let programTrackReady = false;
 
 /* ===== JOIN ===== */
 socket.emit("join", { room: streamId, role: "director" });
@@ -396,6 +397,7 @@ function setLiveCamera(id){
   currentLiveId = id;
   programRotation = rotations[id] || 0;
   programStream = null;
+  programTrackReady = false;
 
   Object.keys(peers).forEach(peerId => {
     socket.emit("control", {
@@ -507,10 +509,29 @@ function startProgramLoop(){
       updateViewerFeeds();
     }
 
+    const trackNow = getProgramTrack();
+    if (trackNow && !programTrackReady) {
+      programTrackReady = true;
+      renegotiateAllViewers();
+    }
+
     requestAnimationFrame(draw);
   };
 
   requestAnimationFrame(draw);
+}
+
+function renegotiateAllViewers(){
+  Object.entries(viewers).forEach(([id, v]) => {
+    if (!v || !v.pc) return;
+    const track = getProgramTrack();
+    if (track && v.sender) v.sender.replaceTrack(track);
+    v.pc.createOffer()
+      .then(o => v.pc.setLocalDescription(o))
+      .then(() => {
+        socket.emit("signal",{ to:id, data:v.pc.localDescription });
+      });
+  });
 }
 
 /* ===== SIGNAL ===== */
