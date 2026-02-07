@@ -211,16 +211,16 @@ socket.on("signal", async ({from,data})=>{
     return;
   }
 
-  if (data.candidate !== undefined) {
-    if (data.candidate) {
-      await pc.addIceCandidate(data.candidate);
-    }
-    return;
-  }
+  // Ignore legacy SDP-wrapped messages
+  if (data.sdp) return;
 
-  if (data.candidate === undefined && data.type === undefined) {
-    await pc.addIceCandidate(data);
-  }
+  // Candidate can arrive as {candidate: ...} or as raw candidate init
+  const candidateInit = data.candidate !== undefined ? data.candidate : data;
+  if (!candidateInit) return;
+  if (typeof candidateInit !== "object") return;
+  if (!candidateInit.candidate && !candidateInit.sdpMid && !candidateInit.sdpMLineIndex) return;
+
+  await pc.addIceCandidate(candidateInit);
 });
 </script>
 </body>
