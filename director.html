@@ -395,6 +395,7 @@ function setLiveCamera(id){
   if (!id || !peers[id]) return;
   currentLiveId = id;
   programRotation = rotations[id] || 0;
+  programStream = null;
 
   Object.keys(peers).forEach(peerId => {
     socket.emit("control", {
@@ -405,6 +406,7 @@ function setLiveCamera(id){
 
   startProgramLoop();
   updateViewerFeeds();
+  setTimeout(updateViewerFeeds, 500);
 }
 
 /* ===== VIEWERS ===== */
@@ -463,8 +465,13 @@ function updateViewerFeeds(){
 
 function getProgramTrack(){
   if (!programStream) {
-    if (!programCanvas || !programCanvas.captureStream) return null;
-    programStream = programCanvas.captureStream(30);
+    if (mainVideo && mainVideo.captureStream && mainVideo.readyState >= 2) {
+      programStream = mainVideo.captureStream(30);
+    } else if (programCanvas && programCanvas.captureStream) {
+      programStream = programCanvas.captureStream(30);
+    } else {
+      return null;
+    }
   }
   const tracks = programStream.getVideoTracks();
   return tracks && tracks[0] ? tracks[0] : null;
