@@ -213,28 +213,41 @@ const mainVideo = document.getElementById("mainVideo");
 const placeholder = document.getElementById("placeholder");
 const strip = document.getElementById("cameraStrip");
 
-const peers = {};      // socketId -> { pc, stream, slot }
+const peers = {};      // camera socketId -> { pc, stream, slot }
+const viewers = {};    // viewer socketId -> { pc, sender }
 const rotations = {}; // socketId -> rotation degrees
 let currentLiveId = null;
+let currentLiveStream = null;
 
 /* ===== JOIN ===== */
-socket.emit("join", streamId);
+socket.emit("join", { room: streamId, role: "director" });
 
-/* ===== EXISTING CAMERAS ===== */
+/* ===== EXISTING PEERS ===== */
 socket.on("existing-peers", peersList => {
   if (!Array.isArray(peersList)) return;
-  peersList.forEach(({ id }) => {
-    if (id && !peers[id]) createPeer(id);
+  peersList.forEach(({ id, role }) => {
+    if (!id) return;
+    if (role === "viewer") {
+      if (!viewers[id]) createViewerPeer(id);
+      return;
+    }
+    if (!peers[id]) createPeer(id);
   });
 });
 
-/* ===== CAMERA JOINED ===== */
-socket.on("peer-joined", ({ id }) => {
+/* ===== PEER JOINED ===== */
+socket.on("peer-joined", ({ id, role }) => {
+  if (!id) return;
+  if (role === "viewer") {
+    if (viewers[id]) return;
+    createViewerPeer(id);
+    return;
+  }
   if (peers[id]) return;
   createPeer(id);
 });
 
-/* ===== CAMERA LEFT ===== */
+/* ===== PEER LEFT ===== */
 function removePeer(id){
   const p = peers[id];
   if (!p) return;
@@ -252,10 +265,22 @@ function removePeer(id){
 }
 
 socket.on("peer-left", ({ id }) => {
+  if (viewers[id]) {
+    const v = viewers[id];
+    v.pc.close();
+    delete viewers[id];
+    return;
+  }
   removePeer(id);
 });
 
 socket.on("camera-left", ({ id }) => {
+  if (viewers[id]) {
+    const v = viewers[id];
+    v.pc.close();
+    delete viewers[id];
+    return;
+  }
   removePeer(id);
 });
 
@@ -273,7 +298,7 @@ socket.on("camera-rotate", ({ from, rotation }) => {
   }
 });
 
-/* ===== CREATE PEER ===== */
+/* ===== CREATE CAMERA PEER ===== */
 function createPeer(id){
   const pc = new RTCPeerConnection({
     iceServers: [
@@ -349,9 +374,11 @@ function createPeer(id){
     });
 }
 
+/* ===== LIVE CAMERA ===== */
 function setLiveCamera(id){
   if (!id || !peers[id]) return;
   currentLiveId = id;
+  currentLiveStream = peers[id].stream || null;
 
   Object.keys(peers).forEach(peerId => {
     socket.emit("control", {
@@ -359,18 +386,79 @@ function setLiveCamera(id){
       data: { type: "live", on: peerId === id }
     });
   });
+
+  updateViewerFeeds();
+}
+
+/* ===== VIEWERS ===== */
+function createViewerPeer(id){
+  const pc = new RTCPeerConnection({
+    iceServers: [
+      {
+        urls: [
+          "stun:stun.cloudflare.com:3478",
+          "stun:stun.cloudflare.com:53"
+        ]
+      },
+      {
+        urls: [
+          "turn:turn.cloudflare.com:3478?transport=udp",
+          "turn:turn.cloudflare.com:3478?transport=tcp",
+          "turns:turn.cloudflare.com:5349?transport=tcp",
+          "turn:turn.cloudflare.com:53?transport=udp",
+          "turn:turn.cloudflare.com:80?transport=tcp",
+          "turns:turn.cloudflare.com:443?transport=tcp"
+        ],
+        username: "g07ef1b745ad2a747da14d563e4bfbd538f21945297c2fad25578fb243c68286",
+        credential: "3882b29cc1772be95d469efdb14ccd45ed1b79ec8c52d9e0d8070720e093b43d"
+      }
+    ]
+  });
+
+  const transceiver = pc.addTransceiver("video", { direction: "sendonly" });
+  viewers[id] = { pc, sender: transceiver.sender };
+
+  if (currentLiveStream && currentLiveStream.getVideoTracks()[0]) {
+    transceiver.sender.replaceTrack(currentLiveStream.getVideoTracks()[0]);
+  }
+
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit("signal",{ to:id, data:e.candidate });
+    }
+  };
+
+  pc.createOffer()
+    .then(o => pc.setLocalDescription(o))
+    .then(() => {
+      socket.emit("signal",{ to:id, data:pc.localDescription });
+    });
+}
+
+function updateViewerFeeds(){
+  const track = currentLiveStream && currentLiveStream.getVideoTracks
+    ? currentLiveStream.getVideoTracks()[0]
+    : null;
+
+  Object.values(viewers).forEach(v => {
+    if (!v.sender) return;
+    v.sender.replaceTrack(track || null);
+  });
 }
 
 /* ===== SIGNAL ===== */
 socket.on("signal", async ({ from, data }) => {
   const p = peers[from];
-  if (!p) return;
+  const v = viewers[from];
+  if (!p && !v) return;
 
   if (data.type) {
-    await p.pc.setRemoteDescription(data);
+    if (p) await p.pc.setRemoteDescription(data);
+    if (v) await v.pc.setRemoteDescription(data);
   }
   if (data.candidate) {
-    await p.pc.addIceCandidate(data);
+    if (p) await p.pc.addIceCandidate(data);
+    if (v) await v.pc.addIceCandidate(data);
   }
 });
 </script>
