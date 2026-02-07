@@ -230,6 +230,7 @@ let programStream = null;
 let programRotation = 0;
 let programLoopRunning = false;
 let programTrackReady = false;
+let viewerTrack = null;
 
 /* ===== JOIN ===== */
 socket.emit("join", { room: streamId, role: "director" });
@@ -398,6 +399,16 @@ function setLiveCamera(id){
   programRotation = rotations[id] || 0;
   programStream = null;
   programTrackReady = false;
+  if (viewerTrack) {
+    viewerTrack.stop();
+    viewerTrack = null;
+  }
+
+  const live = peers[id].stream;
+  const liveTrack = live && live.getVideoTracks ? live.getVideoTracks()[0] : null;
+  if (liveTrack) {
+    viewerTrack = liveTrack.clone();
+  }
 
   Object.keys(peers).forEach(peerId => {
     socket.emit("control", {
@@ -440,8 +451,10 @@ function createViewerPeer(id){
   viewers[id] = { pc, sender: transceiver.sender };
 
   startProgramLoop();
-  const track = getProgramTrack();
-  if (track) transceiver.sender.replaceTrack(track);
+  const track = getViewerTrack();
+  if (track) {
+    transceiver.sender.replaceTrack(track);
+  }
 
   pc.onicecandidate = e => {
     if (e.candidate) {
@@ -457,12 +470,17 @@ function createViewerPeer(id){
 }
 
 function updateViewerFeeds(){
-  const track = getProgramTrack();
+  const track = getViewerTrack();
 
   Object.values(viewers).forEach(v => {
     if (!v.sender) return;
     v.sender.replaceTrack(track || null);
   });
+}
+
+function getViewerTrack(){
+  if (viewerTrack) return viewerTrack;
+  return getProgramTrack();
 }
 
 function getProgramTrack(){
@@ -524,7 +542,7 @@ function startProgramLoop(){
 function renegotiateAllViewers(){
   Object.entries(viewers).forEach(([id, v]) => {
     if (!v || !v.pc) return;
-    const track = getProgramTrack();
+    const track = getViewerTrack();
     if (track && v.sender) v.sender.replaceTrack(track);
     v.pc.createOffer()
       .then(o => v.pc.setLocalDescription(o))
