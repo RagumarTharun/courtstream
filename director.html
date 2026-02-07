@@ -178,7 +178,12 @@ body{
 
 </div>
 
-<canvas id="programCanvas" width="1280" height="720" style="display:none;"></canvas>
+<canvas
+  id="programCanvas"
+  width="1280"
+  height="720"
+  style="position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none;"
+></canvas>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -430,7 +435,8 @@ function createViewerPeer(id){
   const transceiver = pc.addTransceiver("video", { direction: "sendonly" });
   viewers[id] = { pc, sender: transceiver.sender };
 
-  const track = getViewerTrack();
+  startProgramLoop();
+  const track = getProgramTrack();
   if (track) transceiver.sender.replaceTrack(track);
 
   pc.onicecandidate = e => {
@@ -447,20 +453,12 @@ function createViewerPeer(id){
 }
 
 function updateViewerFeeds(){
-  const track = getViewerTrack();
+  const track = getProgramTrack();
 
   Object.values(viewers).forEach(v => {
     if (!v.sender) return;
     v.sender.replaceTrack(track || null);
   });
-}
-
-function getViewerTrack(){
-  const live = currentLiveId && peers[currentLiveId]
-    ? peers[currentLiveId].stream
-    : null;
-  const liveTrack = live && live.getVideoTracks ? live.getVideoTracks()[0] : null;
-  return liveTrack || getProgramTrack();
 }
 
 function getProgramTrack(){
