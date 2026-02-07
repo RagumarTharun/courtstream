@@ -182,6 +182,7 @@ const pc = new RTCPeerConnection({
 });
 
 socket.emit("join", { room: streamId, role: "viewer" });
+socket.emit("viewer-ready", { room: streamId });
 
 pc.ontrack = e => {
   video.srcObject = e.streams[0];
