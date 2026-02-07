@@ -164,6 +164,8 @@ let isLive = false;
 let videoDevices = [];
 let currentDeviceIndex = 0;
 let hasPickedDefault = false;
+let resolveCameraReady;
+const cameraReady = new Promise(r => { resolveCameraReady = r; });
 
 const socket = io();
 const pc = new RTCPeerConnection({
@@ -274,6 +276,10 @@ async function startCamera(){
   }
 
   mediaStream = stream;
+  if (resolveCameraReady) {
+    resolveCameraReady();
+    resolveCameraReady = null;
+  }
 }
 startCamera();
 
@@ -357,6 +363,7 @@ pc.onicecandidate = e=>{
 socket.on("signal", async ({from,data})=>{
   if(data.type === "offer"){
     directorId = from;
+    await cameraReady;
     await pc.setRemoteDescription(data);
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
