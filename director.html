@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CourtStream – Director</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161922;
+      --border: #262b3d;
+      --text: #e6e6eb;
+      --muted: #9aa0b4;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --green: #22c55e;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui;
+      height: 100vh;
+    }
+
+    /* ===== LAYOUT ===== */
+    .director {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 14px;
+      padding: 14px;
+      height: 100%;
+    }
+
+    /* ===== PANELS ===== */
+    .panel {
+      background: var(--panel);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+
+    /* ===== MAIN PREVIEW ===== */
+    .main-feed {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      overflow: hidden;
+    }
+
+    /* Fixed preview size */
+    .main-feed::before {
+      content: "";
+      display: block;
+      padding-top: 56.25%;
+    }
+
+    .main-feed video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+      transform-origin: center center;
+    }
+
+    /* Placeholder */
+    .placeholder {
+      position: absolute;
+      color: var(--muted);
+      font-size: 14px;
+      z-index: 2;
+    }
+
+    /* Top-left badge */
+    .stream-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      z-index: 2;
+    }
+
+    /* Record badge */
+    .record-bar {
+      position: absolute;
+      bottom: 14px;
+      left: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      z-index: 2;
+    }
+
+    .record-dot {
+      width: 10px;
+      height: 10px;
+      background: var(--red);
+      border-radius: 50%;
+    }
+
+    /* Top-right controls */
+    .main-controls {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      display: flex;
+      gap: 8px;
+      z-index: 2;
+    }
+
+    .ctrl-btn {
+      border: none;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      color: #fff;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .ctrl-btn:hover {
+      background: var(--border);
+    }
+
+    .ctrl-btn.active {
+      background: var(--red);
+      border-color: var(--red);
+    }
+
+    .ctrl-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    /* ===== RIGHT CAMERA STRIPE ===== */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px;
+      overflow-y: auto;
+    }
+
+    .side-title {
+      font-size: 13px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .camera-slot {
+      background: #000;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      flex-shrink: 0;
+      padding-top: 6px;
+    }
+
+    .camera-slot video {
+      width: 100%;
+      height: 140px;
+      object-fit: contain;
+      background: #000;
+      transform-origin: center center;
+    }
+
+    .camera-slot span {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      font-size: 12px;
+      background: rgba(0, 0, 0, .6);
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: #fff;
+    }
+
+    .camera-name {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: #fff;
+      font-size: 12px;
+      padding: 6px 10px 4px;
+      outline: none;
+    }
+
+    .camera-actions {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      display: flex;
+      gap: 6px;
+      z-index: 2;
+    }
+
+    .mini-btn {
+      border: none;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 4px 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 10px;
+    }
+
+    /* ===== MODALS ===== */
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .6);
+      z-index: 20;
+    }
+
+    .modal-box {
+      background: #161922;
+      border-radius: 14px;
+      padding: 20px;
+      width: 340px;
+      text-align: center;
+      border: 1px solid #262b3d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .modal-box h3 {
+      margin: 0 0 10px
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .modal video {
+      width: 100%;
+      border-radius: 10px;
+      background: #000;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="director">
+
+    <!-- MAIN PREVIEW -->
+    <div class="panel main-feed">
+      <video id="mainVideo" autoplay muted playsinline></video>
+      <div id="placeholder" class="placeholder">Select a camera to preview</div>
+
+      <div class="stream-badge" id="streamBadge"></div>
+
+      <div class="main-controls">
+        <!-- RECORD -->
+        <button id="recordBtn" class="ctrl-btn" title="Record">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-4-4h8v-8H8v8z"
+              class="stop-icon" style="display:none" />
+            <circle cx="12" cy="12" r="5" class="rec-icon" />
+          </svg>
+        </button>
+
+        <!-- PLAYBACK -->
+        <button id="playbackBtn" class="ctrl-btn" title="Playback Editor" onclick="goToPlayback()">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z" />
+          </svg>
+        </button>
+
+        <!-- QR CODE -->
+        <button id="qrBtn" class="ctrl-btn" title="Scan QR">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 3h8v8H3zm2 2v4h4V5zm8-2h8v8h-8zm2 2v4h4V5zM3 13h8v8H3zm2 2v4h4v-4zm8-2h8v8h-8zm2 2v4h4v-4z" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="record-bar" id="recordBar" style="display:none;">
+        <div class="record-dot"></div>
+        <div id="recordTimer">00:00:00</div>
+        <div id="recordStatus" style="color:var(--muted);font-size:12px;">REC</div>
+      </div>
+    </div>
+
+    <!-- RIGHT CAMERA STRIPE -->
+    <div class="panel side-panel" id="cameraStrip">
+      <div class="side-title">
+        <span>Cameras</span>
+      </div>
+    </div>
+
+  </div>
+
+  <canvas id="programCanvas" width="1280" height="720"
+    style="position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none;"></canvas>
+
+  <!-- QR MODAL -->
+  <div class="modal" id="qrModal">
+    <div class="modal-box">
+      <h3>Scan to Join as Camera</h3>
+      <div id="qrCode" style="background:#fff;padding:10px;border-radius:8px;"></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px;word-break:break-all;" id="qrLink"></div>
+      <div class="modal-actions">
+        <button class="ctrl-btn" onclick="closeQr()"
+          style="width:auto;height:auto;padding:8px 16px;border-radius:8px;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
+  <script>
+    /* ===== STREAM INFO ===== */
+    const params = new URLSearchParams(location.search);
+    const streamId = params.get("stream");
+    let streamName = params.get("name");
+    let streamLabel = "";
+
+    async function updateStreamBadge() {
+      let name = streamName;
+
+      if (!name && streamId) {
+        try {
+          const res = await fetch("/api/streams");
+          if (res.ok) {
+            const streams = await res.json();
+            const match = streams.find(s => s.id === streamId);
+            if (match) name = match.name;
+          }
+        } catch {
+          // fallback below
+        }
+      }
+
+      const label = name || streamId || "Unknown Stream";
+      streamLabel = label;
+      document.getElementById("streamBadge").innerText =
+        label + " • LIVE";
+    }
+    updateStreamBadge();
+
+    /* ===== SOCKET / STATE ===== */
+    const socket = io();
+    const mainVideo = document.getElementById("mainVideo");
+    const placeholder = document.getElementById("placeholder");
+    const strip = document.getElementById("cameraStrip");
+    const programCanvas = document.getElementById("programCanvas");
+    const programCtx = programCanvas.getContext("2d");
+
+    const peers = {};      // camera socketId -> { pc, stream, slot, name }
+    const viewers = {};    // viewer socketId -> { pc, sender }
+    const rotations = {}; // socketId -> rotation degrees
+    let currentLiveId = null;
+    const pendingViewers = new Set();
+
+    let programStream = programCanvas.captureStream(30);
+    mainVideo.srcObject = programStream;
+    mainVideo.onloadedmetadata = () => mainVideo.play().catch(() => { });
+
+    let selectedStream = null;
+    let drawLoopRunning = false;
+
+    /* ===== RECORDING ===== */
+    let recordingState = "idle"; // idle | recording | paused
+    let recordStartTime = 0;
+    let recordTimerInt = null;
+    let programRecorder = null;
+    const programChunks = [];
+    const cameraRecorders = {}; // id -> { recorder, chunks }
+
+    /* ===== JOIN ===== */
+    socket.emit("join", { room: streamId, role: "director" });
+
+    // Proactive Discovery: Poll for peers every 5 seconds to catch missed joins
+    setInterval(() => {
+      socket.emit("join", { room: streamId, role: "director" }); // Re-emit join to trigger server-side existing-peers list
+    }, 5000);
+
+    /* ===== EXISTING PEERS ===== */
+    socket.on("existing-peers", peersList => {
+      console.log("👥 Existing peers:", peersList);
+      if (!Array.isArray(peersList)) return;
+      peersList.forEach(({ id, role }) => {
+        if (!id || id === socket.id) return;
+        if (role === "viewer") {
+          if (!viewers[id]) queueOrCreateViewer(id);
+          return;
+        }
+        if (role === "director") return; // Ignore other directors
+        if (!peers[id]) createPeer(id);
+      });
+    });
+
+    /* ===== PEER JOINED ===== */
+    socket.on("peer-joined", ({ id, role }) => {
+      console.log("👤 Peer joined:", id, "role:", role);
+      if (!id || id === socket.id) return;
+      if (role === "viewer") {
+        if (viewers[id]) return;
+        queueOrCreateViewer(id);
+        return;
+      }
+      if (role === "director") return;
+      if (peers[id]) return;
+      createPeer(id);
+    });
+
+    socket.on("viewer-ready", ({ id }) => {
+      console.log("👀 Viewer ready:", id);
+      if (!id) return;
+      if (!viewers[id]) {
+        createViewerPeer(id);
+      } else {
+        console.log("👀 Viewer already exists, swapping track to current live");
+        updateViewerFeeds();
+      }
+    });
+
+    /* ===== PEER LEFT ===== */
+    function removePeer(id) {
+      const p = peers[id];
+      if (!p) return;
+
+      p.pc.close();
+      p.slot.remove();
+      delete peers[id];
+      delete rotations[id];
+
+      if (currentLiveId === id) {
+        currentLiveId = null;
+        selectedStream = null;
+        placeholder.style.display = "block";
+        updateViewerFeeds();
+      }
+    }
+
+    socket.on("peer-left", ({ id }) => {
+      if (viewers[id]) {
+        const v = viewers[id];
+        v.pc.close();
+        delete viewers[id];
+        return;
+      }
+      removePeer(id);
+    });
+
+    socket.on("camera-left", ({ id }) => {
+      if (viewers[id]) {
+        const v = viewers[id];
+        v.pc.close();
+        delete viewers[id];
+        return;
+      }
+      removePeer(id);
+    });
+
+    /* ===== CAMERA ROTATION (MANUAL) ===== */
+    socket.on("camera-rotate", ({ from, rotation }) => {
+      rotations[from] = rotation;
+      const p = peers[from];
+      if (!p) return;
+
+      const v = p.slot.querySelector("video");
+      if (v) v.style.transform = `rotate(${rotation}deg)`;
+    });
+
+    /* ===== CREATE CAMERA PEER ===== */
+    let cameraCount = 0;
+    function createPeer(id) {
+      if (!id || peers[id]) return;
+
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          {
+            urls: [
+              "stun:stun.cloudflare.com:3478",
+              "stun:stun.cloudflare.com:53"
+            ]
+          },
+          {
+            urls: [
+              "turn:turn.cloudflare.com:3478?transport=udp",
+              "turn:turn.cloudflare.com:3478?transport=tcp",
+              "turns:turn.cloudflare.com:5349?transport=tcp",
+              "turn:turn.cloudflare.com:53?transport=udp",
+              "turn:turn.cloudflare.com:80?transport=tcp",
+              "turns:turn.cloudflare.com:443?transport=tcp"
+            ],
+            username: "g07ef1b745ad2a747da14d563e4bfbd538f21945297c2fad25578fb243c68286",
+            credential: "3882b29cc1772be95d469efdb14ccd45ed1b79ec8c52d9e0d8070720e093b43d"
+          }
+        ]
+      });
+
+      pc.addTransceiver("video", { direction: "recvonly" });
+      pc.addTransceiver("audio", { direction: "recvonly" });
+
+      const slot = document.createElement("div");
+      slot.className = "camera-slot";
+
+      const nameInput = document.createElement("input");
+      nameInput.className = "camera-name";
+      cameraCount += 1;
+      nameInput.value = `Camera ${cameraCount}`;
+
+      const actions = document.createElement("div");
+      actions.className = "camera-actions";
+
+      slot.appendChild(actions);
+      slot.appendChild(nameInput);
+
+      strip.appendChild(slot);
+
+      peers[id] = { pc, slot, stream: null, name: nameInput.value };
+
+      nameInput.oninput = () => {
+        peers[id].name = nameInput.value.trim() || `Camera ${cameraCount}`;
+      };
+
+      pc.ontrack = e => {
+        console.log("🎥 Received track from:", id);
+        if (peers[id].stream) return;
+
+        const stream = e.streams[0] || new MediaStream([e.track]);
+        peers[id].stream = stream;
+
+        const v = document.createElement("video");
+        v.autoplay = true;
+        v.muted = true;
+        v.playsInline = true;
+        v.srcObject = stream;
+        v.style.transform = `rotate(${rotations[id] || 0}deg)`;
+
+        v.onloadedmetadata = () => {
+          console.log("🎬 Video metadata loaded for:", id);
+          v.play().catch(err => console.error("Video play error:", err));
+        };
+
+        slot.appendChild(v);
+        slot.onclick = () => setLiveCamera(id);
+
+        if (recordingState !== "idle") {
+          startCameraRecorder(id, stream);
+        }
+      };
+
+      pc.onicecandidate = e => {
+        if (e.candidate) {
+          socket.emit("signal", { to: id, data: e.candidate });
+        }
+      };
+
+      pc.createOffer()
+        .then(o => pc.setLocalDescription(o))
+        .then(() => {
+          console.log("📡 Director: Sending offer to camera", id);
+          socket.emit("signal", { to: id, data: pc.localDescription });
+        })
+        .catch(err => console.error("Offer error:", err));
+    }
+
+    function setLiveCamera(id) {
+      if (!id || !peers[id] || !peers[id].stream) {
+        console.warn("⚠️ Cannot set live: No stream for", id);
+        return;
+      }
+      currentLiveId = id;
+      selectedStream = peers[id].stream;
+
+      document.querySelectorAll(".camera-slot").forEach(s => s.classList.remove("live"));
+      if (peers[id].slot) peers[id].slot.classList.add("live");
+
+      Object.keys(peers).forEach(peerId => {
+        socket.emit("control", {
+          to: peerId,
+          data: { type: "live", on: peerId === id }
+        });
+      });
+
+      if (placeholder) placeholder.style.setProperty("display", "none", "important");
+      updateViewerFeeds();
+      startDrawLoop();
+    }
+
+    /* ===== VIEWERS ===== */
+    function createViewerPeer(id) {
+      console.log("📡 Director: Creating peer for viewer", id);
+      const track = getViewerTrack();
+      if (!track) {
+        console.warn("⚠️ Director: No track available for viewer!");
+        return;
+      }
+
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+          { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.cloudflare.com:53"] }
+        ]
+      });
+
+      const stream = new MediaStream([track]);
+      const sender = pc.addTrack(track, stream);
+      viewers[id] = { pc, sender };
+
+      pc.onicecandidate = e => {
+        if (e.candidate) {
+          socket.emit("signal", { to: id, data: e.candidate });
+        }
+      };
+
+      pc.createOffer()
+        .then(o => pc.setLocalDescription(o))
+        .then(() => {
+          console.log("📡 Director: Sending offer to viewer", id);
+          socket.emit("signal", { to: id, data: pc.localDescription });
+        })
+        .catch(err => console.error("Offer error:", err));
+    }
+
+    function queueOrCreateViewer(id) {
+      createViewerPeer(id);
+    }
+
+    function flushPendingViewers() {
+      // No-op now as we always have a program track
+    }
+
+    function updateViewerFeeds() {
+      const track = getViewerTrack();
+      if (!track) return;
+      Object.values(viewers).forEach(v => {
+        if (v.sender) {
+          v.sender.replaceTrack(track).catch(err => console.error("replaceTrack error:", err));
+        }
+      });
+    }
+
+    function getViewerTrack() {
+      // ALWAYS use programStream (canvas) for viewers for maximum stability.
+      // This ensures viewers don't experience disconnects when cameras swap.
+      return programStream.getVideoTracks()[0];
+    }
+
+    /* ===== PROGRAM CANVAS DRAW ===== */
+    function startDrawLoop() {
+      if (drawLoopRunning) return;
+      drawLoopRunning = true;
+
+      const draw = () => {
+        const w = programCanvas.width;
+        const h = programCanvas.height;
+
+        programCtx.fillStyle = "#000";
+        programCtx.fillRect(0, 0, w, h);
+
+        if (currentLiveId && peers[currentLiveId]) {
+          const videoEl = peers[currentLiveId].slot.querySelector("video");
+
+          if (videoEl && videoEl.readyState >= 2) {
+            const vw = videoEl.videoWidth;
+            const vh = videoEl.videoHeight;
+
+            if (vw > 0 && vh > 0) {
+              const scale = Math.min(w / vw, h / vh);
+              const dw = vw * scale;
+              const dh = vh * scale;
+              const rot = rotations[currentLiveId] || 0;
+
+              programCtx.save();
+              programCtx.translate(w / 2, h / 2);
+              programCtx.rotate((rot * Math.PI) / 180);
+              programCtx.drawImage(videoEl, -dw / 2, -dh / 2, dw, dh);
+              programCtx.restore();
+            }
+          }
+        }
+
+        // Use requestAnimationFrame for smoothness, 
+        // but also a setTimeout fallback so it keeps ticking in background tabs
+        if (document.hidden) {
+          setTimeout(draw, 100); // Lower rate when hidden to save CPU but stay "alive"
+        } else {
+          requestAnimationFrame(draw);
+        }
+      };
+
+      requestAnimationFrame(draw);
+    }
+    startDrawLoop();
+
+    /* ===== RECORDING UI ===== */
+    const recordBtn = document.getElementById("recordBtn");
+    const stopIcon = recordBtn.querySelector(".stop-icon");
+    const recIcon = recordBtn.querySelector(".rec-icon");
+
+    recordBtn.onclick = () => {
+      if (recordingState === "idle") {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    };
+
+    document.getElementById("qrBtn").onclick = () => openQr();
+
+    function startRecording() {
+      if (recordingState !== "idle") return;
+
+      programChunks.length = 0;
+      programRecorder = createRecorder(programStream, programChunks);
+      programRecorder.start();
+
+      Object.keys(peers).forEach(id => {
+        if (peers[id].stream) startCameraRecorder(id, peers[id].stream);
+      });
+
+      recordingState = "recording";
+      recordBtn.classList.add("active");
+      recIcon.style.display = "none";
+      stopIcon.style.display = "block";
+      recordBar.style.display = "flex";
+      recordStatus.textContent = "REC";
+      recordStartTime = Date.now();
+      tickTimer();
+    }
+
+    function pauseRecording() {
+      if (recordingState !== "recording") return;
+      if (programRecorder && programRecorder.state === "recording") programRecorder.pause();
+      Object.values(cameraRecorders).forEach(r => r.recorder.state === "recording" && r.recorder.pause());
+      recordingState = "paused";
+      recordBtn.textContent = "Resume";
+      recordStatus.textContent = "PAUSED";
+      clearInterval(recordTimerInt);
+    }
+
+    function resumeRecording() {
+      if (recordingState !== "paused") return;
+      if (programRecorder && programRecorder.state === "paused") programRecorder.resume();
+      Object.values(cameraRecorders).forEach(r => r.recorder.state === "paused" && r.recorder.resume());
+      recordingState = "recording";
+      recordBtn.textContent = "Pause";
+      recordStatus.textContent = "REC";
+      recordStartTime = Date.now() - (parseTime(recordTimer.textContent) * 1000);
+      tickTimer();
+    }
+
+    function stopRecording() {
+      if (recordingState === "idle") return Promise.resolve();
+      recordingState = "idle";
+      recordBtn.classList.remove("active");
+      recIcon.style.display = "block";
+      stopIcon.style.display = "none";
+      recordStatus.textContent = "REC";
+      recordBar.style.display = "none";
+      clearInterval(recordTimerInt);
+
+      const stopPromises = [];
+      if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
+      Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
+
+      return Promise.all(stopPromises).then(() => {
+        return downloadAllRecordings();
+      });
+    }
+
+    function tickTimer() {
+      clearInterval(recordTimerInt);
+      recordTimerInt = setInterval(() => {
+        const elapsed = Math.max(0, Date.now() - recordStartTime);
+        recordTimer.textContent = formatTime(elapsed / 1000);
+      }, 500);
+    }
+
+    function createRecorder(stream, chunks) {
+      const type = getSupportedMime();
+      const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      rec.ondataavailable = e => {
+        if (e.data && e.data.size) chunks.push(e.data);
+      };
+      return rec;
+    }
+
+    function stopRecorder(rec) {
+      return new Promise(resolve => {
+        if (!rec || rec.state === "inactive") return resolve();
+        rec.onstop = () => resolve();
+        rec.stop();
+      });
+    }
+
+    function getSupportedMime() {
+      const types = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm"
+      ];
+      return types.find(t => MediaRecorder.isTypeSupported(t));
+    }
+
+    function startCameraRecorder(id, stream) {
+      if (cameraRecorders[id]) return;
+      const chunks = [];
+      const rec = createRecorder(stream, chunks);
+      cameraRecorders[id] = { recorder: rec, chunks };
+      rec.start();
+    }
+
+    function sanitizeName(str) {
+      return (str || "").toString().trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_\-]/g, "");
+    }
+
+    function formatDate(ts) {
+      const d = new Date(ts);
+      const pad = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+    }
+
+    function formatTime(sec) {
+      const s = Math.floor(sec);
+      const h = String(Math.floor(s / 3600)).padStart(2, "0");
+      const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+      const r = String(s % 60).padStart(2, "0");
+      return `${h}:${m}:${r}`;
+    }
+
+    function parseTime(t) {
+      const [h, m, s] = t.split(":").map(Number);
+      return h * 3600 + m * 60 + s;
+    }
+
+    /* ===== MP4 CONVERSION ===== */
+    let ffmpegInstance = null;
+    async function ensureFFmpeg() {
+      if (ffmpegInstance) return ffmpegInstance;
+      const { createFFmpeg, fetchFile } = FFmpeg;
+      const ffmpeg = createFFmpeg({ log: false });
+      await ffmpeg.load();
+      ffmpegInstance = { ffmpeg, fetchFile };
+      return ffmpegInstance;
+    }
+
+    async function convertToMp4(blob, baseName) {
+      const { ffmpeg, fetchFile } = await ensureFFmpeg();
+      const input = `${baseName}.webm`;
+      const output = `${baseName}.mp4`;
+
+      ffmpeg.FS("writeFile", input, await fetchFile(blob));
+      await ffmpeg.run("-i", input, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", "-movflags", "+faststart", output);
+      const data = ffmpeg.FS("readFile", output);
+      ffmpeg.FS("unlink", input);
+      ffmpeg.FS("unlink", output);
+      return new Blob([data.buffer], { type: "video/mp4" });
+    }
+
+    async function downloadAllRecordings() {
+      const timestamp = formatDate(Date.now());
+      const streamSafe = sanitizeName(streamLabel || "courtstream");
+
+      // Program (live)
+      if (programChunks.length) {
+        const webmBlob = new Blob(programChunks, { type: "video/webm" });
+        try {
+          const mp4Blob = await convertToMp4(webmBlob, "live");
+          downloadBlob(mp4Blob, `${streamSafe}_live_${timestamp}.mp4`);
+        } catch (e) {
+          console.warn("FFmpeg failed, downloading webm", e);
+          downloadBlob(webmBlob, `${streamSafe}_live_${timestamp}.webm`);
+        }
+      }
+
+      // Each camera
+      for (const [id, obj] of Object.entries(cameraRecorders)) {
+        const camName = sanitizeName(peers[id]?.name || "camera");
+        const chunks = obj.chunks || [];
+        if (!chunks.length) continue;
+
+        const webmBlob = new Blob(chunks, { type: "video/webm" });
+        try {
+          const mp4Blob = await convertToMp4(webmBlob, camName);
+          downloadBlob(mp4Blob, `${streamSafe}_${camName}_${timestamp}.mp4`);
+        } catch (e) {
+          console.warn("FFmpeg failed, downloading webm", e);
+          downloadBlob(webmBlob, `${streamSafe}_${camName}_${timestamp}.webm`);
+        }
+      }
+
+      programChunks.length = 0;
+      Object.keys(cameraRecorders).forEach(id => delete cameraRecorders[id]);
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    /* ===== QR ===== */
+    function openQr() {
+      const modal = document.getElementById("qrModal");
+      const box = document.getElementById("qrCode");
+      const linkBox = document.getElementById("qrLink");
+      box.innerHTML = "";
+
+      const url = `https://courtstream.live/camera-live.html?stream=${encodeURIComponent(streamId)}&name=${encodeURIComponent(streamLabel || "")}`;
+      new QRCode(box, {
+        text: url,
+        width: 200,
+        height: 200,
+        colorDark: "#ffffff",
+        colorLight: "#161922"
+      });
+      linkBox.textContent = url;
+      modal.style.display = "flex";
+    }
+
+    function closeQr() {
+      document.getElementById("qrModal").style.display = "none";
+    }
+
+    async function goToPlayback() {
+      if (recordingState !== "idle") {
+        if (confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
+          try {
+            await stopRecording();
+            // Allow time for downloads to initiate
+            setTimeout(() => location.href = "playback.html", 1500);
+          } catch (e) {
+            console.error(e);
+            alert("Error stopping recording: " + e);
+          }
+        }
+      } else {
+        location.href = "playback.html";
+      }
+    }
+
+    /* ===== SIGNAL ===== */
+    socket.on("signal", async ({ from, data }) => {
+      const p = peers[from];
+      const v = viewers[from];
+      if (!p && !v) {
+        console.log("📡 Director: Signal from unknown peer", from);
+        return;
+      }
+
+      try {
+        if (data.type) {
+          console.log(`📡 Director: Received ${data.type} from`, from);
+          if (p) await p.pc.setRemoteDescription(new RTCSessionDescription(data));
+          if (v) await v.pc.setRemoteDescription(new RTCSessionDescription(data));
+        } else {
+          // Robust candidate handling
+          let cand = null;
+          if (data.candidate !== undefined && typeof data.candidate === 'string') {
+            cand = data;
+          } else if (data.candidate && data.candidate.candidate !== undefined) {
+            cand = data.candidate;
+          } else if (data.sdpMid !== undefined) {
+            cand = data;
+          }
+
+          if (cand) {
+            console.log("✅ Director: Adding ICE candidate from", from);
+            if (p) await p.pc.addIceCandidate(new RTCIceCandidate(cand));
+            if (v) await v.pc.addIceCandidate(new RTCIceCandidate(cand));
+          }
+        }
+      } catch (e) {
+        console.warn("Signal error:", e);
+      }
+    });
+  </script>
+</body>
+
+</html>

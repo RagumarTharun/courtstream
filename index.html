@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Home – CourtStream</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Favicon (using SVG data URI for instant update) -->
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ef4444'><circle cx='12' cy='12' r='10'/><path d='M8 10l8 5-8 5V10z' fill='white'/></svg>">
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161922;
+      --border: #262b3d;
+      --text: #e6e6eb;
+      --muted: #9aa0b4;
+      --blue: #3b82f6;
+      --red: #ef4444;
+      --green: #22c55e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    /* HEADER */
+    header {
+      height: 64px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Play Button inside Basketball Icon */
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+    }
+
+    .user-menu {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 14px;
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .avatar:hover {
+      transform: scale(1.1);
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      background: var(--border);
+      color: var(--text);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    button.primary {
+      background: var(--blue);
+      color: white;
+    }
+
+    button.primary:hover {
+      background: #2563eb;
+    }
+
+    /* CONTAINER */
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 32px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+    }
+
+    .search-bar {
+      width: 100%;
+      max-width: 320px;
+      position: relative;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 12px 16px;
+      padding-left: 40px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: white;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: var(--blue);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      width: 16px;
+      height: 16px;
+    }
+
+    /* GRID */
+    .streams-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+      border-color: #3f4453;
+    }
+
+    .live-badge {
+      background: rgba(220, 38, 38, 0.9);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* CARD BODY */
+
+    .card-body {
+      padding: 16px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-title {
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+
+    .card-actions {
+      margin-top: auto;
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      flex: 1;
+      height: 40px;
+      /* Fixed height */
+      padding: 0;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      transition: all 0.2s ease;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .icon-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+      transition: transform 0.2s;
+    }
+
+    .icon-btn span {
+      position: absolute;
+      opacity: 0;
+      font-size: 13px;
+      font-weight: 600;
+      transform: translateX(10px);
+      transition: all 0.2s;
+    }
+
+    /* Hover State */
+    .icon-btn:hover {
+      width: auto;
+      /* Allow expansion if we were using width transition */
+      background: var(--border);
+      color: white;
+    }
+
+    .icon-btn:hover svg {
+      transform: translateX(-30px);
+      /* Move icon out or to side */
+      opacity: 0;
+    }
+
+    .icon-btn:hover span {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    /* Specific Colors on Hover */
+    .watch-btn:hover {
+      background: var(--blue);
+      border-color: var(--blue);
+    }
+
+    .cam-btn:hover {
+      background: var(--green);
+      border-color: var(--green);
+    }
+
+    .direct-btn:hover {
+      background: var(--red);
+      border-color: var(--red);
+    }
+
+    /* EMPTY STATE */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      background: var(--panel);
+      border-radius: 16px;
+      border: 1px dashed var(--border);
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div class="brand">
+      <!-- Play button inside Basketball SVG -->
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" stroke="var(--red)" />
+        <path d="M2.5 12h19M12 2.5a14 14 0 0 1 0 19M12 2.5a14 14 0 0 0 0 19" stroke="var(--red)" stroke-width="1.5"
+          opacity="0.5" />
+        <!-- Triangle Play -->
+        <path d="M10 8l6 4-6 4V8z" fill="white" stroke="none" />
+      </svg>
+      CourtStream
+    </div>
+    <div class="user-menu" id="userMenu" style="display:none">
+      <div class="avatar" id="userAvatar" onclick="location.href='profile.html'" title="My Profile">U</div>
+    </div>
+    <div class="user-menu" id="guestMenu" style="display:none">
+      <button onclick="location.href='login.html'">Sign In</button>
+      <button class="primary" onclick="location.href='register.html'">Sign Up</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <div class="hero">
+      <div>
+        <h1 id="greeting">Welcome</h1>
+        <div class="subtitle">Watch live games or start your broadcast.</div>
+      </div>
+
+      <button class="primary" id="createBtn" onclick="location.href='create.html'" style="display:none">
+        + Start Stream
+      </button>
+    </div>
+
+    <div style="margin-bottom: 32px;">
+      <div class="search-bar">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input class="search-input" id="search" placeholder="Search streams..." autocomplete="off">
+      </div>
+    </div>
+
+    <div class="streams-grid" id="streamList"></div>
+
+    <div class="empty-state" id="emptyState">
+      <h3>No live streams</h3>
+      <p>Be the first to start a broadcast!</p>
+    </div>
+
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    let allStreams = [];
+    let currentUser = null;
+    const socket = io();
+
+    // Store peer connections for hover previews
+    const previews = {}; // streamId -> { pc, videoEl }
+
+    /* INIT */
+    (async () => {
+      try {
+        const res = await fetch("/me", { credentials: "include" });
+        if (res.ok) {
+          currentUser = await res.json();
+          setupUserUI(currentUser);
+        } else {
+          setupGuestUI();
+        }
+      } catch {
+        setupGuestUI();
+      }
+      loadStreams();
+    })();
+
+    function setupUserUI(user) {
+      document.getElementById("userMenu").style.display = "flex";
+      document.getElementById("guestMenu").style.display = "none";
+
+      const avatar = document.getElementById("userAvatar");
+      avatar.textContent = user.email.charAt(0).toUpperCase();
+
+      document.getElementById("greeting").textContent = `Welcome back`;
+      document.getElementById("createBtn").style.display = "block";
+    }
+
+    function setupGuestUI() {
+      document.getElementById("userMenu").style.display = "none";
+      document.getElementById("guestMenu").style.display = "flex";
+      document.getElementById("greeting").textContent = "Welcome to CourtStream";
+    }
+
+    /* STREAMS */
+    async function loadStreams() {
+      try {
+        const res = await fetch("/api/streams");
+        const streams = await res.json();
+        console.log("📥 Loaded streams:", streams);
+        allStreams = streams;
+        render();
+      } catch (e) {
+        console.error("Failed to load streams:", e);
+      }
+    }
+
+    // Refresh every 10 seconds to update LIVE status
+    setInterval(loadStreams, 10000);
+
+    function render(list = allStreams) {
+      const grid = document.getElementById("streamList");
+      grid.innerHTML = "";
+
+      if (!list.length) {
+        document.getElementById("emptyState").style.display = "block";
+        return;
+      }
+      document.getElementById("emptyState").style.display = "none";
+
+      list.forEach(s => {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const isOwner = currentUser && s.creator === currentUser.id;
+
+        card.innerHTML = `
+            <div class="card-body">
+                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:12px;">
+                  <div>
+                    <div class="card-title" title="${s.name}">${s.name}</div>
+                    <div class="card-meta">
+                      Live Stream 
+                      ${(s.camera_access === 'protected' || s.viewer_access === 'protected') ? '• <span style="color:var(--blue)">Secured</span>' : ''}
+                    </div>
+                  </div>
+                  ${s.isLive ? '<div class="live-badge" style="position:static;">LIVE</div>' : ''}
+                </div>
+                
+                <div class="card-actions">
+                    <button class="icon-btn watch-btn" onclick="location.href='viewer.html?stream=${s.id}&name=${encodeURIComponent(s.name)}'" title="Watch">
+                      <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                      <span>Watch</span>
+                    </button>
+                    <button class="icon-btn cam-btn" onclick="location.href='camera-live.html?stream=${s.id}&name=${encodeURIComponent(s.name)}'" title="Add Camera">
+                      <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                      <span>Camera</span>
+                    </button>
+                    ${isOwner ? `
+                    <button class="icon-btn direct-btn" onclick="location.href='director.html?stream=${s.id}&name=${encodeURIComponent(s.name)}'" title="Direct">
+                      <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
+                      <span>Direct</span>
+                    </button>` : ''}
+                </div>
+            </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    document.getElementById("search").oninput = e => {
+      const q = e.target.value.toLowerCase();
+      render(allStreams.filter(s => s.name.toLowerCase().includes(q)));
+    };
+
+  </script>
+
+</body>
+
+</html>

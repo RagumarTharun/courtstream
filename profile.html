@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>My Profile – CourtStream</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #161922;
+            --border: #262b3d;
+            --text: #e6e6eb;
+            --muted: #9aa0b4;
+            --blue: #3b82f6;
+            --red: #ef4444;
+            --green: #22c55e;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        /* HEADER */
+        header {
+            height: 64px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0;
+        }
+
+        .back-btn:hover {
+            color: var(--text);
+        }
+
+        .page-title {
+            margin-left: 16px;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        /* LAYOUT */
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 32px;
+        }
+
+        /* SIDEBAR */
+        .profile-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .avatar-lg {
+            width: 80px;
+            height: 80px;
+            background: var(--blue);
+            border-radius: 50%;
+            margin: 0 auto 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+            transition: transform 0.2s;
+        }
+
+        .avatar-lg:hover {
+            transform: scale(1.05);
+        }
+
+        .avatar-lg span {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.5);
+            font-size: 10px;
+            bottom: 0;
+            width: 100%;
+            padding: 2px 0;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .avatar-lg:hover span {
+            opacity: 1;
+        }
+
+        .user-email {
+            font-weight: 600;
+            margin-bottom: 4px;
+            font-size: 16px;
+        }
+
+        .user-role {
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 24px;
+        }
+
+        .logout-btn {
+            width: 100%;
+            padding: 10px;
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: var(--red);
+            color: white;
+        }
+
+        /* MAIN CONTENT */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .stat-val {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        h2 {
+            font-size: 20px;
+            margin: 0 0 16px;
+        }
+
+        .streams-list {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .stream-item {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stream-item:last-child {
+            border-bottom: none;
+        }
+
+        .stream-item:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .stream-info strong {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 15px;
+        }
+
+        .stream-info span {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text);
+            margin-left: 8px;
+        }
+
+        .action-btn:hover {
+            background: #333;
+        }
+
+        .btn-view {
+            color: var(--blue);
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-manage {
+            color: var(--green);
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+
+        /* Basketball Logo in Header */
+        .logo-icon {
+            margin-right: -4px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <button class="back-btn" onclick="location.href='index.html'">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+            </svg>
+            Back to Home
+        </button>
+        <div class="page-title">Profile Settings</div>
+    </header>
+
+    <div class="container">
+
+        <!-- SIDEBAR -->
+        <aside>
+            <div class="profile-card">
+                <div class="avatar-lg" id="avatarUi">
+                    U
+                </div>
+                <div class="user-email" id="emailUi">Loading...</div>
+                <div class="user-role">Stream Director</div>
+                <button class="logout-btn" onclick="logout()">Sign Out</button>
+            </div>
+        </aside>
+
+        <!-- CONTENT -->
+        <main>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-val" id="streamCount">0</div>
+                    <div class="stat-label">Streams Created</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val">1.2k</div> <!-- Mock -->
+                    <div class="stat-label">Total Views</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val">12</div> <!-- Mock -->
+                    <div class="stat-label">Hours Live</div>
+                </div>
+            </div>
+
+            <h2>My Streams</h2>
+            <div class="streams-list" id="myStreams">
+                <div style="padding:20px;text-align:center;color:var(--muted)">Loading...</div>
+            </div>
+        </main>
+
+    </div>
+
+    <script>
+        let currentUser = null;
+
+        (async () => {
+            try {
+                // 1. Get Auth
+                const res = await fetch("/me", { credentials: "include" });
+                if (!res.ok) return location.href = "login.html";
+                currentUser = await res.json();
+
+                // Update UI
+                const emailUi = document.getElementById("emailUi");
+                const avatarUi = document.getElementById("avatarUi");
+
+                emailUi.innerText = currentUser.email;
+                avatarUi.innerText = currentUser.email.charAt(0).toUpperCase();
+
+                // 2. Get Streams
+                loadMyStreams();
+
+                // 2. Get Streams
+                loadMyStreams();
+
+            } catch (e) {
+                console.error(e);
+                location.href = "login.html";
+            }
+        })();
+
+        async function loadMyStreams() {
+            const res = await fetch("/api/streams");
+            const all = await res.json();
+
+            // Filter for current user
+            const mine = all.filter(s => s.creator === currentUser.id);
+
+            document.getElementById("streamCount").innerText = mine.length;
+
+            const list = document.getElementById("myStreams");
+            list.innerHTML = "";
+
+            if (mine.length === 0) {
+                list.innerHTML = `
+        <div style="padding:40px;text-align:center;color:var(--muted)">
+          You haven't created any streams yet.
+          <br><br>
+          <button class="action-btn" onclick="location.href='create.html'" style="color:var(--blue);border-color:var(--blue)">
+            + Create New Stream
+          </button>
+        </div>
+      `;
+                return;
+            }
+
+            mine.forEach(s => {
+                const item = document.createElement("div");
+                item.className = "stream-item";
+                item.innerHTML = `
+        <div class="stream-info">
+          <strong>${s.name}</strong>
+          <span>ID: ${s.id}</span>
+        </div>
+        <div>
+          <button class="action-btn btn-view" onclick="location.href='viewer.html?stream=${s.id}'">View</button>
+          <button class="action-btn btn-manage" onclick="location.href='director.html?stream=${s.id}'">Direct</button>
+        </div>
+      `;
+                list.appendChild(item);
+            });
+        }
+
+        async function logout() {
+            await fetch("/logout", { method: "POST", credentials: "include" });
+            location.href = "login.html";
+        }
+    </script>
+
+</body>
+
+</html>

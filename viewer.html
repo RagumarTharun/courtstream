@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CourtStream – Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161922;
+      --border: #262b3d;
+      --text: #e6e6eb;
+      --muted: #9aa0b4;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui;
+      height: 100vh;
+    }
+
+    /* ===== LAYOUT ===== */
+    .viewer {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding: 14px;
+      gap: 14px;
+    }
+
+    /* ===== PLAYER ===== */
+    .player {
+      position: relative;
+      flex: 1;
+      background: #000;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .player::before {
+      content: "";
+      display: block;
+      padding-top: 56.25%;
+    }
+
+    .player video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    .stream-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+    }
+
+    .live-badge {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: #22c55e;
+    }
+
+    .controls {
+      position: absolute;
+      bottom: 14px;
+      right: 14px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .ctrl-btn {
+      border: none;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="viewer">
+    <div class="player">
+      <video id="v" autoplay muted playsinline></video>
+
+      <div class="stream-badge" id="streamBadge">CourtStream • LIVE</div>
+      <div class="live-badge">LIVE</div>
+
+      <div class="controls">
+        <button class="ctrl-btn" onclick="location.reload()" style="background:var(--panel);">Reload Feed</button>
+        <button class="ctrl-btn" onclick="toggleFullscreen()">Fullscreen</button>
+      </div>
+
+      <!-- Entry Gate Overlay -->
+      <div id="entryOverlay"
+        style="position:absolute;inset:0;background:rgba(15,17,21,0.8);z-index:90;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
+        <button class="ctrl-btn" id="entryBtn"
+          style="padding:14px 32px;background:var(--blue);border:none;border-radius:12px;font-weight:600;font-size:16px;box-shadow:0 4px 20px rgba(59,130,246,0.3);">Watch
+          Live Stream</button>
+      </div>
+
+      <!-- Passcode Overlay -->
+      <div id="passcodeOverlay"
+        style="display:none;position:absolute;inset:0;background:rgba(15,17,21,0.95);z-index:100;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
+        <h3 style="margin-top:0;">Secured Stream</h3>
+        <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">This stream requires a passcode to view.</p>
+        <input type="password" id="passInput" placeholder="Enter Passcode"
+          style="background:var(--bg);border:1px solid var(--border);color:#fff;padding:12px;border-radius:8px;width:100%;max-width:240px;text-align:center;font-size:18px;letter-spacing:4px;margin-bottom:16px;">
+        <button class="ctrl-btn" id="joinBtn"
+          style="padding:10px 24px;background:var(--blue);border:none;border-radius:8px;font-weight:600;">Join
+          Stream</button>
+        <div id="errorMsg" style="color:#ef4444;font-size:12px;margin-top:12px;display:none;">Invalid passcode. Please
+          try again.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const streamId = params.get("stream");
+    const streamName = params.get("name");
+    const video = document.getElementById("v");
+    const badge = document.getElementById("streamBadge");
+    let directorId = null;
+
+    async function updateStreamBadge() {
+      let name = streamName;
+
+      if (!name && streamId) {
+        try {
+          const res = await fetch("/api/streams");
+          if (res.ok) {
+            const streams = await res.json();
+            const match = streams.find(s => s.id === streamId);
+            if (match) name = match.name;
+          }
+        } catch {
+          // fallback below
+        }
+      }
+
+      const label = name || streamId || "CourtStream";
+      badge.innerText = `${label} • LIVE`;
+    }
+    updateStreamBadge();
+
+    function toggleFullscreen() {
+      const el = document.querySelector(".player");
+      if (!document.fullscreenElement) {
+        el.requestFullscreen?.();
+      } else {
+        document.exitFullscreen?.();
+      }
+    }
+
+    /* ===== WEBRTC ===== */
+    const socket = io();
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+        { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.cloudflare.com:53"] }
+      ]
+    });
+
+    const overlay = document.getElementById("passcodeOverlay");
+    const passInput = document.getElementById("passInput");
+    const joinBtn = document.getElementById("joinBtn");
+    const errorMsg = document.getElementById("errorMsg");
+
+    const pendingCandidates = [];
+
+    const entryOverlay = document.getElementById("entryOverlay");
+    const entryBtn = document.getElementById("entryBtn");
+
+    entryBtn.onclick = () => {
+      entryOverlay.style.display = "none";
+      checkAccess();
+    };
+
+    async function checkAccess() {
+      try {
+        const res = await fetch("/api/streams");
+        const all = await res.json();
+        const stream = all.find(s => s.id === streamId);
+
+        // Explicitly check for 'protected' string
+        if (stream && stream.viewer_access === "protected") {
+          console.log("🔒 Viewer: Protected stream detected");
+          overlay.style.display = "flex";
+          joinBtn.onclick = () => {
+            const pass = passInput.value.trim();
+            if (!pass) return;
+            socket.emit("join", { room: streamId, role: "viewer", password: pass });
+          };
+        } else {
+          console.log("🔓 Viewer: Public stream detected");
+          overlay.style.display = "none";
+          socket.emit("join", { room: streamId, role: "viewer" });
+        }
+      } catch (e) {
+        console.warn("Check access failed, defaulting to public join", e);
+        overlay.style.display = "none";
+        socket.emit("join", { room: streamId, role: "viewer" });
+      }
+    }
+
+    socket.on("join-error", (msg) => {
+      overlay.style.display = "flex"; // Ensure visible
+      errorMsg.style.display = "block";
+      passInput.value = "";
+      passInput.focus();
+    });
+
+    pc.ontrack = e => {
+      console.log("📺 Viewer: Received track");
+      overlay.style.display = "none";
+
+      const incomingStream = e.streams[0] || new MediaStream([e.track]);
+      if (video.srcObject !== incomingStream) {
+        video.srcObject = incomingStream;
+      }
+
+      // Force play even if already assigned, helps with late tracks
+      video.muted = true;
+      video.play().then(() => {
+        console.log("🎬 Playback started");
+      }).catch(err => {
+        console.warn("Auto-play blocked, waiting for user interaction:", err);
+      });
+    };
+
+    pc.onicecandidate = e => {
+      if (e.candidate) {
+        if (directorId) {
+          socket.emit("signal", { to: directorId, data: e.candidate });
+        } else {
+          pendingCandidates.push(e.candidate);
+        }
+      }
+    };
+
+    socket.on("signal", async ({ from, data }) => {
+      if (!data) return;
+
+      if (data.type === "offer") {
+        console.log("📡 Viewer: Received offer from", from);
+        directorId = from;
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data));
+          const ans = await pc.createAnswer();
+          await pc.setLocalDescription(ans);
+          socket.emit("signal", { to: from, data: pc.localDescription });
+
+          // Send any candidates gathered while directorId was null
+          while (pendingCandidates.length > 0) {
+            socket.emit("signal", { to: directorId, data: pendingCandidates.shift() });
+          }
+        } catch (e) {
+          console.error("Remote description error:", e);
+        }
+        return;
+      }
+
+      // Robust candidate handling
+      let cand = null;
+      if (data.candidate !== undefined && typeof data.candidate === 'string') {
+        cand = data; // Data IS the candidate object
+      } else if (data.candidate && data.candidate.candidate !== undefined) {
+        cand = data.candidate; // Wrapped in .candidate
+      } else if (data.sdpMid !== undefined) {
+        cand = data; // Flat candidate
+      }
+
+      if (cand) {
+        try {
+          console.log("✅ Viewer: Adding ICE candidate");
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
+        } catch (e) {
+          console.warn("ICE failure:", e);
+        }
+      }
+    });
+
+    // Fallback: If no offer after 5 seconds of join, try re-triggering ready
+    setTimeout(() => {
+      if (pc.connectionState !== "connected" && pc.connectionState !== "connecting") {
+        console.log("⌛ Viewer: Connection timeout, re-signaling...");
+        socket.emit("viewer-ready", { room: streamId });
+      }
+    }, 5000);
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Join Stream – CourtStream</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  margin:0;
+  background:#0f1115;
+  color:#e6e6eb;
+  font-family:system-ui;
+}
+.page{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.card{
+  width:360px;
+  background:#161922;
+  border:1px solid #262b3d;
+  border-radius:16px;
+  padding:28px;
+}
+h3{margin-top:0}
+button{
+  width:100%;
+  margin-top:14px;
+  padding:12px;
+  border-radius:999px;
+  border:none;
+  background:#3b82f6;
+  color:#fff;
+  font-size:14px;
+  cursor:pointer;
+}
+.secondary{
+  background:#262b3d;
+}
+.icon{
+  margin-right:8px;
+}
+</style>
+</head>
+
+<body>
+<div class="page">
+  <div class="card">
+    <h3>Join stream as</h3>
+
+    <button onclick="go('camera')">
+      🎥 Camera
+    </button>
+
+    <button class="secondary" onclick="go('viewer')">
+      👁️ Viewer
+    </button>
+  </div>
+</div>
+
+<script>
+const stream =
+  new URLSearchParams(location.search).get("stream");
+
+function go(role){
+  if(!stream){
+    alert("Invalid stream");
+    return;
+  }
+  location.href =
+    role === "camera"
+      ? `camera-join.html?stream=${stream}`
+      : `viewer.html?stream=${stream}`;
+}
+</script>
+</body>
+</html>

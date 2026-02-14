@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Camera</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+
+<video id="cam" autoplay playsinline muted></video>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+const room = new URLSearchParams(location.search).get("room");
+const position = sessionStorage.getItem("pos");
+
+let pc;
+navigator.mediaDevices.getUserMedia({ video:true }).then(stream=>{
+  cam.srcObject = stream;
+
+  socket.emit("join", {
+    room,
+    role:"camera",
+    position
+  });
+
+  socket.on("signal", async ({from,data})=>{
+    if(data.type==="offer"){
+      pc = new RTCPeerConnection();
+      stream.getTracks().forEach(t=>pc.addTrack(t,stream));
+      pc.onicecandidate=e=>e.candidate &&
+        socket.emit("signal",{to:from,data:e.candidate});
+      await pc.setRemoteDescription(data);
+      const ans=await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      socket.emit("signal",{to:from,data:ans});
+    }
+    if(data.candidate) await pc.addIceCandidate(data);
+  });
+});
+</script>
+</body>
+</html>
