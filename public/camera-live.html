@@ -283,6 +283,7 @@
       const config = await getTurnConfig();
       pc = new RTCPeerConnection(config);
 
+      socket.emit("join", { room: streamId, role: "camera" });
       startCamera(); // Ensure camera starts after PC is initialized to add tracks
 
       pc.onicecandidate = e => {
@@ -334,6 +335,53 @@
         setLive(!!data.on);
       }
     });
+
+    /* ===== ACTIONS ===== */
+    function toggleMic() {
+      micOn = !micOn;
+      if (mediaStream) {
+        mediaStream.getAudioTracks().forEach(t => (t.enabled = micOn));
+      }
+      micBtn.classList.toggle("off", !micOn);
+    }
+
+    function toggleCam() {
+      camOn = !camOn;
+      if (mediaStream) {
+        mediaStream.getVideoTracks().forEach(t => (t.enabled = camOn));
+      }
+      camBtn.classList.toggle("off", !camOn);
+    }
+
+    function setLive(on) {
+      isLive = on;
+      liveBadge.style.display = on ? "inline" : "none";
+      video.style.transform = on ? `scale(1.05) rotate(${rotations[socket.id] || 0}deg)` : `rotate(${rotations[socket.id] || 0}deg)`;
+    }
+
+    function leave() {
+      if (confirm("Stop streaming and leave?")) {
+        location.href = "index.html";
+      }
+    }
+
+    /* ===== ORIENTATION ===== */
+    const rotations = {};
+    function applyOrientation() {
+      const orient = window.orientation;
+      let rot = 0;
+      if (orient === 90) rot = -90;
+      if (orient === -90) rot = 90;
+      if (orient === 180) rot = 180;
+
+      rotations[socket.id] = rot;
+      socket.emit("camera-rotate", { room: streamId, rotation: rot });
+
+      video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot} rot)`;
+    }
+    window.addEventListener("orientationchange", applyOrientation);
+    setInterval(applyOrientation, 2000);
+
   </script>
 
 </body>

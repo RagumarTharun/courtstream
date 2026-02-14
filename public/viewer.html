@@ -183,13 +183,22 @@
     }
 
     /* ===== WEBRTC ===== */
+    let turnConfig = null;
+    async function getTurnConfig() {
+      if (turnConfig) return turnConfig;
+      try {
+        const res = await fetch("/api/turn-credentials");
+        turnConfig = await res.json();
+        return turnConfig;
+      } catch (e) {
+        console.error("Failed to fetch TURN config:", e);
+        return { iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] };
+      }
+    }
+
     const socket = io();
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
-        { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.cloudflare.com:53"] }
-      ]
-    });
+    let pc;
+
 
     const overlay = document.getElementById("passcodeOverlay");
     const passInput = document.getElementById("passInput");
@@ -201,11 +210,43 @@
     const entryOverlay = document.getElementById("entryOverlay");
     const entryBtn = document.getElementById("entryBtn");
 
-    entryBtn.onclick = () => {
+    entryBtn.onclick = async () => {
       entryOverlay.style.display = "none";
+      const config = await getTurnConfig();
+      pc = new RTCPeerConnection(config);
+      setupPeerHooks();
       checkAccess();
     };
 
+    function setupPeerHooks() {
+      pc.ontrack = e => {
+        console.log("📺 Viewer: Received track");
+        overlay.style.display = "none";
+
+        const incomingStream = e.streams[0] || new MediaStream([e.track]);
+        if (video.srcObject !== incomingStream) {
+          video.srcObject = incomingStream;
+        }
+
+        // Force play even if already assigned, helps with late tracks
+        video.muted = true;
+        video.play().then(() => {
+          console.log("🎬 Playback started");
+        }).catch(err => {
+          console.warn("Auto-play blocked, waiting for user interaction:", err);
+        });
+      };
+
+      pc.onicecandidate = e => {
+        if (e.candidate) {
+          if (directorId) {
+            socket.emit("signal", { to: directorId, data: e.candidate });
+          } else {
+            pendingCandidates.push(e.candidate);
+          }
+        }
+      };
+    }
     async function checkAccess() {
       try {
         const res = await fetch("/api/streams");
@@ -233,6 +274,7 @@
       }
     }
 
+
     socket.on("join-error", (msg) => {
       overlay.style.display = "flex"; // Ensure visible
       errorMsg.style.display = "block";
@@ -240,33 +282,7 @@
       passInput.focus();
     });
 
-    pc.ontrack = e => {
-      console.log("📺 Viewer: Received track");
-      overlay.style.display = "none";
 
-      const incomingStream = e.streams[0] || new MediaStream([e.track]);
-      if (video.srcObject !== incomingStream) {
-        video.srcObject = incomingStream;
-      }
-
-      // Force play even if already assigned, helps with late tracks
-      video.muted = true;
-      video.play().then(() => {
-        console.log("🎬 Playback started");
-      }).catch(err => {
-        console.warn("Auto-play blocked, waiting for user interaction:", err);
-      });
-    };
-
-    pc.onicecandidate = e => {
-      if (e.candidate) {
-        if (directorId) {
-          socket.emit("signal", { to: directorId, data: e.candidate });
-        } else {
-          pendingCandidates.push(e.candidate);
-        }
-      }
-    };
 
     socket.on("signal", async ({ from, data }) => {
       if (!data) return;
