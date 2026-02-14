@@ -58,6 +58,13 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // SCHEMA UPGRADE (Add columns if they don't exist in old DB)
+  db.run("ALTER TABLE streams ADD COLUMN thumbnail TEXT", err => { });
+  db.run("ALTER TABLE streams ADD COLUMN camera_access TEXT DEFAULT 'public'", err => { });
+  db.run("ALTER TABLE streams ADD COLUMN viewer_access TEXT DEFAULT 'public'", err => { });
+  db.run("ALTER TABLE streams ADD COLUMN password TEXT", err => { });
+  db.run("ALTER TABLE users ADD COLUMN avatar TEXT", err => { });
 });
 
 /* =========================
@@ -266,7 +273,9 @@ io.on("connection", socket => {
 
   socket.on("disconnect", () => {
     if (socket.room) {
-      socket.to(socket.room).emit("peer-left", { id: socket.id });
+      const payload = { id: socket.id };
+      socket.to(socket.room).emit("peer-left", payload);
+      socket.to(socket.room).emit("camera-left", payload);
     }
   });
 });
