@@ -266,6 +266,7 @@ io.on("connection", socket => {
       socket.join(room);
       socket.room = room;
       socket.data.role = role; // Official Socket.IO way to store metadata
+      socket.emit("join-success");
 
       console.log(`👤 ${socket.id} joined room ${room} as ${role}`);
 

@@ -145,6 +145,21 @@
 
     </div>
 
+    <!-- Passcode Overlay -->
+    <div id="passcodeOverlay"
+      style="display:none;position:absolute;inset:0;background:rgba(15,17,21,0.95);z-index:100;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
+      <h3 style="margin-top:0;">Secured Stream</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">This stream requires a passcode for cameras to
+        join.</p>
+      <input type="password" id="passInput" placeholder="Enter Passcode"
+        style="background:var(--bg);border:1px solid var(--border);color:#fff;padding:12px;border-radius:8px;width:100%;max-width:240px;text-align:center;font-size:18px;letter-spacing:4px;margin-bottom:16px;">
+      <button class="ctrl-btn" id="joinBtn"
+        style="padding:10px 24px;background:var(--blue);border:none;border-radius:8px;font-weight:600;color:white;cursor:pointer;">Join
+        Stream</button>
+      <div id="errorMsg" style="color:#ef4444;font-size:12px;margin-top:12px;display:none;">Invalid passcode. Please
+        try again.</div>
+    </div>
+
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -157,6 +172,10 @@
     const camBtn = document.getElementById("camBtn");
     const streamTitle = document.getElementById("streamTitle");
     const liveBadge = document.getElementById("liveBadge");
+    const overlay = document.getElementById("passcodeOverlay");
+    const passInput = document.getElementById("passInput");
+    const joinBtn = document.getElementById("joinBtn");
+    const errorMsg = document.getElementById("errorMsg");
 
     let mediaStream;
     let videoSender;
@@ -283,7 +302,7 @@
       const config = await getTurnConfig();
       pc = new RTCPeerConnection(config);
 
-      socket.emit("join", { room: streamId, role: "camera" });
+      checkAccess();
       startCamera(); // Ensure camera starts after PC is initialized to add tracks
 
       pc.onicecandidate = e => {
@@ -381,6 +400,44 @@
     }
     window.addEventListener("orientationchange", applyOrientation);
     setInterval(applyOrientation, 2000);
+
+    /* ===== ACCESS CHECK ===== */
+    async function checkAccess() {
+      try {
+        const res = await fetch("/api/streams");
+        const all = await res.json();
+        const stream = all.find(s => s.id === streamId);
+
+        if (stream && stream.camera_access === "protected") {
+          console.log("🔒 Camera: Protected stream detected");
+          overlay.style.display = "flex";
+          joinBtn.onclick = () => {
+            const pass = passInput.value.trim();
+            if (!pass) return;
+            socket.emit("join", { room: streamId, role: "camera", password: pass });
+          };
+        } else {
+          console.log("🔓 Camera: Public stream detected");
+          overlay.style.display = "none";
+          socket.emit("join", { room: streamId, role: "camera" });
+        }
+      } catch (e) {
+        console.warn("Check access failed, defaulting to public join", e);
+        overlay.style.display = "none";
+        socket.emit("join", { room: streamId, role: "camera" });
+      }
+    }
+
+    socket.on("join-error", (msg) => {
+      overlay.style.display = "flex";
+      errorMsg.style.display = "block";
+      passInput.value = "";
+      passInput.focus();
+    });
+
+    socket.on("join-success", () => {
+      overlay.style.display = "none";
+    });
 
   </script>
 

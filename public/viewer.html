@@ -282,6 +282,10 @@
       passInput.focus();
     });
 
+    socket.on("join-success", () => {
+      overlay.style.display = "none";
+    });
+
 
 
     socket.on("signal", async ({ from, data }) => {
