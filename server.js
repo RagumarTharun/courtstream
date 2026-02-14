@@ -168,10 +168,7 @@ app.get("/api/turn-credentials", (req, res) => {
   });
 });
 
-// 404 Handler
-app.use((req, res) => {
-  res.status(404).send("Page not found");
-});
+
 
 /* =========================
    STREAM ROUTES (INDEX / CREATE)
@@ -212,7 +209,7 @@ app.get("/api/streams", (req, res) => {
 });
 
 app.post("/api/streams", (req, res) => {
-  if (!req.session.user) return res.sendStatus(401);
+  if (!req.session.user) return res.status(401).json({ error: "Unauthorized" });
 
   const id = crypto.randomUUID();
   const { name, thumbnail, camera_access, viewer_access, password } = req.body;
@@ -323,4 +320,9 @@ io.on("connection", socket => {
 ========================= */
 server.listen(PORT, "0.0.0.0", () => {
   console.log("✅ CourtStream running on port", PORT);
+});
+
+// 404 Handler (MUST BE LAST)
+app.use((req, res) => {
+  res.status(404).send("Page not found");
 });

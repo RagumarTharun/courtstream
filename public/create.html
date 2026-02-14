@@ -289,8 +289,15 @@
         });
 
         if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || "Failed");
+          let errorMsg = "Failed to create stream";
+          try {
+            const data = await res.json();
+            errorMsg = data.error || errorMsg;
+          } catch (e) {
+            // Fallback for non-JSON errors (like 401 Unauthorized text)
+            if (res.status === 401) errorMsg = "Session expired. Please log in again.";
+          }
+          throw new Error(errorMsg);
         }
 
         // Success
