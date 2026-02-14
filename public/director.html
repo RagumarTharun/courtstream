@@ -422,6 +422,10 @@
     socket.on("existing-peers", peersList => {
       console.log("👥 Existing peers:", peersList);
       if (!Array.isArray(peersList)) return;
+
+      const activeIds = new Set(peersList.map(p => p.id));
+
+      // 1. Add new peers
       peersList.forEach(({ id, role }) => {
         if (!id || id === socket.id) return;
         if (role === "viewer") {
@@ -430,6 +434,14 @@
         }
         if (role === "director") return; // Ignore other directors
         if (!peers[id]) createPeer(id);
+      });
+
+      // 2. Garbage Collect Stale Peers
+      Object.keys(peers).forEach(id => {
+        if (!activeIds.has(id)) {
+          console.warn("🧹 Removing stale peer (GC):", id);
+          removePeer(id);
+        }
       });
     });
 
