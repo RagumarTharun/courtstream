@@ -5,6 +5,7 @@
 const express = require("express");
 const http = require("http");
 const crypto = require("crypto");
+require("dotenv").config();
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const sqlite3 = require("sqlite3").verbose();
@@ -28,12 +29,12 @@ const io = new Server(server, {
   transports: ["websocket", "polling"]
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 /* =========================
    DATABASE
 ========================= */
-const db = new sqlite3.Database("db.sqlite");
+const db = new sqlite3.Database(process.env.DB_PATH || "db.sqlite");
 
 db.serialize(() => {
   db.run(`
@@ -76,7 +77,7 @@ app.use((req, res, next) => {
 app.use(
   session({
     name: "courtstream.sid",
-    secret: "courtstream-secret",
+    secret: process.env.SESSION_SECRET || "courtstream-secret",
     resave: false,
     saveUninitialized: false
   })
