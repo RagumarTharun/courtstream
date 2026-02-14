@@ -243,6 +243,15 @@
         .logo-icon {
             margin-right: -4px;
         }
+
+        .btn-remove {
+            color: var(--red);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-remove:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
     </style>
 </head>
 
@@ -280,7 +289,7 @@
                     <div class="stat-label">Streams Created</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-val">1.2k</div> <!-- Mock -->
+                    <div class="stat-val" id="totalViews">0</div>
                     <div class="stat-label">Total Views</div>
                 </div>
                 <div class="stat-card">
@@ -295,6 +304,23 @@
             </div>
         </main>
 
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirmModal" class="modal-overlay"
+        style="position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;">
+        <div class="modal"
+            style="background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 32px; width: 100%; max-width: 400px; text-align: center;">
+            <h3>Delete Stream?</h3>
+            <p style="color: var(--muted); margin-bottom: 24px;">This action cannot be undone. All stream settings will
+                be lost.</p>
+            <div class="modal-btns" style="display: flex; gap: 12px;">
+                <button class="modal-btn btn-cancel" onclick="closeModal()"
+                    style="flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: 600; cursor: pointer; background: var(--border); color: #fff;">Cancel</button>
+                <button class="modal-btn btn-confirm" id="confirmDeleteBtn"
+                    style="flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: 600; cursor: pointer; background: var(--red); color: #fff;">Delete</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -317,9 +343,6 @@
                 // 2. Get Streams
                 loadMyStreams();
 
-                // 2. Get Streams
-                loadMyStreams();
-
             } catch (e) {
                 console.error(e);
                 location.href = "login.html";
@@ -332,6 +355,10 @@
 
             // Filter for current user
             const mine = all.filter(s => s.creator === currentUser.id);
+
+            // Calculate total views
+            const totalViews = mine.reduce((acc, s) => acc + (s.views || 0), 0);
+            document.getElementById("totalViews").innerText = totalViews.toLocaleString();
 
             document.getElementById("streamCount").innerText = mine.length;
 
@@ -357,11 +384,12 @@
                 item.innerHTML = `
         <div class="stream-info">
           <strong>${s.name}</strong>
-          <span>ID: ${s.id}</span>
+          <span>ID: ${s.id} • ${s.views || 0} views</span>
         </div>
         <div>
           <button class="action-btn btn-view" onclick="location.href='viewer.html?stream=${s.id}'">View</button>
           <button class="action-btn btn-manage" onclick="location.href='director.html?stream=${s.id}'">Direct</button>
+          <button class="action-btn btn-remove" onclick="confirmDelete('${s.id}')">Remove</button>
         </div>
       `;
                 list.appendChild(item);
@@ -371,6 +399,35 @@
         async function logout() {
             await fetch("/logout", { method: "POST", credentials: "include" });
             location.href = "login.html";
+        }
+
+        let streamToDelete = null;
+        function confirmDelete(id) {
+            streamToDelete = id;
+            document.getElementById("confirmModal").style.display = "flex";
+            document.getElementById("confirmDeleteBtn").onclick = async () => {
+                await deleteStream(streamToDelete);
+                closeModal();
+            };
+        }
+
+        function closeModal() {
+            document.getElementById("confirmModal").style.display = "none";
+            streamToDelete = null;
+        }
+
+        async function deleteStream(id) {
+            try {
+                const res = await fetch(`/api/streams/${id}`, { method: "DELETE" });
+                if (res.ok) {
+                    loadMyStreams();
+                } else {
+                    const data = await res.json();
+                    alert("Error: " + data.error);
+                }
+            } catch (e) {
+                console.error(e);
+            }
         }
     </script>
 

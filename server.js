@@ -57,6 +57,7 @@ db.serialize(() => {
       camera_access TEXT DEFAULT 'public',
       viewer_access TEXT DEFAULT 'public',
       password TEXT,
+      views INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -66,6 +67,7 @@ db.serialize(() => {
   db.run("ALTER TABLE streams ADD COLUMN camera_access TEXT DEFAULT 'public'", err => { });
   db.run("ALTER TABLE streams ADD COLUMN viewer_access TEXT DEFAULT 'public'", err => { });
   db.run("ALTER TABLE streams ADD COLUMN password TEXT", err => { });
+  db.run("ALTER TABLE streams ADD COLUMN views INTEGER DEFAULT 0", err => { });
   db.run("ALTER TABLE users ADD COLUMN avatar TEXT", err => { });
 });
 
@@ -228,6 +230,16 @@ app.post("/api/streams", (req, res) => {
   );
 });
 
+app.delete("/api/streams/:id", (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: "Unauthorized" });
+  const { id } = req.params;
+  db.run("DELETE FROM streams WHERE id = ? AND creator = ?", [id, req.session.user.id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) return res.status(404).json({ error: "Stream not found or unauthorized" });
+    res.json({ success: true });
+  });
+});
+
 /* =========================
    SOCKET.IO — WEBRTC (OLD WORKING LOGIC)
 ========================= */
@@ -261,6 +273,11 @@ io.on("connection", socket => {
       if (!isDirector && accessMode === "protected" && stream.password !== password) {
         console.log(`❌ Join Denied for ${socket.id} (role: ${role}) in room ${room}`);
         return socket.emit("join-error", "Invalid passcode");
+      }
+
+      // Increment views if viewer successfully joins
+      if (isViewer) {
+        db.run("UPDATE streams SET views = views + 1 WHERE id = ?", [room]);
       }
 
       socket.join(room);
