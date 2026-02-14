@@ -1,0 +1,9 @@
+.env
+node_modules/
+db.sqlite
+courtstream.db
+.DS_Store
+*.webm
+*.mp4
+dist/
+build/

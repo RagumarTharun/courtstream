@@ -298,6 +298,14 @@
           </svg>
         </button>
 
+        <!-- PLAYBACK -->
+        <button id="playbackBtn" class="ctrl-btn" title="Playback Editor" onclick="goToPlayback()">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z" />
+          </svg>
+        </button>
+
         <!-- QR CODE -->
         <button id="qrBtn" class="ctrl-btn" title="Scan QR">
           <svg viewBox="0 0 24 24">
@@ -383,7 +391,6 @@
     const viewers = {};    // viewer socketId -> { pc, sender }
     const rotations = {}; // socketId -> rotation degrees
     let currentLiveId = null;
-    let viewerTrack = null;
     const pendingViewers = new Set();
 
     let programStream = programCanvas.captureStream(30);
@@ -404,34 +411,49 @@
     /* ===== JOIN ===== */
     socket.emit("join", { room: streamId, role: "director" });
 
+    // Proactive Discovery: Poll for peers every 5 seconds to catch missed joins
+    setInterval(() => {
+      socket.emit("join", { room: streamId, role: "director" }); // Re-emit join to trigger server-side existing-peers list
+    }, 5000);
+
     /* ===== EXISTING PEERS ===== */
     socket.on("existing-peers", peersList => {
+      console.log("👥 Existing peers:", peersList);
       if (!Array.isArray(peersList)) return;
       peersList.forEach(({ id, role }) => {
-        if (!id) return;
+        if (!id || id === socket.id) return;
         if (role === "viewer") {
           if (!viewers[id]) queueOrCreateViewer(id);
           return;
         }
+        if (role === "director") return; // Ignore other directors
         if (!peers[id]) createPeer(id);
       });
     });
 
     /* ===== PEER JOINED ===== */
     socket.on("peer-joined", ({ id, role }) => {
-      if (!id) return;
+      console.log("👤 Peer joined:", id, "role:", role);
+      if (!id || id === socket.id) return;
       if (role === "viewer") {
         if (viewers[id]) return;
         queueOrCreateViewer(id);
         return;
       }
+      if (role === "director") return;
       if (peers[id]) return;
       createPeer(id);
     });
 
     socket.on("viewer-ready", ({ id }) => {
+      console.log("👀 Viewer ready:", id);
       if (!id) return;
-      if (!viewers[id]) queueOrCreateViewer(id);
+      if (!viewers[id]) {
+        createViewerPeer(id);
+      } else {
+        console.log("👀 Viewer already exists, swapping track to current live");
+        updateViewerFeeds();
+      }
     });
 
     /* ===== PEER LEFT ===== */
@@ -448,6 +470,7 @@
         currentLiveId = null;
         selectedStream = null;
         placeholder.style.display = "block";
+        updateViewerFeeds();
       }
     }
 
@@ -483,31 +506,28 @@
 
     /* ===== CREATE CAMERA PEER ===== */
     let cameraCount = 0;
-    function createPeer(id) {
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          {
-            urls: [
-              "stun:stun.cloudflare.com:3478",
-              "stun:stun.cloudflare.com:53"
-            ]
-          },
-          {
-            urls: [
-              "turn:turn.cloudflare.com:3478?transport=udp",
-              "turn:turn.cloudflare.com:3478?transport=tcp",
-              "turns:turn.cloudflare.com:5349?transport=tcp",
-              "turn:turn.cloudflare.com:53?transport=udp",
-              "turn:turn.cloudflare.com:80?transport=tcp",
-              "turns:turn.cloudflare.com:443?transport=tcp"
-            ],
-            username: "g07ef1b745ad2a747da14d563e4bfbd538f21945297c2fad25578fb243c68286",
-            credential: "3882b29cc1772be95d469efdb14ccd45ed1b79ec8c52d9e0d8070720e093b43d"
-          }
-        ]
-      });
+    let turnConfig = null;
+
+    async function getTurnConfig() {
+      if (turnConfig) return turnConfig;
+      try {
+        const res = await fetch("/api/turn-credentials");
+        turnConfig = await res.json();
+        return turnConfig;
+      } catch (e) {
+        console.error("Failed to fetch TURN config:", e);
+        return { iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] };
+      }
+    }
+
+    async function createPeer(id) {
+      if (!id || peers[id]) return;
+
+      const config = await getTurnConfig();
+      const pc = new RTCPeerConnection(config);
 
       pc.addTransceiver("video", { direction: "recvonly" });
+      pc.addTransceiver("audio", { direction: "recvonly" });
 
       const slot = document.createElement("div");
       slot.className = "camera-slot";
@@ -532,9 +552,10 @@
       };
 
       pc.ontrack = e => {
+        console.log("🎥 Received track from:", id);
         if (peers[id].stream) return;
 
-        const stream = e.streams[0];
+        const stream = e.streams[0] || new MediaStream([e.track]);
         peers[id].stream = stream;
 
         const v = document.createElement("video");
@@ -544,13 +565,13 @@
         v.srcObject = stream;
         v.style.transform = `rotate(${rotations[id] || 0}deg)`;
 
-        v.onloadedmetadata = () => v.play().catch(() => { });
+        v.onloadedmetadata = () => {
+          console.log("🎬 Video metadata loaded for:", id);
+          v.play().catch(err => console.error("Video play error:", err));
+        };
 
         slot.appendChild(v);
-
         slot.onclick = () => setLiveCamera(id);
-
-
 
         if (recordingState !== "idle") {
           startCameraRecorder(id, stream);
@@ -566,24 +587,22 @@
       pc.createOffer()
         .then(o => pc.setLocalDescription(o))
         .then(() => {
+          console.log("📡 Director: Sending offer to camera", id);
           socket.emit("signal", { to: id, data: pc.localDescription });
-        });
+        })
+        .catch(err => console.error("Offer error:", err));
     }
 
     function setLiveCamera(id) {
-      if (!id || !peers[id] || !peers[id].stream) return;
+      if (!id || !peers[id] || !peers[id].stream) {
+        console.warn("⚠️ Cannot set live: No stream for", id);
+        return;
+      }
       currentLiveId = id;
       selectedStream = peers[id].stream;
 
-      if (viewerTrack) {
-        viewerTrack.stop();
-        viewerTrack = null;
-      }
-
-      const liveTrack = selectedStream.getVideoTracks()[0];
-      if (liveTrack) {
-        viewerTrack = liveTrack.clone();
-      }
+      document.querySelectorAll(".camera-slot").forEach(s => s.classList.remove("live"));
+      if (peers[id].slot) peers[id].slot.classList.add("live");
 
       Object.keys(peers).forEach(peerId => {
         socket.emit("control", {
@@ -592,37 +611,24 @@
         });
       });
 
-      placeholder.style.display = "none";
+      if (placeholder) placeholder.style.setProperty("display", "none", "important");
       updateViewerFeeds();
-      setTimeout(updateViewerFeeds, 500);
-      flushPendingViewers();
+      startDrawLoop();
     }
 
     /* ===== VIEWERS ===== */
     function createViewerPeer(id) {
+      console.log("📡 Director: Creating peer for viewer", id);
       const track = getViewerTrack();
-      if (!track) return;
+      if (!track) {
+        console.warn("⚠️ Director: No track available for viewer!");
+        return;
+      }
 
       const pc = new RTCPeerConnection({
         iceServers: [
-          {
-            urls: [
-              "stun:stun.cloudflare.com:3478",
-              "stun:stun.cloudflare.com:53"
-            ]
-          },
-          {
-            urls: [
-              "turn:turn.cloudflare.com:3478?transport=udp",
-              "turn:turn.cloudflare.com:3478?transport=tcp",
-              "turns:turn.cloudflare.com:5349?transport=tcp",
-              "turn:turn.cloudflare.com:53?transport=udp",
-              "turn:turn.cloudflare.com:80?transport=tcp",
-              "turns:turn.cloudflare.com:443?transport=tcp"
-            ],
-            username: "g07ef1b745ad2a747da14d563e4bfbd538f21945297c2fad25578fb243c68286",
-            credential: "3882b29cc1772be95d469efdb14ccd45ed1b79ec8c52d9e0d8070720e093b43d"
-          }
+          { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+          { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.cloudflare.com:53"] }
         ]
       });
 
@@ -639,41 +645,34 @@
       pc.createOffer()
         .then(o => pc.setLocalDescription(o))
         .then(() => {
+          console.log("📡 Director: Sending offer to viewer", id);
           socket.emit("signal", { to: id, data: pc.localDescription });
-        });
+        })
+        .catch(err => console.error("Offer error:", err));
     }
 
     function queueOrCreateViewer(id) {
-      const track = getViewerTrack();
-      if (track) {
-        createViewerPeer(id);
-      } else {
-        pendingViewers.add(id);
-      }
+      createViewerPeer(id);
     }
 
     function flushPendingViewers() {
-      if (!pendingViewers.size) return;
-      const track = getViewerTrack();
-      if (!track) return;
-      Array.from(pendingViewers).forEach(id => {
-        pendingViewers.delete(id);
-        if (!viewers[id]) createViewerPeer(id);
-      });
+      // No-op now as we always have a program track
     }
 
     function updateViewerFeeds() {
       const track = getViewerTrack();
-
+      if (!track) return;
       Object.values(viewers).forEach(v => {
-        if (!v.sender) return;
-        v.sender.replaceTrack(track || null);
+        if (v.sender) {
+          v.sender.replaceTrack(track).catch(err => console.error("replaceTrack error:", err));
+        }
       });
     }
 
     function getViewerTrack() {
-      if (viewerTrack) return viewerTrack;
-      return null;
+      // ALWAYS use programStream (canvas) for viewers for maximum stability.
+      // This ensures viewers don't experience disconnects when cameras swap.
+      return programStream.getVideoTracks()[0];
     }
 
     /* ===== PROGRAM CANVAS DRAW ===== */
@@ -710,7 +709,13 @@
           }
         }
 
-        requestAnimationFrame(draw);
+        // Use requestAnimationFrame for smoothness, 
+        // but also a setTimeout fallback so it keeps ticking in background tabs
+        if (document.hidden) {
+          setTimeout(draw, 100); // Lower rate when hidden to save CPU but stay "alive"
+        } else {
+          requestAnimationFrame(draw);
+        }
       };
 
       requestAnimationFrame(draw);
@@ -775,7 +780,7 @@
     }
 
     function stopRecording() {
-      if (recordingState === "idle") return;
+      if (recordingState === "idle") return Promise.resolve();
       recordingState = "idle";
       recordBtn.classList.remove("active");
       recIcon.style.display = "block";
@@ -788,8 +793,8 @@
       if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
       Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
 
-      Promise.all(stopPromises).then(() => {
-        downloadAllRecordings();
+      return Promise.all(stopPromises).then(() => {
+        return downloadAllRecordings();
       });
     }
 
@@ -952,19 +957,56 @@
       document.getElementById("qrModal").style.display = "none";
     }
 
+    async function goToPlayback() {
+      if (recordingState !== "idle") {
+        if (confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
+          try {
+            await stopRecording();
+            // Allow time for downloads to initiate
+            setTimeout(() => location.href = "playback.html", 1500);
+          } catch (e) {
+            console.error(e);
+            alert("Error stopping recording: " + e);
+          }
+        }
+      } else {
+        location.href = "playback.html";
+      }
+    }
+
     /* ===== SIGNAL ===== */
     socket.on("signal", async ({ from, data }) => {
       const p = peers[from];
       const v = viewers[from];
-      if (!p && !v) return;
-
-      if (data.type) {
-        if (p) await p.pc.setRemoteDescription(data);
-        if (v) await v.pc.setRemoteDescription(data);
+      if (!p && !v) {
+        console.log("📡 Director: Signal from unknown peer", from);
+        return;
       }
-      if (data.candidate) {
-        if (p) await p.pc.addIceCandidate(data);
-        if (v) await v.pc.addIceCandidate(data);
+
+      try {
+        if (data.type) {
+          console.log(`📡 Director: Received ${data.type} from`, from);
+          if (p) await p.pc.setRemoteDescription(new RTCSessionDescription(data));
+          if (v) await v.pc.setRemoteDescription(new RTCSessionDescription(data));
+        } else {
+          // Robust candidate handling
+          let cand = null;
+          if (data.candidate !== undefined && typeof data.candidate === 'string') {
+            cand = data;
+          } else if (data.candidate && data.candidate.candidate !== undefined) {
+            cand = data.candidate;
+          } else if (data.sdpMid !== undefined) {
+            cand = data;
+          }
+
+          if (cand) {
+            console.log("✅ Director: Adding ICE candidate from", from);
+            if (p) await p.pc.addIceCandidate(new RTCIceCandidate(cand));
+            if (v) await v.pc.addIceCandidate(new RTCIceCandidate(cand));
+          }
+        }
+      } catch (e) {
+        console.warn("Signal error:", e);
       }
     });
   </script>
