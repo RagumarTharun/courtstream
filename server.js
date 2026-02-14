@@ -297,7 +297,7 @@ app.post("/api/feedback", (req, res) => {
 
 app.get("/api/admin/stats", (req, res) => {
   const secret = req.headers["x-admin-secret"];
-  const ADMIN_SECRET = process.env.ADMIN_SECRET || "admin123";
+  const ADMIN_SECRET = process.env.ADMIN_SECRET || "8008";
 
   if (secret !== ADMIN_SECRET) {
     return res.status(403).json({ error: "Forbidden" });
