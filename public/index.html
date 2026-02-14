@@ -20,9 +20,9 @@
   <meta property="twitter:title" content="CourtStream – Live Sports Broadcasting" />
   <meta property="twitter:description" content="Broadcast and watch live sports games with professional-grade tools." />
 
-  <!-- Favicon (using SVG data URI for instant update) -->
+  <!-- Favicon -->
   <link rel="icon"
-    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ef4444'><circle cx='12' cy='12' r='10'/><path d='M8 10l8 5-8 5V10z' fill='white'/></svg>">
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='2'><circle cx='12' cy='12' r='10'/><path d='M9.5 8l6 4-6 4V8z' fill='white' stroke='none'/></svg>">
 
   <style>
     :root {
@@ -383,6 +383,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="feedback.js"></script>
   <script>
     let allStreams = [];
     let currentUser = null;

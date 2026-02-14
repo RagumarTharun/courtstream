@@ -68,7 +68,28 @@ db.serialize(() => {
   db.run("ALTER TABLE streams ADD COLUMN viewer_access TEXT DEFAULT 'public'", err => { });
   db.run("ALTER TABLE streams ADD COLUMN password TEXT", err => { });
   db.run("ALTER TABLE streams ADD COLUMN views INTEGER DEFAULT 0", err => { });
+  db.run("ALTER TABLE streams ADD COLUMN views INTEGER DEFAULT 0", err => { });
   db.run("ALTER TABLE users ADD COLUMN avatar TEXT", err => { });
+
+  // FEEDBACK & ANALYTICS
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_feedback (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      page_url TEXT,
+      category TEXT,
+      description TEXT,
+      metadata TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS page_analytics (
+      path TEXT PRIMARY KEY,
+      visit_count INTEGER DEFAULT 1,
+      last_visited_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 });
 
 /* =========================
@@ -82,6 +103,23 @@ app.use(express.static(__dirname + "/public"));
 app.use((req, res, next) => {
   res.header("Cross-Origin-Opener-Policy", "same-origin");
   res.header("Cross-Origin-Embedder-Policy", "require-corp");
+  next();
+});
+
+// ANALYTICS MIDDLEWARE
+app.use((req, res, next) => {
+  if (req.method === "GET" && req.path.endsWith(".html")) {
+    const path = req.path === "/" ? "/index.html" : req.path;
+    db.run(
+      `INSERT INTO page_analytics (path, visit_count, last_visited_at) 
+       VALUES (?, 1, CURRENT_TIMESTAMP) 
+       ON CONFLICT(path) DO UPDATE SET 
+       visit_count = visit_count + 1, 
+       last_visited_at = CURRENT_TIMESTAMP`,
+      [path],
+      (err) => { if (err) console.error("Analytics Error:", err.message); }
+    );
+  }
   next();
 });
 
@@ -237,6 +275,41 @@ app.delete("/api/streams/:id", (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (this.changes === 0) return res.status(404).json({ error: "Stream not found or unauthorized" });
     res.json({ success: true });
+  });
+});
+
+/* =========================
+   FEEDBACK & ADMIN API
+========================= */
+app.post("/api/feedback", (req, res) => {
+  const { page_url, category, description, metadata } = req.body;
+  if (!description) return res.status(400).json({ error: "Description required" });
+
+  db.run(
+    "INSERT INTO user_feedback (page_url, category, description, metadata) VALUES (?, ?, ?, ?)",
+    [page_url, category, description, JSON.stringify(metadata)],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, id: this.lastID });
+    }
+  );
+});
+
+app.get("/api/admin/stats", (req, res) => {
+  const secret = req.headers["x-admin-secret"];
+  const ADMIN_SECRET = process.env.ADMIN_SECRET || "admin123";
+
+  if (secret !== ADMIN_SECRET) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  db.all("SELECT * FROM user_feedback ORDER BY created_at DESC", [], (err, feedback) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    db.all("SELECT * FROM page_analytics ORDER BY visit_count DESC", [], (err, analytics) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ feedback, analytics });
+    });
   });
 });
 
