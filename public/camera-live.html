@@ -17,12 +17,38 @@
       --red: #b91c1c;
     }
 
-    /* Feedback Button Override */
+    /* Feedback Button Override - Top Right */
     .feedback-fab {
       top: 24px !important;
-      left: 24px !important;
+      right: 24px !important;
       bottom: auto !important;
-      right: auto !important;
+      left: auto !important;
+    }
+
+    .live-indicator {
+      display: none;
+      background: #ef4444;
+      color: white;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-left: 8px;
+      font-size: 11px;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.5;
+      }
+
+      100% {
+        opacity: 1;
+      }
     }
 
     body {
@@ -44,17 +70,18 @@
       height: 56px;
       display: flex;
       align-items: center;
+      padding: 0 16px;
+      /* Add padding */
+      justify-content: center;
+      /* Center content */
+      position: relative;
     }
 
     .header-title {
-      flex: 1;
-      text-align: center;
       font-size: 15px;
-    }
-
-    .badge {
-      font-size: 12px;
-      color: #22c55e;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
     }
 
     /* PREVIEW */
@@ -196,8 +223,8 @@
 
     <div class="header">
       <div class="header-title">
-        <span id="streamTitle">Camera</span>
-        <span id="liveBadge" class="badge" style="display:none;">LIVE</span>
+        <span id="streamNameDisplay">Camera Ready</span>
+        <span id="liveBadge" class="live-indicator">LIVE</span>
       </div>
     </div>
 
@@ -415,6 +442,23 @@
         }
       };
 
+      socket.on("control", ({ from, data }) => {
+        console.log("Control:", data);
+        if (data && data.type === "live") {
+          const isLive = data.on;
+          document.getElementById("liveBadge").style.display = isLive ? "inline-block" : "none";
+
+          // Show the name of the stream (which is the camera name set by director)
+          if (data.name) {
+            document.getElementById("streamNameDisplay").innerText = data.name;
+          }
+
+          // Optional: Visual feedback on the video border
+          const v = document.querySelector("video");
+          if (v) v.style.border = isLive ? "2px solid #ef4444" : "none";
+        }
+      });
+
       socket.on("signal", async ({ from, data }) => {
         if (!data) return;
 
@@ -450,12 +494,6 @@
     }
     initWebRTC();
 
-    socket.on("control", ({ data }) => {
-      if (!data || !data.type) return;
-      if (data.type === "live") {
-        setLive(!!data.on);
-      }
-    });
 
     /* ===== ACTIONS ===== */
     function toggleMic() {

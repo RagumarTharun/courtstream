@@ -621,7 +621,11 @@
       Object.keys(peers).forEach(peerId => {
         socket.emit("control", {
           to: peerId,
-          data: { type: "live", on: peerId === id }
+          data: {
+            type: "live",
+            on: peerId === id,
+            name: peers[peerId] ? peers[peerId].name : "Camera"
+          }
         });
       });
 
