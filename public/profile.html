@@ -214,43 +214,75 @@
             font-size: 13px;
         }
 
-        .action-btn {
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            cursor: pointer;
+        /* BUTTONS (Index Style) */
+        .item-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 40px;
+            height: 36px;
+            padding: 0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--panel);
             border: 1px solid var(--border);
-            background: transparent;
-            color: var(--text);
-            margin-left: 8px;
+            color: var(--muted);
+            transition: all 0.2s ease;
+            overflow: hidden;
+            position: relative;
         }
 
-        .action-btn:hover {
-            background: #333;
+        .icon-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+            transition: transform 0.2s;
         }
 
-        .btn-view {
-            color: var(--blue);
-            border-color: rgba(59, 130, 246, 0.3);
+        .icon-btn span {
+            position: absolute;
+            opacity: 0;
+            font-size: 13px;
+            font-weight: 600;
+            transform: translateX(10px);
+            transition: all 0.2s;
+            white-space: nowrap;
         }
 
-        .btn-manage {
-            color: var(--green);
-            border-color: rgba(34, 197, 94, 0.3);
+        .icon-btn:hover {
+            width: 100px;
+            background: var(--border);
+            color: white;
         }
 
-        /* Basketball Logo in Header */
-        .logo-icon {
-            margin-right: -4px;
+        .icon-btn:hover svg {
+            transform: translateX(-30px);
+            opacity: 0;
         }
 
-        .btn-remove {
-            color: var(--red);
-            border-color: rgba(239, 68, 68, 0.3);
+        .icon-btn:hover span {
+            opacity: 1;
+            transform: translateX(0);
         }
 
-        .btn-remove:hover {
-            background: rgba(239, 68, 68, 0.1);
+        /* Specific Colors */
+        .watch-btn:hover {
+            background: var(--blue);
+            border-color: var(--blue);
+        }
+
+        .direct-btn:hover {
+            background: var(--green);
+            border-color: var(--green);
+        }
+
+        .remove-btn:hover {
+            background: var(--red);
+            border-color: var(--red);
         }
     </style>
 </head>
@@ -386,10 +418,19 @@
           <strong>${s.name}</strong>
           <span>ID: ${s.id} • ${s.views || 0} views</span>
         </div>
-        <div>
-          <button class="action-btn btn-view" onclick="location.href='viewer.html?stream=${s.id}'">View</button>
-          <button class="action-btn btn-manage" onclick="location.href='director.html?stream=${s.id}'">Direct</button>
-          <button class="action-btn btn-remove" onclick="confirmDelete('${s.id}')">Remove</button>
+        <div class="item-actions">
+          <button class="icon-btn watch-btn" onclick="location.href='viewer.html?stream=${s.id}'" title="View">
+            <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            <span>View</span>
+          </button>
+          <button class="icon-btn direct-btn" onclick="location.href='director.html?stream=${s.id}'" title="Direct">
+            <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
+            <span>Direct</span>
+          </button>
+          <button class="icon-btn remove-btn" onclick="confirmDelete('${s.id}')" title="Remove">
+            <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            <span>Remove</span>
+          </button>
         </div>
       `;
                 list.appendChild(item);
