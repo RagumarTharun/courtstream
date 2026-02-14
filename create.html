@@ -1,310 +1,172 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8">
-  <title>Create Stream – CourtStream</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Create Session – Zero Glitch</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    :root {
-      --bg: #0f1115;
-      --panel: #161922;
-      --border: #262b3d;
-      --text: #e6e6eb;
-      --muted: #9aa0b4;
-      --blue: #3b82f6;
-      --red: #ef4444;
-    }
+<style>
+  body {
+    margin: 0;
+    background: #0f1115;
+    color: #e6e6eb;
+    font-family: system-ui, Arial;
+  }
 
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: var(--bg);
-      color: var(--text);
-      font-family: system-ui, -apple-system, sans-serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+  .page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-    .card {
-      width: 100%;
-      max-width: 420px;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-    }
+  .card {
+    width: 420px;
+    background: #161922;
+    border: 1px solid #262b3d;
+    border-radius: 16px;
+    padding: 28px;
+  }
 
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-    }
+  h2 { margin-top: 0; }
 
-    h2 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 600;
-    }
+  label {
+    font-size: 13px;
+    color: #9aa0b4;
+    display: block;
+    margin-top: 14px;
+    margin-bottom: 6px;
+  }
 
-    .close-btn {
-      background: none;
-      border: none;
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 24px;
-      padding: 0;
-      line-height: 1;
-    }
+  input, select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    background: #0f1115;
+    border: 1px solid #262b3d;
+    color: #e6e6eb;
+    font-size: 14px;
+  }
 
-    .close-btn:hover {
-      color: var(--text);
-    }
+  button {
+    width: 100%;
+    margin-top: 22px;
+    padding: 10px;
+    border-radius: 999px;
+    border: none;
+    background: #ff3b3b;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+  }
 
-    label {
-      display: block;
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 8px;
-      font-weight: 500;
-    }
+  /* Modal */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
 
-    input,
-    select {
-      width: 100%;
-      padding: 12px;
-      border-radius: 10px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 15px;
-      outline: none;
-      margin-bottom: 20px;
-      box-sizing: border-box;
-      transition: border-color 0.2s;
-    }
+  .modal-box {
+    background: #161922;
+    border-radius: 14px;
+    padding: 20px;
+    width: 320px;
+    text-align: center;
+    border: 1px solid #262b3d;
+  }
 
-    input:focus,
-    select:focus {
-      border-color: var(--blue);
-    }
+  .modal-box p {
+    margin: 0 0 14px;
+    font-size: 14px;
+  }
 
-    button.primary {
-      width: 100%;
-      padding: 12px;
-      border-radius: 999px;
-      border: none;
-      background: var(--blue);
-      color: #fff;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    }
-
-    button.primary:hover {
-      opacity: 0.9;
-    }
-
-    button.primary:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    /* Modal */
-    .modal {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, .6);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-    }
-
-    .modal-box {
-      background: var(--panel);
-      border-radius: 14px;
-      padding: 24px;
-      width: 320px;
-      text-align: center;
-      border: 1px solid var(--border);
-    }
-
-    .modal-box p {
-      margin: 0 0 20px;
-      font-size: 15px;
-    }
-
-    .modal-box button {
-      background: var(--blue);
-      color: white;
-      border: none;
-      padding: 8px 24px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 500;
-    }
-
-    /* NEW THUMB STYLES */
-    .thumb-upload {
-      width: 100%;
-      aspect-ratio: 16/9;
-      background: var(--bg);
-      border: 2px dashed var(--border);
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      overflow: hidden;
-      margin-bottom: 20px;
-      transition: border-color 0.2s;
-    }
-
-    .thumb-upload:hover {
-      border-color: var(--blue);
-    }
-  </style>
+  .modal-box button {
+    background: #3b82f6;
+  }
+</style>
 </head>
 
 <body>
 
+<div class="page">
   <div class="card">
-    <div class="header">
-      <h2>Create New Stream</h2>
-      <button class="close-btn" onclick="location.href='index.html'">&times;</button>
-    </div>
+    <h2 id="greeting">Create Stream</h2>
 
-    <label>Stream Name</label>
-    <input id="nameInput" placeholder="e.g. Championship Finals Game 1" autofocus>
+    <label>Session name</label>
+    <input id="nameInput" placeholder="e.g. JBA_Final">
 
-    <label style="margin-top:20px;">Stream Access (Security)</label>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
-      <div>
-        <label style="font-size:12px;color:var(--muted);">Camera Access</label>
-        <select id="cameraAccess">
-          <option value="public" selected>Public</option>
-          <option value="protected">Protected</option>
-        </select>
-      </div>
-      <div>
-        <label style="font-size:12px;color:var(--muted);">Viewer Access</label>
-        <select id="viewerAccess">
-          <option value="public" selected>Public</option>
-          <option value="protected">Protected</option>
-        </select>
-      </div>
-    </div>
+    
+    <label>Viewer access</label>
+    <select id="viewerAccess">
+      <option value="public">Public</option>
+      <option value="protected">Protected</option>
+    </select>
 
-    <div id="passwordSection" style="display:none;margin-bottom:20px;">
-      <label>Stream Passcode</label>
-      <input type="password" id="streamPassword" placeholder="Enter a 4-digit passcode" maxlength="20">
-      <div style="font-size:11px;color:var(--muted);margin-top:4px;">This password will be required for cameras or
-        viewers to join.</div>
-    </div>
-
-    <button id="createBtn" class="primary">Start Stream</button>
+    <button id="createBtn">Create Stream</button>
   </div>
+</div>
 
-  <!-- ERROR MODAL -->
-  <div class="modal" id="modal">
-    <div class="modal-box">
-      <p id="modalText"></p>
-      <button onclick="closeModal()">OK</button>
-    </div>
+<!-- ERROR MODAL -->
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <p id="modalText"></p>
+    <button onclick="closeModal()">OK</button>
   </div>
+</div>
 
-  <script>
-    const nameInput = document.getElementById("nameInput");
-    const createBtn = document.getElementById("createBtn");
-    const modal = document.getElementById("modal");
-    const modalText = document.getElementById("modalText");
+<script>
+const nameInput = document.getElementById("nameInput");
+const createBtn = document.getElementById("createBtn");
+const modal = document.getElementById("modal");
+const modalText = document.getElementById("modalText");
 
-    function showError(msg) {
-      modalText.innerText = msg;
-      modal.style.display = "flex";
-    }
+function showError(msg) {
+  modalText.innerText = msg;
+  modal.style.display = "flex";
+}
 
-    function closeModal() {
-      modal.style.display = "none";
-      nameInput.focus();
-    }
+function closeModal() {
+  modal.style.display = "none";
+  nameInput.focus();
+}
 
-    /* AUTH CHECK */
-    (async () => {
-      const res = await fetch("/me", { credentials: "include" });
-      if (!res.ok) location.href = "login.html";
-    })();
+/* AUTH */
+(async () => {
+  const res = await fetch("/me", { credentials: "include" });
+  if (!res.ok) location.href = "login.html";
+  const user = await res.json();
+  document.getElementById("greeting").innerText = `Hello ${user.email}`;
+})();
 
-    const cameraAccess = document.getElementById("cameraAccess");
-    const viewerAccess = document.getElementById("viewerAccess");
-    const passwordSection = document.getElementById("passwordSection");
-    const streamPassword = document.getElementById("streamPassword");
+/* CREATE */
+createBtn.onclick = async () => {
+  const name = nameInput.value.trim();
 
-    function checkPassVisibility() {
-      if (cameraAccess.value === "protected" || viewerAccess.value === "protected") {
-        passwordSection.style.display = "block";
-      } else {
-        passwordSection.style.display = "none";
-      }
-    }
+  if (name.length < 3) {
+    showError("Stream name must be at least 3 characters.");
+    return;
+  }
 
-    cameraAccess.onchange = checkPassVisibility;
-    viewerAccess.onchange = checkPassVisibility;
+  const res = await fetch("/api/streams", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
 
-    /* CREATE LOGIC */
-    createBtn.onclick = async () => {
-      const name = nameInput.value.trim();
-      const pass = streamPassword.value.trim();
+  if (!res.ok) {
+    const data = await res.json();
+    showError(data.message || "Failed to create stream.");
+    return;
+  }
 
-      if (name.length < 3) {
-        showError("Stream name must be at least 3 characters.");
-        return;
-      }
-
-      if (passwordSection.style.display === "block" && pass.length < 4) {
-        showError("Passcode must be at least 4 characters.");
-        return;
-      }
-
-      createBtn.disabled = true;
-      createBtn.innerText = "Creating...";
-
-      try {
-        const res = await fetch("/api/streams", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name,
-            camera_access: cameraAccess.value,
-            viewer_access: viewerAccess.value,
-            password: pass
-          })
-        });
-
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || "Failed");
-        }
-
-        // Success
-        const data = await res.json();
-        location.href = `director.html?stream=${data.id}&name=${encodeURIComponent(name)}`;
-
-      } catch (err) {
-        createBtn.disabled = false;
-        createBtn.innerText = "Start Stream";
-        showError(err.message === "exists" ? "Name already taken" : "Failed to create stream");
-      }
-    };
-  </script>
+  location.href = "index.html";
+};
+</script>
 
 </body>
-
 </html>
