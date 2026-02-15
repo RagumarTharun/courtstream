@@ -917,19 +917,16 @@
     };
 
     function toggleRecord() {
+      console.log("Record button clicked. State:", recordingState, "ISO:", isIsoMode);
       if (recordingState === "idle") startRecording();
-      else if (recordingState === "recording") {
-        if (isIsoMode) stopRecording(); // ISO MODE: ALWAYS STOP, NO PAUSE
-        else pauseRecording();
-      }
-      else if (recordingState === "paused") resumeRecording();
+      else stopRecording(); // STRICT START/STOP ONLY - NO PAUSE
     }
 
     // UPDATED: Handle Camera Switching for EDL
     function switchCamera(id) {
       if (activeCameraId === id) return;
       activeCameraId = id;
-
+      
       const cam = cameras[id];
       const video = document.getElementById("mainVideo");
       const ph = document.getElementById("placeholder");
@@ -938,7 +935,7 @@
         video.srcObject = cam.stream;
         video.style.opacity = 1;
         ph.style.display = "none";
-
+        
         // Log cut for ISO EDL
         if (recordingState === "recording" && isIsoMode) {
           isoEdl.push({
@@ -952,7 +949,7 @@
       }
 
       renderCameraStrip();
-      updateStreamBadge();
+      updateStreamBadge(); 
 
       // Signal Live Status
       Object.keys(cameras).forEach(cId => {
@@ -961,12 +958,23 @@
     }
 
     function startRecording() {
-      // Allow ISO start even if no stream, but warn if NO CAMERAS
+      console.log("Attempting to start recording...");
       const hasCameras = Object.keys(cameras).length > 0;
-      if (isIsoMode && !hasCameras) return alert("No cameras connected! Cannot start ISO recording.");
-
-      const stream = document.getElementById("mainVideo").srcObject;
-      if (!isIsoMode && !stream) return alert("Select a camera first");
+      
+      // ISO MODE CHECKS
+      if (isIsoMode) {
+        if (!hasCameras) {
+          console.warn("ISO Start Failed: No cameras connected");
+          return alert("No cameras connected! Cannot start ISO recording.");
+        }
+      } else {
+        // LEGACY MODE CHECKS
+        const stream = document.getElementById("mainVideo").srcObject;
+        if (!stream) {
+          console.warn("Legacy Start Failed: No stream selected");
+          return alert("Select a camera first");
+        }
+      }
 
       recordingState = "recording";
       recordBtn.classList.add("active");
@@ -975,6 +983,7 @@
       recordBar.style.display = "flex";
       recordStatus.textContent = isIsoMode ? "ISO REC" : "REC";
       recordStartTime = Date.now();
+      console.log("Recording started. Mode:", isIsoMode ? "ISO" : "Legacy");
 
       if (isIsoMode) {
         // ISO MODE: Signal cameras to start
@@ -985,16 +994,17 @@
         if (activeCameraId) {
           isoEdl.push({ timestamp: 0, camId: activeCameraId });
         } else if (hasCameras) {
-          // Auto-select first camera for EDL reference
-          const firstCam = Object.keys(cameras)[0];
-          activeCameraId = firstCam;
-          switchCamera(firstCam); // Force visual switch
-          isoEdl.push({ timestamp: 0, camId: firstCam });
+            // Auto-select first camera for EDL reference
+            const firstCam = Object.keys(cameras)[0];
+            activeCameraId = firstCam;
+            switchCamera(firstCam); // Force visual switch
+            isoEdl.push({ timestamp: 0, camId: firstCam });
         }
 
         socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
       } else {
         // LEGACY MODE: Browser-side recording
+        const stream = document.getElementById("mainVideo").srcObject;
         if (!programRecorder) {
           const chunks = [];
           programRecorder = createRecorder(stream, chunks);
@@ -1009,21 +1019,9 @@
       tickTimer();
     }
 
-    function pauseRecording() {
-      if (isIsoMode) return; // Should not be reached logic-wise but fail-safe
-      // Pause logic is complex for ISO (distributed), so we might just BLOCK pause in ISO mode for MVP
-      if (isIsoMode) {
-        alert("Pause not supported in ISO mode yet.");
-        return;
-      }
+    // REMOVED PAUSE/RESUME FUNCTIONS AS REQUESTED
+    function pauseRecording() {} 
 
-      if (programRecorder && programRecorder.state === "recording") programRecorder.pause();
-      Object.values(cameraRecorders).forEach(r => r.recorder.state === "recording" && r.recorder.pause());
-      recordingState = "paused";
-      recordBtn.textContent = "Resume";
-      recordStatus.textContent = "PAUSED";
-      clearInterval(recordTimerInt);
-    }
 
     function resumeRecording() {
       if (isIsoMode) return;
