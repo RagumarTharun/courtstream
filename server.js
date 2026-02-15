@@ -11,6 +11,10 @@ const bcrypt = require("bcryptjs");
 const sqlite3 = require("sqlite3").verbose();
 const { Server } = require("socket.io");
 const helmet = require("helmet");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const ffmpeg = require("fluent-ffmpeg");
 
 const app = express();
 app.use(helmet({
