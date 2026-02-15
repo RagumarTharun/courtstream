@@ -961,75 +961,89 @@
     }
 
     function startRecording() {
-      // DEBUG: Trace execution
-      const hasCameras = Object.keys(cameras).length > 0;
-      const stream = document.getElementById("mainVideo").srcObject;
+      try {
+        // DEBUG: ABSOLUTE FIRST LINE
+        alert("startRecording: Function Entered");
 
-      alert(`startRecording called.\nISO: ${isIsoMode}\nCameras: ${Object.keys(cameras).length}\nMainStream: ${!!stream}`);
-      console.log("Attempting to start recording...");
+        // SAFE CHECK VARIABLES
+        const cams = (typeof cameras !== 'undefined') ? cameras : {};
+        const camsCount = Object.keys(cams).length;
+        const vidElem = document.getElementById("mainVideo");
+        const hasStream = vidElem && !!vidElem.srcObject;
 
-      // ISO MODE CHECKS
-      if (isIsoMode) {
-        if (!hasCameras) {
-          console.warn("ISO Start Failed: No cameras connected");
-          return alert("No cameras connected! Cannot start ISO recording.");
-        }
-      } else {
-        // LEGACY MODE CHECKS
+        alert(`State Check:\nISO: ${isIsoMode}\nCameras: ${camsCount}\nHas Stream: ${hasStream}`);
+        const hasCameras = Object.keys(cameras).length > 0;
         const stream = document.getElementById("mainVideo").srcObject;
-        if (!stream) {
-          console.warn("Legacy Start Failed: No stream selected");
-          return alert("Select a camera first");
+
+        alert(`startRecording called.\nISO: ${isIsoMode}\nCameras: ${Object.keys(cameras).length}\nMainStream: ${!!stream}`);
+        console.log("Attempting to start recording...");
+
+        // ISO MODE CHECKS
+        if (isIsoMode) {
+          if (!hasCameras) {
+            console.warn("ISO Start Failed: No cameras connected");
+            return alert("No cameras connected! Cannot start ISO recording.");
+          }
+        } else {
+          // LEGACY MODE CHECKS
+          const stream = document.getElementById("mainVideo").srcObject;
+          if (!stream) {
+            console.warn("Legacy Start Failed: No stream selected");
+            return alert("Select a camera first");
+          }
         }
+
+        alert("Checks passed. Starting...");
+
+        recordingState = "recording";
+        recordBtn.classList.add("active");
+        recIcon.style.display = "none";
+        stopIcon.style.display = "block";
+        recordBar.style.display = "flex";
+        recordStatus.textContent = isIsoMode ? "ISO REC" : "REC";
+        recordStartTime = Date.now();
+
+        alert("UI Updated. Mode: " + (isIsoMode ? "ISO" : "Legacy"));
+        console.log("Recording started. Mode:", isIsoMode ? "ISO" : "Legacy");
+
+        if (isIsoMode) {
+          // ISO MODE: Signal cameras to start
+          isoSessionId = `session_${Date.now()}`;
+          isoEdl = [];
+
+          // Log initial camera or First available if none selected
+          if (activeCameraId) {
+            isoEdl.push({ timestamp: 0, camId: activeCameraId });
+          } else if (hasCameras) {
+            // Auto-select first camera for EDL reference
+            const firstCam = Object.keys(cameras)[0];
+            activeCameraId = firstCam;
+            switchCamera(firstCam); // Force visual switch
+            isoEdl.push({ timestamp: 0, camId: firstCam });
+          }
+
+          socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
+          alert("ISO Start Signal Sent");
+        } else {
+          // LEGACY MODE: Browser-side recording
+          const stream = document.getElementById("mainVideo").srcObject;
+          if (!programRecorder) {
+            const chunks = [];
+            programRecorder = createRecorder(stream, chunks);
+            programRecorder.chunks = chunks;
+            programRecorder.start();
+          }
+          Object.keys(cameras).forEach(id => {
+            if (cameras[id].stream) startCameraRecorder(id, cameras[id].stream);
+          });
+          alert("Legacy Recording Started");
+        }
+
+        tickTimer();
+      } catch (err) {
+        console.error("CRITICAL ERROR IN startRecording:", err);
+        alert("CRITICAL ERROR: " + err.message);
       }
-
-      alert("Checks passed. Starting...");
-
-      recordingState = "recording";
-      recordBtn.classList.add("active");
-      recIcon.style.display = "none";
-      stopIcon.style.display = "block";
-      recordBar.style.display = "flex";
-      recordStatus.textContent = isIsoMode ? "ISO REC" : "REC";
-      recordStartTime = Date.now();
-
-      alert("UI Updated. Mode: " + (isIsoMode ? "ISO" : "Legacy"));
-      console.log("Recording started. Mode:", isIsoMode ? "ISO" : "Legacy");
-
-      if (isIsoMode) {
-        // ISO MODE: Signal cameras to start
-        isoSessionId = `session_${Date.now()}`;
-        isoEdl = [];
-
-        // Log initial camera or First available if none selected
-        if (activeCameraId) {
-          isoEdl.push({ timestamp: 0, camId: activeCameraId });
-        } else if (hasCameras) {
-          // Auto-select first camera for EDL reference
-          const firstCam = Object.keys(cameras)[0];
-          activeCameraId = firstCam;
-          switchCamera(firstCam); // Force visual switch
-          isoEdl.push({ timestamp: 0, camId: firstCam });
-        }
-
-        socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
-        alert("ISO Start Signal Sent");
-      } else {
-        // LEGACY MODE: Browser-side recording
-        const stream = document.getElementById("mainVideo").srcObject;
-        if (!programRecorder) {
-          const chunks = [];
-          programRecorder = createRecorder(stream, chunks);
-          programRecorder.chunks = chunks;
-          programRecorder.start();
-        }
-        Object.keys(cameras).forEach(id => {
-          if (cameras[id].stream) startCameraRecorder(id, cameras[id].stream);
-        });
-        alert("Legacy Recording Started");
-      }
-
-      tickTimer();
     }
 
     // REMOVED PAUSE/RESUME FUNCTIONS AS REQUESTED
