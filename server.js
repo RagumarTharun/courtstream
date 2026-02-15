@@ -416,7 +416,19 @@ app.post("/api/render-iso", async (req, res) => {
 
     broadcastProgress(100, "Render Complete");
     console.log(`✅ Render Success: ${outputFilename}`);
-    res.json({ success: true, url: `/uploads/iso/${outputFilename}` });
+
+    // Generate list of source files for download
+    const sourceFiles = Object.entries(uploads).map(([camId, filepath]) => ({
+      camId,
+      url: `/uploads/iso/${path.basename(filepath)}`,
+      filename: path.basename(filepath)
+    }));
+
+    res.json({
+      success: true,
+      url: `/uploads/iso/${outputFilename}`,
+      sourceFiles
+    });
 
   } catch (e) {
     console.error("❌ Render Failed:", e.message);

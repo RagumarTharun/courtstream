@@ -227,12 +227,27 @@
                 </p>
             </div>
 
-            <div id="completionSection" style="display:none; margin-top: 24px; text-align: center;">
-                <div style="color: #10b981; font-weight: 700; font-size: 18px; margin-bottom: 12px;">✅ Render Complete!
+            <div id="completionSection" style="display:none; margin-top: 24px;">
+                <div
+                    style="text-align: center; color: #10b981; font-weight: 700; font-size: 18px; margin-bottom: 24px;">
+                    ✅ Render Complete!
                 </div>
-                <a id="downloadLink" href="#" download class="btn btn-success">
-                    Download Final Clip
-                </a>
+
+                <div style="margin-bottom: 24px;">
+                    <div style="font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 8px;">FINAL MIX</div>
+                    <a id="downloadLink" href="#" download class="btn btn-success">
+                        Download Final Program (Edited)
+                    </a>
+                </div>
+
+                <div id="sourceFilesSection" style="margin-bottom: 24px; display: none;">
+                    <div style="font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 8px;">INDIVIDUAL
+                        CAMERA FEEDS (ISO)</div>
+                    <div id="sourceFilesList" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Dynamic Links -->
+                    </div>
+                </div>
+
                 <button class="btn btn-outline" onclick="exit()">Return to Dashboard</button>
             </div>
         </div>
@@ -343,6 +358,25 @@
                     renderSection.style.display = "none";
                     completionSection.style.display = "block";
                     document.getElementById("downloadLink").href = data.url;
+
+                    if (data.sourceFiles && data.sourceFiles.length > 0) {
+                        const list = document.getElementById("sourceFilesList");
+                        document.getElementById("sourceFilesSection").style.display = "block";
+
+                        data.sourceFiles.forEach(file => {
+                            const btn = document.createElement("a");
+                            btn.className = "btn btn-outline";
+                            btn.href = file.url;
+                            btn.download = file.filename;
+                            btn.innerHTML = `
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;">
+                                    <path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/>
+                                </svg>
+                                Download ${file.camId === "director_program" ? "Program Source" : file.camId.substring(0, 8)}
+                            `;
+                            list.appendChild(btn);
+                        });
+                    }
                 } else {
                     alert("Render failed: " + data.error);
                 }
