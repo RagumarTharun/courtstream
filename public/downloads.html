@@ -262,6 +262,7 @@
             document.getElementById("activeContent").style.display = "none";
             document.getElementById("emptyState").style.display = "block";
         } else {
+            console.log(`Joining room ${room} to track session ${sessionId}`);
             sessionIdDisplay.innerText = `Session ID: ${sessionId}`;
             socket.emit("join", { room, role: "director" }); // Join to hear messages
         }
@@ -277,6 +278,7 @@
         });
 
         socket.on("render-progress", ({ progress, status }) => {
+            console.log("Render Progress:", progress, status);
             renderSection.style.display = "block";
             renderAction.style.display = "none";
 

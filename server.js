@@ -318,7 +318,10 @@ app.post("/api/render-iso", async (req, res) => {
 
   const broadcastProgress = (progress, status) => {
     if (room) {
+      // console.log(`📢 Broadcasting progress to ${room}: ${progress}% - ${status}`);
       io.to(room).emit("render-progress", { sessionId, progress, status });
+    } else {
+      console.warn("⚠️ No room provided for progress broadcast");
     }
   };
 
@@ -371,10 +374,19 @@ app.post("/api/render-iso", async (req, res) => {
             "-c:a aac",
             "-force_key_frames expr:gte(t,n_forced*2)" // Force keyframes for smoother concat
           ])
+          .on("start", (cmdLine) => {
+            console.log(`🎬 FFmpeg Started Clip ${i}: ${cmdLine}`);
+          })
+          .on("progress", (p) => {
+            // Optional: more granular progress logging if needed
+          })
           .save(segmentPath)
-          .on("end", resolve)
+          .on("end", () => {
+            console.log(`✅ Clip ${i} processed`);
+            resolve();
+          })
           .on("error", (err) => {
-            console.error(`Error processing clip ${i} (Cam ${camId}):`, err.message);
+            console.error(`❌ Error processing clip ${i} (Cam ${camId}):`, err.message);
             reject(new Error(`Clip ${i} (Cam ${camId}) failed: ${err.message}`));
           });
       });
