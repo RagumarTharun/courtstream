@@ -286,10 +286,21 @@
             updateCamRow(from, progress);
         });
 
+        const expectedUploads = JSON.parse(localStorage.getItem("isoExpectedUploads") || "[]");
+        console.log("Expected Uploads:", expectedUploads);
+
         socket.on("iso-upload-complete", ({ from }) => {
             uploadedSet.add(from);
             updateCamRow(from, 100);
             document.getElementById("uploadCount").innerText = `${uploadedSet.size} done`;
+
+            // Check if all expected uploads are done
+            const allDone = expectedUploads.length > 0 && expectedUploads.every(id => uploadedSet.has(id));
+
+            if (allDone) {
+                console.log("All expected uploads complete. Auto-triggering render...");
+                triggerRender(true); // true = auto
+            }
         });
 
         socket.on("render-progress", ({ progress, status }) => {
@@ -341,8 +352,8 @@
             if (progress >= 100) fill.classList.add("done");
         }
 
-        async function triggerRender() {
-            if (!confirm("Are you sure you want to trigger the render now? Make sure major camera feeds are done uploading.")) return;
+        async function triggerRender(isAuto = false) {
+            if (!isAuto && !confirm("Are you sure you want to trigger the render now? Make sure major camera feeds are done uploading.")) return;
 
             renderAction.style.display = "none";
             renderSection.style.display = "block";

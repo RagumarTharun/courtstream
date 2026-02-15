@@ -1168,13 +1168,19 @@
 
       // QUALITY (ALL) or BOTH: Redirect to Downloads for Server Processing
       if (mode === "all" || mode === "both") {
+        // Gather expected uploads (active cameras + program?)
+        // Note: In "all" mode, Director generally doesn't upload program, but we might want to?
+        // The original code didn't upload director program in "all" mode, only cameras.
+        // If we want director program in "all" mode too, we should uncomment uploading it.
+        // For now, assuming "all" means just cameras + server-side mixing.
+
+        const expected = Object.keys(peers); // All connected cameras are expected to upload
         localStorage.setItem("isoSessionId", isoSessionId);
         localStorage.setItem("isoStreamId", streamId);
         localStorage.setItem("isoEdl", JSON.stringify(isoEdl));
+        localStorage.setItem("isoExpectedUploads", JSON.stringify(expected));
 
         console.log("Redirecting to Download Manager...");
-        // If "both", maybe wait a moment or show a "Redirecting" toast?
-        // Using slight delay to allow download prompts to spawn
         setTimeout(() => location.href = "downloads.html", 1000);
         return;
       }
@@ -1183,6 +1189,11 @@
       if (mode === "program") {
         if (programChunks.length) {
           const blob = new Blob(programChunks, { type: "video/webm" });
+
+          // We upload immediately, so expected upload is just ourselves
+          const expected = ["director_program"];
+          localStorage.setItem("isoExpectedUploads", JSON.stringify(expected));
+
           await uploadDirectorProgram(blob, isoSessionId);
 
           // Mock EDL for just one clip
@@ -1190,7 +1201,7 @@
 
           localStorage.setItem("isoSessionId", isoSessionId);
           localStorage.setItem("isoStreamId", streamId);
-          localStorage.setItem("isoEdl", JSON.stringify(simpleEdl)); // We might need to handle this specially in downloads
+          localStorage.setItem("isoEdl", JSON.stringify(simpleEdl));
 
           location.href = "downloads.html";
         } else {
