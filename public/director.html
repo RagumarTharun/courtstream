@@ -207,10 +207,23 @@
       border-color: var(--red);
     }
 
-    .ctrl-btn svg {
-      width: 20px;
-      height: 20px;
-      fill: currentColor;
+    /* RENDER SPINNER */
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     /* ===== RIGHT CAMERA STRIPE ===== */
@@ -1091,8 +1104,17 @@
         const modalId = "isoWaitModal_" + Date.now();
         const triggerRender = async () => {
           const m = document.getElementById(modalId);
-          if (m) m.remove();
-          showModal("Rendering...", "Triggering video reconstruction now...");
+          // Keep modal but clear actions and add spinner + progress
+          const box = m.querySelector(".modal-box");
+          box.innerHTML = `
+            <h3>Rendering Video...</h3>
+            <p style="margin-bottom:15px;"><span class="spinner"></span> <span id="modalRenderStatus">Starting reconstruction...</span></p>
+            <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden; margin-bottom:10px;">
+              <div id="modalRenderFill" style="width:0%; height:100%; background:#3b82f6; transition:width 0.3s ease;"></div>
+            </div>
+            <p id="modalRenderPercent" style="font-size:11px; color:#94a3b8; text-align:right;">0%</p>
+          `;
+
           try {
             const res = await fetch("/api/render-iso", {
               method: "POST",
@@ -1100,14 +1122,35 @@
               body: JSON.stringify({ sessionId: isoSessionId, edl: isoEdl, room: streamId })
             });
             const data = await res.json();
+
             if (data.success) {
-              showModal("Render Complete!", `Your video is ready.<br><br><a href="${data.url}" download class="btn" style="display:inline-block; margin-top:10px; background:#3b82f6; text-decoration:none; padding:8px 16px; border-radius:6px; color:white; font-weight:600;">Download Video</a>`);
+              // Final UI Update
+              box.innerHTML = `
+                <h3>Render Complete!</h3>
+                <p>Your high-quality video is ready for download.</p>
+                <div class="modal-actions" style="margin-top:20px;">
+                  <a href="${data.url}" download class="ctrl-btn" style="width:100%; height:auto; padding:12px; border-radius:12px; background:#10b981; text-align:center; text-decoration:none; display:block; color:white; font-weight:600;">Download Video</a>
+                  <button onclick="this.closest('.modal').remove()" class="ctrl-btn cm-btn-cancel" style="width:100%; height:auto; padding:12px; border-radius:12px; margin-top:8px;">Close</button>
+                </div>
+              `;
             } else {
-              showModal("Render Failed", "Error: " + data.error);
+              box.innerHTML = `
+                <h3>Render Failed</h3>
+                <p style="color:#ef4444;">Error: ${data.error}</p>
+                <div class="modal-actions" style="margin-top:20px;">
+                  <button onclick="this.closest('.modal').remove()" class="ctrl-btn cm-btn-cancel" style="width:100%; height:auto; padding:12px; border-radius:12px;">Close</button>
+                </div>
+              `;
             }
           } catch (e) {
             console.error("Render trigger failed:", e);
-            showModal("Render Error", "Failed to contact server.");
+            box.innerHTML = `
+              <h3>Render Error</h3>
+              <p style="color:#ef4444;">Failed to contact server.</p>
+              <div class="modal-actions" style="margin-top:20px;">
+                <button onclick="this.closest('.modal').remove()" class="ctrl-btn cm-btn-cancel" style="width:100%; height:auto; padding:12px; border-radius:12px;">Close</button>
+              </div>
+            `;
           }
         };
 
@@ -1154,24 +1197,40 @@
 
     /* ===== RENDER PROGRESS ===== */
     socket.on("render-progress", ({ progress, status }) => {
+      // Update modal if active
+      const modalStatus = document.getElementById("modalRenderStatus");
+      const modalFill = document.getElementById("modalRenderFill");
+      const modalPercent = document.getElementById("modalRenderPercent");
+
+      if (modalStatus) modalStatus.innerText = status;
+      if (modalFill) modalFill.style.width = Math.max(0, progress) + "%";
+      if (modalPercent) modalPercent.innerText = Math.max(0, progress) + "%";
+
+      // Error case in progress
+      if (progress < 0 && modalStatus) {
+        modalStatus.style.color = "#ef4444";
+        if (modalFill) modalFill.style.background = "#ef4444";
+      }
+
+      // Legacy panel update (optional cleanup later)
       const bar = document.getElementById("renderProgressPanel");
       const fill = document.getElementById("renderProgressFill");
       const text = document.getElementById("renderStatusText");
 
       if (progress < 0) {
-        text.innerText = "Error: " + status;
-        fill.style.background = "#ef4444";
-        setTimeout(() => { bar.style.display = "none"; }, 5000);
+        if (text) text.innerText = "Error: " + status;
+        if (fill) fill.style.background = "#ef4444";
+        setTimeout(() => { if (bar) bar.style.display = "none"; }, 5000);
         return;
       }
 
-      bar.style.display = "flex";
-      fill.style.width = progress + "%";
-      fill.style.background = "#3b82f6";
-      text.innerText = status + " (" + progress + "%)";
+      if (bar) bar.style.display = "flex";
+      if (fill) fill.style.width = progress + "%";
+      if (fill) fill.style.background = "#3b82f6";
+      if (text) text.innerText = status + " (" + progress + "%)";
 
       if (progress >= 100) {
-        setTimeout(() => { bar.style.display = "none"; }, 3000);
+        setTimeout(() => { if (bar) bar.style.display = "none"; }, 3000);
       }
     });
 

@@ -622,7 +622,7 @@
       // Track progress
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
-          const percent = Math.round((e.loaded / e.total) * 100);
+          const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
           fill.style.width = percent + "%";
           socket.emit("iso-upload-progress", { room: streamId, progress: percent });
         }
