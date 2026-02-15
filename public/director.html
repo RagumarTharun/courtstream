@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>CourtStream – Director</title>
+  <script src="modal.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='2'><circle cx='12' cy='12' r='10'/><path d='M9.5 8l6 4-6 4V8z' fill='white' stroke='none'/></svg>">
@@ -540,6 +541,7 @@
     const peers = {};      // camera socketId -> { pc, stream, slot, name }
     const viewers = {};    // viewer socketId -> { pc, sender }
     const rotations = {}; // socketId -> rotation degrees
+    let activeCameraId = null; // Fix: Declare missing state variable
     let currentLiveId = null;
     const pendingViewers = new Set();
 
@@ -760,11 +762,20 @@
         console.warn("⚠️ Cannot set live: No stream for", id);
         return;
       }
+      activeCameraId = id; // Unify state
       currentLiveId = id;
       selectedStream = peers[id].stream;
 
-      document.querySelectorAll(".camera-slot").forEach(s => s.classList.remove("live"));
-      if (peers[id].slot) peers[id].slot.classList.add("live");
+      // Update EDL if recording ISO
+      if (recordingState === "recording" && isIsoMode) {
+        isoEdl.push({
+          timestamp: Date.now() - recordStartTime,
+          camId: id
+        });
+      }
+
+      document.querySelectorAll(".camera-slot").forEach(s => s.classList.remove("active", "live"));
+      if (peers[id].slot) peers[id].slot.classList.add("live", "active");
 
       Object.keys(peers).forEach(peerId => {
         socket.emit("control", {
@@ -889,6 +900,7 @@
     let isIsoMode = false;
     let isoSessionId = null;
     let isoEdl = []; // [{ timestamp, camId }]
+    let uploadedCameras = new Set(); // Track camera uploads for ISO
 
     const recordBar = document.getElementById("recordBar");
     const recordTimer = document.getElementById("recordTimer");
@@ -917,48 +929,30 @@
     };
 
     function toggleRecord() {
-      // DEBUG: Force feedback to confirm click
-      alert("Record Clicked! State: " + recordingState);
-      console.log("Record button clicked. State:", recordingState, "ISO:", isIsoMode);
-
-      if (recordingState === "idle") startRecording();
-      else stopRecording(); // STRICT START/STOP ONLY - NO PAUSE
-    }
-
-    // UPDATED: Handle Camera Switching for EDL
-    function switchCamera(id) {
-      if (activeCameraId === id) return;
-      activeCameraId = id;
-
-      const cam = peers[id];
-      const video = document.getElementById("mainVideo");
-      const ph = document.getElementById("placeholder");
-
-      if (cam && cam.stream) {
-        video.srcObject = cam.stream;
-        video.style.opacity = 1;
-        ph.style.display = "none";
-
-        // Log cut for ISO EDL
-        if (recordingState === "recording" && isIsoMode) {
-          isoEdl.push({
-            timestamp: Date.now() - recordStartTime,
-            camId: id
-          });
-        }
-      } else {
-        video.style.opacity = 0;
-        ph.style.display = "flex";
+      try {
+        console.log("Record button clicked. State:", recordingState, "ISO:", isIsoMode);
+        if (recordingState === "idle") startRecording();
+        else stopRecording();
+      } catch (e) {
+        console.error("Critical error in toggleRecord:", e);
+        // Fallback alert since showModal might be part of the failure
+        window.alert("An unexpected error occurred: " + e.message);
       }
-
-      renderCameraStrip();
-      updateStreamBadge();
-
-      // Signal Live Status
-      Object.keys(peers).forEach(cId => {
-        socket.emit("control", { to: cId, data: { type: "live", on: (cId === id), name: streamName } });
-      });
     }
+
+    /* ===== ISO UPLOAD HANDLER ===== */
+    socket.on("iso-upload-complete", ({ filename }) => {
+      console.log("✅ Camera upload received:", filename);
+      uploadedCameras.add(filename);
+
+      // Update modal if waiting
+      const waitingMsg = document.getElementById("isoWaitingMsg");
+      if (waitingMsg) {
+        waitingMsg.innerHTML = `Received clips from <b>${uploadedCameras.size}</b> camera(s).<br><br>Waiting for others or click below to start render now.`;
+      }
+    });
+
+    // switchCamera removed - using setLiveCamera directly
 
     function startRecording() {
       console.log("Attempting to start recording...");
@@ -1001,8 +995,7 @@
         } else if (hasCameras) {
           // Auto-select first camera for EDL reference
           const firstCam = Object.keys(peers)[0];
-          activeCameraId = firstCam;
-          switchCamera(firstCam); // Force visual switch
+          setLiveCamera(firstCam); // Fix: use unified state setter
           isoEdl.push({ timestamp: 0, camId: firstCam });
         }
 
@@ -1010,12 +1003,24 @@
       } else {
         // LEGACY MODE: Browser-side recording
         const stream = vidElem.srcObject;
-        if (!programRecorder) {
-          const chunks = [];
-          programRecorder = createRecorder(stream, chunks);
-          programRecorder.chunks = chunks;
-          programRecorder.start();
+
+        // Fix: Reset programRecorder completely
+        if (programRecorder) {
+          try { programRecorder.stop(); } catch (e) { }
+          programRecorder = null;
         }
+
+        const currentChunks = [];
+        programRecorder = createRecorder(stream, currentChunks);
+        programRecorder.chunks = currentChunks;
+        programRecorder.start();
+
+        // Fix: Clear and restart camera recorders
+        Object.keys(cameraRecorders).forEach(id => {
+          try { cameraRecorders[id].recorder.stop(); } catch (e) { }
+          delete cameraRecorders[id];
+        });
+
         Object.keys(peers).forEach(id => {
           if (peers[id].stream) startCameraRecorder(id, peers[id].stream);
         });
@@ -1024,21 +1029,9 @@
       tickTimer();
     }
 
-    // REMOVED PAUSE/RESUME FUNCTIONS AS REQUESTED
+    // PAUSE/RESUME REMOVED - STRICT START/STOP
     function pauseRecording() { }
-
-
-    function resumeRecording() {
-      if (isIsoMode) return;
-
-      if (programRecorder && programRecorder.state === "paused") programRecorder.resume();
-      Object.values(cameraRecorders).forEach(r => r.recorder.state === "paused" && r.recorder.resume());
-      recordingState = "recording";
-      recordBtn.textContent = "Pause";
-      recordStatus.textContent = "REC";
-      recordStartTime = Date.now() - (parseTime(recordTimer.textContent) * 1000);
-      tickTimer();
-    }
+    function resumeRecording() { }
 
     async function stopRecording() {
       if (recordingState === "idle") return;
@@ -1049,42 +1042,71 @@
       recIcon.style.display = "block";
       stopIcon.style.display = "none";
       recordBar.style.display = "none";
-      stopTimer();
+      // Fix timer crash - clear interval directly
+      clearInterval(recordTimerInt);
 
       if (isIsoMode) {
         socket.emit("stop-iso", { room: streamId });
 
-        // Notify user and trigger render
-        showModal("ISO Recording Stopped", "The recording has ended. Reconstructing high-quality video now...");
+        uploadedCameras.clear();
 
-        try {
-          // Trigger server-side render
-          const res = await fetch("/api/render-iso", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sessionId: isoSessionId,
-              edl: isoEdl,
-              room: streamId // for progress broadcasting
-            })
-          });
-          const data = await res.json();
-          if (data.success) {
-            showModal("Render Complete!", `Your high-quality video is ready. <br><br><a href="${data.url}" download class="btn" style="display:inline-block; margin-top:10px; background:#3b82f6; text-decoration:none; padding:8px 16px; border-radius:6px; color:white; font-weight:600;">Download Video</a>`);
-          } else {
-            showModal("Render Failed", "Error: " + data.error);
+        // Modal for waiting
+        const modalId = "isoWaitModal_" + Date.now();
+        const triggerRender = async () => {
+          const m = document.getElementById(modalId);
+          if (m) m.remove();
+          showModal("Rendering...", "Triggering video reconstruction now...");
+          try {
+            const res = await fetch("/api/render-iso", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId: isoSessionId, edl: isoEdl, room: streamId })
+            });
+            const data = await res.json();
+            if (data.success) {
+              showModal("Render Complete!", `Your video is ready.<br><br><a href="${data.url}" download class="btn" style="display:inline-block; margin-top:10px; background:#3b82f6; text-decoration:none; padding:8px 16px; border-radius:6px; color:white; font-weight:600;">Download Video</a>`);
+            } else {
+              showModal("Render Failed", "Error: " + data.error);
+            }
+          } catch (e) {
+            console.error("Render trigger failed:", e);
+            showModal("Render Error", "Failed to contact server.");
           }
-        } catch (e) {
-          console.error("Render trigger failed:", e);
-          showModal("Render Error", "Failed to trigger video reconstruction.");
-        }
+        };
+
+        const modal = document.createElement("div");
+        modal.id = modalId;
+        modal.className = "modal";
+        modal.style.display = "flex";
+        modal.innerHTML = `
+          <div class="modal-box">
+            <h3>ISO Recording Stopped</h3>
+            <p id="isoWaitingMsg">Waiting for high-quality clips to upload...<br><br>Received clips from <b>0</b> camera(s).</p>
+            <div class="modal-actions" style="flex-direction:column; gap:8px;">
+              <button id="isoTriggerBtn" class="ctrl-btn" style="width:100%; height:auto; padding:12px; border-radius:12px; background:#3b82f6;">Render Now</button>
+              <button id="isoCancelBtn" class="ctrl-btn cm-btn-cancel" style="width:100%; height:auto; padding:12px; border-radius:12px;">Close</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+
+        const itb = document.getElementById("isoTriggerBtn");
+        const icb = document.getElementById("isoCancelBtn");
+        if (itb) itb.onclick = triggerRender;
+        if (icb) icb.onclick = () => modal.remove();
+
       } else {
         const stopPromises = [];
         if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
         Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
 
         await Promise.all(stopPromises);
-        downloadAll();
+
+        // Fix: Reset recorder state
+        programRecorder = null;
+        Object.keys(cameraRecorders).forEach(id => delete cameraRecorders[id]);
+
+        downloadAllRecordings();
       }
     }
 
@@ -1323,7 +1345,6 @@
       }
     });
   </script>
-  <script src="modal.js"></script>
   <script src="feedback.js"></script>
   <div id="renderProgressPanel"
     style="display:none; position:fixed; bottom:100px; left:50%; transform:translateX(-50%); width:320px; background:rgba(0,0,0,0.8); padding:16px; border-radius:12px; border:1px solid var(--border); z-index:200; flex-direction:column; gap:8px;">
