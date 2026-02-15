@@ -961,7 +961,10 @@
     }
 
     function startRecording() {
+      // DEBUG: Trace execution
+      alert("startRecording called");
       console.log("Attempting to start recording...");
+
       const hasCameras = Object.keys(cameras).length > 0;
 
       // ISO MODE CHECKS
@@ -979,6 +982,8 @@
         }
       }
 
+      alert("Checks passed. Starting...");
+
       recordingState = "recording";
       recordBtn.classList.add("active");
       recIcon.style.display = "none";
@@ -986,6 +991,8 @@
       recordBar.style.display = "flex";
       recordStatus.textContent = isIsoMode ? "ISO REC" : "REC";
       recordStartTime = Date.now();
+
+      alert("UI Updated. Mode: " + (isIsoMode ? "ISO" : "Legacy"));
       console.log("Recording started. Mode:", isIsoMode ? "ISO" : "Legacy");
 
       if (isIsoMode) {
@@ -1005,6 +1012,7 @@
         }
 
         socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
+        alert("ISO Start Signal Sent");
       } else {
         // LEGACY MODE: Browser-side recording
         const stream = document.getElementById("mainVideo").srcObject;
@@ -1017,6 +1025,7 @@
         Object.keys(cameras).forEach(id => {
           if (cameras[id].stream) startCameraRecorder(id, cameras[id].stream);
         });
+        alert("Legacy Recording Started");
       }
 
       tickTimer();
