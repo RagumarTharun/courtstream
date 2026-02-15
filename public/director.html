@@ -897,8 +897,12 @@
     const recIcon = document.querySelector(".rec-icon");
     const stopIcon = document.querySelector(".stop-icon");
     const isoToggle = document.getElementById("isoToggle");
+    const qrBtn = document.getElementById("qrBtn");
 
     recordBtn.onclick = toggleRecord;
+
+    // Fix: Attach QR button listener
+    if (qrBtn) qrBtn.onclick = openQr;
 
     isoToggle.onchange = (e) => {
       // Prevent toggling while recording
@@ -914,7 +918,10 @@
 
     function toggleRecord() {
       if (recordingState === "idle") startRecording();
-      else if (recordingState === "recording") pauseRecording();
+      else if (recordingState === "recording") {
+        if (isIsoMode) stopRecording(); // ISO doesn't support pause, so treat as STOP
+        else pauseRecording();
+      }
       else if (recordingState === "paused") resumeRecording();
     }
 
