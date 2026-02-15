@@ -289,7 +289,7 @@ app.post("/api/upload-iso", upload.single("video"), (req, res) => {
 
 // ISO Render Endpoint
 app.post("/api/render-iso", async (req, res) => {
-  const { sessionId, edl } = req.body;
+  const { sessionId, edl, room } = req.body; // room added for progress broadcast
 
   if (!sessionId || !edl || !Array.isArray(edl) || edl.length === 0) {
     return res.status(400).json({ error: "Invalid data" });
@@ -297,12 +297,18 @@ app.post("/api/render-iso", async (req, res) => {
 
   const uploads = sessionUploads[sessionId];
   if (!uploads) {
-    return res.status(404).json({ error: "No recordings found for this session. Wait for uploads to finish." });
+    return res.status(404).json({ error: `No recordings found for session ${sessionId}. Wait for uploads to finish.` });
   }
 
   const outputFilename = `render_${sessionId}.mp4`;
   const outputPath = path.join(__dirname, "public", "uploads", "iso", outputFilename);
   console.log(`🎬 Starting Render for Session ${sessionId} (${edl.length} clips)...`);
+
+  const broadcastProgress = (progress, status) => {
+    if (room) {
+      io.to(room).emit("render-progress", { sessionId, progress, status });
+    }
+  };
 
   // Create temp dir for segments
   const tempDir = path.join(__dirname, "public", "uploads", "iso", "temp_" + sessionId);
@@ -329,8 +335,12 @@ app.post("/api/render-iso", async (req, res) => {
 
       if (!inputPath) {
         console.warn(`⚠️ Skipped Clip ${i}: Missing file for Cam ${camId}`);
+        // Log what we DO have for debugging
+        console.log("Available Cam IDs in this session:", Object.keys(uploads));
         continue;
       }
+
+      broadcastProgress(Math.round((i / edl.length) * 80), `Processing clip ${i + 1}/${edl.length}`);
 
       const segmentPath = path.join(tempDir, `seg_${i}.mp4`);
       segments.push(segmentPath);
@@ -352,13 +362,14 @@ app.post("/api/render-iso", async (req, res) => {
           .save(segmentPath)
           .on("end", resolve)
           .on("error", (err) => {
-            console.error(`Error processing clip ${i}:`, err.message);
-            reject(err);
+            console.error(`Error processing clip ${i} (Cam ${camId}):`, err.message);
+            reject(new Error(`Clip ${i} (Cam ${camId}) failed: ${err.message}`));
           });
       });
     }
 
     // CONCAT
+    broadcastProgress(85, "Concatenating segments...");
     console.log("🔗 Concatenating segments...");
     const fileListContent = segments.map(p => `file '${p}'`).join("\n");
     fs.writeFileSync(listPath, fileListContent);
@@ -370,17 +381,22 @@ app.post("/api/render-iso", async (req, res) => {
         .outputOptions("-c copy")
         .save(outputPath)
         .on("end", resolve)
-        .on("error", reject);
+        .on("error", (err) => {
+          console.error("Concat Error:", err.message);
+          reject(new Error("Final concat failed: " + err.message));
+        });
     });
 
     // Cleanup
     fs.rmSync(tempDir, { recursive: true, force: true });
 
+    broadcastProgress(100, "Render Complete");
     console.log(`✅ Render Success: ${outputFilename}`);
     res.json({ success: true, url: `/uploads/iso/${outputFilename}` });
 
   } catch (e) {
-    console.error("❌ Render Failed:", e);
+    console.error("❌ Render Failed:", e.message);
+    broadcastProgress(-1, `Render Failed: ${e.message}`);
     // Cleanup on error
     if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
     res.status(500).json({ error: e.message });

@@ -516,9 +516,11 @@
     /* ===== ISO RECORDING ===== */
     let isoRecorder = null;
     let isoChunks = [];
+    let currentIsoSessionId = null;
 
     socket.on("start-iso", async ({ sessionId }) => {
       console.log("🎥 Starting ISO Recording for Session:", sessionId);
+      currentIsoSessionId = sessionId;
       if (!mediaStream) return;
 
       isoChunks = [];
@@ -567,7 +569,8 @@
 
       const formData = new FormData();
       formData.append("video", blob, `cam_${socket.id}.webm`);
-      formData.append("sessionId", "iso_upload"); // Metadata
+      formData.append("sessionId", currentIsoSessionId || "unknown");
+      formData.append("camId", socket.id);
 
       try {
         const res = await fetch("/api/upload-iso", {
@@ -588,7 +591,39 @@
         liveBadge.textContent = "ERROR";
       }
     }
+
+    /* ===== RENDER PROGRESS ===== */
+    socket.on("render-progress", ({ progress, status }) => {
+      const bar = document.getElementById("renderProgressPanel");
+      const fill = document.getElementById("renderProgressFill");
+      const text = document.getElementById("renderStatusText");
+
+      if (progress < 0) {
+        text.innerText = "Error: " + status;
+        fill.style.background = "#ef4444";
+        setTimeout(() => { bar.style.display = "none"; }, 5000);
+        return;
+      }
+
+      bar.style.display = "flex";
+      fill.style.width = progress + "%";
+      fill.style.background = "#3b82f6";
+      text.innerText = status + " (" + progress + "%)";
+
+      if (progress >= 100) {
+        setTimeout(() => { bar.style.display = "none"; }, 3000);
+      }
+    });
   </script>
+
+  <div id="renderProgressPanel"
+    style="display:none; position:fixed; bottom:100px; left:20px; right:20px; background:rgba(0,0,0,0.8); padding:16px; border-radius:12px; border:1px solid var(--border); z-index:200; flex-direction:column; gap:8px;">
+    <div style="font-size:12px; font-weight:600; color:#94a3b8;" id="renderStatusText">Rendering Video...</div>
+    <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden;">
+      <div id="renderProgressFill" style="width:0%; height:100%; background:#3b82f6; transition: width 0.3s ease;">
+      </div>
+    </div>
+  </div>
 </body>
 
 </html>
