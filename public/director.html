@@ -940,8 +940,7 @@
       }
     }
 
-    /* ===== ISO UPLOAD HANDLER ===== */
-    socket.on("iso-upload-complete", ({ filename }) => {
+    socket.on("iso-upload-complete", ({ filename, from }) => {
       console.log("✅ Camera upload received:", filename);
       uploadedCameras.add(filename);
 
@@ -949,6 +948,44 @@
       const waitingMsg = document.getElementById("isoWaitingMsg");
       if (waitingMsg) {
         waitingMsg.innerHTML = `Received clips from <b>${uploadedCameras.size}</b> camera(s).<br><br>Waiting for others or click below to start render now.`;
+      }
+
+      // Mark specific camera as done in progress list
+      const camRow = document.querySelector(`[data-cam-id="${from}"]`);
+      if (camRow) {
+        const bar = camRow.querySelector(".progress-fill");
+        const status = camRow.querySelector(".cam-status");
+        if (bar) bar.style.width = "100%";
+        if (status) status.innerText = "DONE";
+      }
+    });
+
+    socket.on("iso-upload-progress", ({ from, progress }) => {
+      const list = document.getElementById("isoProgressList");
+      if (!list) return;
+
+      let camRow = list.querySelector(`[data-cam-id="${from}"]`);
+      if (!camRow) {
+        // Create new row for this camera
+        camRow = document.createElement("div");
+        camRow.setAttribute("data-cam-id", from);
+        camRow.style.marginBottom = "10px";
+        camRow.innerHTML = `
+          <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+            <span>${peers[from] ? peers[from].name : 'Unknown Camera'}</span>
+            <span class="cam-status">${progress}%</span>
+          </div>
+          <div style="height:4px; background:#1e293b; border-radius:2px; overflow:hidden;">
+            <div class="progress-fill" style="width:${progress}%; height:100%; background:#3b82f6; transition:width 0.2s ease;"></div>
+          </div>
+        `;
+        list.appendChild(camRow);
+      } else {
+        // Update existing row
+        const bar = camRow.querySelector(".progress-fill");
+        const status = camRow.querySelector(".cam-status");
+        if (bar) bar.style.width = progress + "%";
+        if (status) status.innerText = progress + "%";
       }
     });
 
@@ -1079,9 +1116,14 @@
         modal.className = "modal";
         modal.style.display = "flex";
         modal.innerHTML = `
-          <div class="modal-box">
+          <div class="modal-box" style="max-width:360px;">
             <h3>ISO Recording Stopped</h3>
-            <p id="isoWaitingMsg">Waiting for high-quality clips to upload...<br><br>Received clips from <b>0</b> camera(s).</p>
+            <p id="isoWaitingMsg" style="margin-bottom:15px;">Waiting for high-quality clips to upload...</p>
+            
+            <div id="isoProgressList" style="text-align:left; margin-bottom:20px; max-height:200px; overflow-y:auto; background:rgba(0,0,0,0.2); padding:10px; border-radius:8px;">
+              <!-- Individual camera bars will appear here -->
+            </div>
+
             <div class="modal-actions" style="flex-direction:column; gap:8px;">
               <button id="isoTriggerBtn" class="ctrl-btn" style="width:100%; height:auto; padding:12px; border-radius:12px; background:#3b82f6;">Render Now</button>
               <button id="isoCancelBtn" class="ctrl-btn cm-btn-cancel" style="width:100%; height:auto; padding:12px; border-radius:12px;">Close</button>

@@ -16,6 +16,16 @@ const path = require("path");
 const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
 
+// Ensure upload directories exist
+const UPLOADS_BASE = path.join(__dirname, "public", "uploads");
+const UPLOADS_ISO = path.join(UPLOADS_BASE, "iso");
+[UPLOADS_BASE, UPLOADS_ISO].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log("📁 Created directory:", dir);
+  }
+});
+
 const app = express();
 app.use(helmet({
   contentSecurityPolicy: false, // Disabled for WebRTC/Socket.IO
@@ -189,7 +199,9 @@ app.get("/me", (req, res) => {
 // Multer storage configuration (assuming 'uploads' directory exists)
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, './public/uploads/');
+    // ISO uploads go to a specific subfolder for better organization
+    const dest = file.fieldname === "video" ? "./public/uploads/iso/" : "./public/uploads/";
+    cb(null, dest);
   },
   filename: function (req, file, cb) {
     cb(null, Date.now() + '-' + file.originalname);
@@ -584,7 +596,12 @@ io.on("connection", socket => {
   socket.on("iso-upload-complete", ({ room, filename }) => {
     // Notify director that a camera has finished uploading
     console.log(`✅ ISO Upload Complete: ${filename}`);
-    socket.to(room).emit("iso-upload-complete", { filename });
+    socket.to(room).emit("iso-upload-complete", { filename, from: socket.id });
+  });
+
+  socket.on("iso-upload-progress", ({ room, progress }) => {
+    // Relay upload progress to director
+    socket.to(room).emit("iso-upload-progress", { from: socket.id, progress });
   });
 
   socket.on("disconnect", () => {

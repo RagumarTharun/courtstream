@@ -173,6 +173,36 @@
       color: white;
       cursor: pointer;
     }
+
+    /* UPLOAD PROGRESS */
+    #uploadProgressOverlay {
+      display: none;
+      position: absolute;
+      bottom: 100px;
+      left: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      z-index: 50;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: #1e293b;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #3b82f6;
+      width: 0%;
+      transition: width 0.1s linear;
+    }
   </style>
 </head>
 
@@ -214,6 +244,14 @@
           <path d="M3 5h8v14H3z" />
         </svg>
       </button>
+    </div>
+
+    <!-- Upload Progress -->
+    <div id="uploadProgressOverlay">
+      <div style="font-size: 11px; font-weight: 600; color: #94a3b8;">Uploading High Quality Clip...</div>
+      <div class="progress-bar">
+        <div id="uploadProgressFill" class="progress-fill"></div>
+      </div>
     </div>
 
   </div>
@@ -562,7 +600,13 @@
     });
 
     async function uploadIso(blob) {
-      console.log("📤 Uploading ISO file...", blob.size);
+      console.log("📤 Uploading ISO file using XHR...", blob.size);
+      const overlay = document.getElementById("uploadProgressOverlay");
+      const fill = document.getElementById("uploadProgressFill");
+
+      overlay.style.display = "flex";
+      fill.style.width = "0%";
+
       liveBadge.textContent = "UPLOADING";
       liveBadge.style.background = "#f59e0b"; // Orange
       liveBadge.style.display = "inline-block";
@@ -572,24 +616,47 @@
       formData.append("sessionId", currentIsoSessionId || "unknown");
       formData.append("camId", socket.id);
 
-      try {
-        const res = await fetch("/api/upload-iso", {
-          method: "POST",
-          body: formData
-        });
-        const data = await res.json();
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/upload-iso", true);
 
-        if (data.success) {
-          console.log("✅ Upload complete:", data.filename);
-          socket.emit("iso-upload-complete", { room: streamId, filename: data.filename });
-          liveBadge.textContent = "DONE";
-          liveBadge.style.background = "#10b981"; // Green
-          setTimeout(() => { liveBadge.style.display = "none"; }, 3000);
+      // Track progress
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          fill.style.width = percent + "%";
+          socket.emit("iso-upload-progress", { room: streamId, progress: percent });
         }
-      } catch (e) {
-        console.error("Upload failed:", e);
+      };
+
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status === 200 && data.success) {
+            console.log("✅ Upload complete:", data.filename);
+            socket.emit("iso-upload-complete", { room: streamId, filename: data.filename });
+            liveBadge.textContent = "DONE";
+            liveBadge.style.background = "#10b981"; // Green
+            setTimeout(() => {
+              liveBadge.style.display = "none";
+              overlay.style.display = "none";
+            }, 3000);
+          } else {
+            throw new Error(data.error || "Server rejected upload");
+          }
+        } catch (e) {
+          console.error("Upload process error:", e);
+          liveBadge.textContent = "ERROR";
+          overlay.style.display = "none";
+        }
+      };
+
+      xhr.onerror = () => {
+        console.error("Network error during upload");
         liveBadge.textContent = "ERROR";
-      }
+        overlay.style.display = "none";
+      };
+
+      xhr.send(formData);
     }
 
     /* ===== RENDER PROGRESS ===== */
