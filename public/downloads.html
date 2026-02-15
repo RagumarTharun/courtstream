@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Progress Manager - CourtStream</title>
+    <link rel="stylesheet" href="index.css">
+    <style>
+        body {
+            background: #0f1115;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .manager-card {
+            background: #161922;
+            border: 1px solid #2d3340;
+            border-radius: 24px;
+            padding: 32px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .logo-circle {
+            width: 48px;
+            height: 48px;
+            background: #3b82f6;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .session-id {
+            font-size: 11px;
+            color: #64748b;
+            font-family: monospace;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #94a3b8;
+            margin: 24px 0 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .progress-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 16px;
+            border-radius: 16px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .cam-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .cam-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+
+        .progress-container {
+            height: 6px;
+            background: #2d3340;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #3b82f6;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.done {
+            background: #10b981;
+        }
+
+        .render-section {
+            margin-top: 32px;
+            border-top: 1px solid #2d3340;
+            padding-top: 24px;
+            display: none;
+            /* Shown when uploads are done or manually triggered */
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #2d3340;
+            color: #94a3b8;
+        }
+
+        .btn-outline:hover {
+            background: #2d3340;
+            color: white;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+            text-decoration: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 0;
+            color: #64748b;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="manager-card">
+        <div class="header">
+            <div class="logo-circle">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+                </svg>
+            </div>
+            <div>
+                <h1>Progress Manager</h1>
+                <div class="session-id" id="sessionIdDisplay">Session ID: Unknown</div>
+            </div>
+        </div>
+
+        <div id="activeContent">
+            <div class="section-title">
+                <span>CAMERA UPLOADS</span>
+                <span id="uploadCount">0 done</span>
+            </div>
+
+            <div class="progress-list" id="uploadList">
+                <!-- Rows added dynamically -->
+            </div>
+
+            <div id="renderAction">
+                <button class="btn btn-primary" onclick="triggerRender()" id="renderBtn">
+                    Render Final Video
+                </button>
+            </div>
+
+            <div class="render-section" id="renderSection">
+                <div class="section-title">
+                    <span>RENDERING PROGRESS</span>
+                    <span id="renderPercentText">0%</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-fill" id="renderFill"></div>
+                </div>
+                <p style="font-size: 13px; color: #94a3b8; margin-top: 12px;" id="renderStatus">
+                    <span class="spinner"></span> Preparing segments...
+                </p>
+            </div>
+
+            <div id="completionSection" style="display:none; margin-top: 24px; text-align: center;">
+                <div style="color: #10b981; font-weight: 700; font-size: 18px; margin-bottom: 12px;">✅ Render Complete!
+                </div>
+                <a id="downloadLink" href="#" download class="btn btn-success">
+                    Download Final Clip
+                </a>
+                <button class="btn btn-outline" onclick="exit()">Return to Dashboard</button>
+            </div>
+        </div>
+
+        <div id="emptyState" class="empty-state" style="display:none;">
+            <p>No active export session found.</p>
+            <button class="btn btn-outline" onclick="exit()">Return to Dashboard</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const sessionId = localStorage.getItem("isoSessionId");
+        const room = localStorage.getItem("isoStreamId");
+        const edl = JSON.parse(localStorage.getItem("isoEdl") || "[]");
+
+        const uploadList = document.getElementById("uploadList");
+        const renderSection = document.getElementById("renderSection");
+        const renderAction = document.getElementById("renderAction");
+        const completionSection = document.getElementById("completionSection");
+        const sessionIdDisplay = document.getElementById("sessionIdDisplay");
+
+        const socket = io();
+        const uploadedSet = new Set();
+
+        if (!sessionId || !room) {
+            document.getElementById("activeContent").style.display = "none";
+            document.getElementById("emptyState").style.display = "block";
+        } else {
+            sessionIdDisplay.innerText = `Session ID: ${sessionId}`;
+            socket.emit("join", { room, role: "director" }); // Join to hear messages
+        }
+
+        socket.on("iso-upload-progress", ({ from, progress }) => {
+            updateCamRow(from, progress);
+        });
+
+        socket.on("iso-upload-complete", ({ from }) => {
+            uploadedSet.add(from);
+            updateCamRow(from, 100);
+            document.getElementById("uploadCount").innerText = `${uploadedSet.size} done`;
+        });
+
+        socket.on("render-progress", ({ progress, status }) => {
+            renderSection.style.display = "block";
+            renderAction.style.display = "none";
+
+            const fill = document.getElementById("renderFill");
+            const text = document.getElementById("renderStatus");
+            const pct = document.getElementById("renderPercentText");
+
+            if (progress < 0) {
+                text.innerHTML = `<span style="color:#ef4444;">❌ Error: ${status}</span>`;
+                fill.style.background = "#ef4444";
+                return;
+            }
+
+            fill.style.width = progress + "%";
+            pct.innerText = progress + "%";
+            text.innerHTML = `<span class="spinner"></span> ${status}`;
+
+            if (progress >= 100) {
+                text.innerHTML = `Finished processing.`;
+            }
+        });
+
+        function updateCamRow(id, progress) {
+            let row = document.getElementById(`cam_${id}`);
+            if (!row) {
+                row = document.createElement("div");
+                row.id = `cam_${id}`;
+                row.className = "cam-row";
+                row.innerHTML = `
+          <div class="cam-info">
+            <span class="name">Camera ${id.substring(0, 4)}</span>
+            <span class="pct">0%</span>
+          </div>
+          <div class="progress-container">
+            <div class="progress-fill"></div>
+          </div>
+        `;
+                uploadList.appendChild(row);
+            }
+
+            const fill = row.querySelector(".progress-fill");
+            const pct = row.querySelector(".pct");
+            fill.style.width = progress + "%";
+            pct.innerText = progress + "%";
+            if (progress >= 100) fill.classList.add("done");
+        }
+
+        async function triggerRender() {
+            if (!confirm("Are you sure you want to trigger the render now? Make sure major camera feeds are done uploading.")) return;
+
+            renderAction.style.display = "none";
+            renderSection.style.display = "block";
+
+            try {
+                const res = await fetch("/api/render-iso", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sessionId, edl, room })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    renderSection.style.display = "none";
+                    completionSection.style.display = "block";
+                    document.getElementById("downloadLink").href = data.url;
+                } else {
+                    alert("Render failed: " + data.error);
+                }
+            } catch (e) {
+                alert("Network error triggering render");
+            }
+        }
+
+        function exit() {
+            localStorage.removeItem("isoSessionId");
+            localStorage.removeItem("isoEdl");
+            localStorage.removeItem("isoStreamId");
+            location.href = "/profile.html";
+        }
+    </script>
+</body>
+
+</html>

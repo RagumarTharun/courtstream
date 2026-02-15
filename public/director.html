@@ -912,7 +912,7 @@
     let isIsoMode = false;
     let isoSessionId = null;
     let isoEdl = []; // [{ timestamp, camId }]
-    let uploadedCameras = new Set(); // Track camera uploads for ISO
+    /* uploadedCameras removed - moved to downloads.html */
 
     const recordBar = document.getElementById("recordBar");
     const recordTimer = document.getElementById("recordTimer");
@@ -952,52 +952,29 @@
       }
     }
 
-    socket.on("iso-upload-complete", ({ filename, from }) => {
-      console.log("✅ Camera upload received:", filename);
-      uploadedCameras.add(filename);
+    /* ===== ISO UPLOAD HANDLER REMOVED - MOVED TO downloads.html ===== */
 
-      // Update modal if waiting
-      const waitingMsg = document.getElementById("isoWaitingMsg");
-      if (waitingMsg) {
-        waitingMsg.innerHTML = `Received clips from <b>${uploadedCameras.size}</b> camera(s).<br><br>Waiting for others or click below to start render now.`;
+    socket.on("render-progress", ({ progress, status }) => {
+      // Keep legacy progress panel for non-ISO tasks if needed, 
+      // but ISO progress is now in downloads.html
+      const bar = document.getElementById("renderProgressPanel");
+      const fill = document.getElementById("renderProgressFill");
+      const text = document.getElementById("renderStatusText");
+      if (!bar) return;
+
+      if (progress < 0) {
+        if (text) text.innerText = "Error: " + status;
+        if (fill) fill.style.background = "#ef4444";
+        setTimeout(() => { bar.style.display = "none"; }, 5000);
+        return;
       }
 
-      // Mark specific camera as done in progress list
-      const camRow = document.querySelector(`[data-cam-id="${from}"]`);
-      if (camRow) {
-        const bar = camRow.querySelector(".progress-fill");
-        const status = camRow.querySelector(".cam-status");
-        if (bar) bar.style.width = "100%";
-        if (status) status.innerText = "DONE";
-      }
-    });
+      bar.style.display = "flex";
+      if (fill) fill.style.width = progress + "%";
+      if (text) text.innerText = status + " (" + progress + "%)";
 
-    socket.on("iso-upload-progress", ({ from, progress }) => {
-      const list = document.getElementById("isoProgressList");
-      if (!list) return;
-
-      let camRow = list.querySelector(`[data-cam-id="${from}"]`);
-      if (!camRow) {
-        // Create new row for this camera
-        camRow = document.createElement("div");
-        camRow.setAttribute("data-cam-id", from);
-        camRow.style.marginBottom = "10px";
-        camRow.innerHTML = `
-          <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
-            <span>${peers[from] ? peers[from].name : 'Unknown Camera'}</span>
-            <span class="cam-status">${progress}%</span>
-          </div>
-          <div style="height:4px; background:#1e293b; border-radius:2px; overflow:hidden;">
-            <div class="progress-fill" style="width:${progress}%; height:100%; background:#3b82f6; transition:width 0.2s ease;"></div>
-          </div>
-        `;
-        list.appendChild(camRow);
-      } else {
-        // Update existing row
-        const bar = camRow.querySelector(".progress-fill");
-        const status = camRow.querySelector(".cam-status");
-        if (bar) bar.style.width = progress + "%";
-        if (status) status.innerText = progress + "%";
+      if (progress >= 100) {
+        setTimeout(() => { bar.style.display = "none"; }, 3000);
       }
     });
 
@@ -1012,10 +989,7 @@
 
       // ISO MODE CHECKS
       if (isIsoMode) {
-        if (!hasCameras) {
-          console.warn("ISO Start Failed: No cameras connected");
-          return alert("No cameras connected! Cannot start ISO recording.");
-        }
+        // No checks needed yet for start
       } else {
         // LEGACY MODE CHECKS
         if (!hasStream) {
@@ -1097,88 +1071,14 @@
       if (isIsoMode) {
         socket.emit("stop-iso", { room: streamId });
 
-        uploadedCameras.clear();
+        // Handover to downloads.html
+        localStorage.setItem("isoSessionId", isoSessionId);
+        localStorage.setItem("isoStreamId", streamId);
+        localStorage.setItem("isoEdl", JSON.stringify(isoEdl));
 
-        // Modal for waiting
-        const modalId = "isoWaitModal_" + Date.now();
-        const triggerRender = async () => {
-          const m = document.getElementById(modalId);
-          // Keep modal but clear actions and add spinner + progress
-          const box = m.querySelector(".modal-box");
-          box.innerHTML = `
-            <h3>Rendering Video...</h3>
-            <p style="margin-bottom:15px;"><span class="spinner"></span> <span id="modalRenderStatus">Starting reconstruction...</span></p>
-            <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden; margin-bottom:10px;">
-              <div id="modalRenderFill" style="width:0%; height:100%; background:#3b82f6; transition:width 0.3s ease;"></div>
-            </div>
-            <p id="modalRenderPercent" style="font-size:11px; color:#94a3b8; text-align:right;">0%</p>
-          `;
-
-          try {
-            const res = await fetch("/api/render-iso", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sessionId: isoSessionId, edl: isoEdl, room: streamId })
-            });
-            const data = await res.json();
-
-            if (data.success) {
-              // Final UI Update
-              box.innerHTML = `
-                <h3>Render Complete!</h3>
-                <p>Your high-quality video is ready for download.</p>
-                <div class="modal-actions" style="margin-top:20px;">
-                  <a href="${data.url}" download class="ctrl-btn" style="width:100%; height:auto; padding:12px; border-radius:12px; background:#10b981; text-align:center; text-decoration:none; display:block; color:white; font-weight:600;">Download Video</a>
-                  <button onclick="this.closest('.modal').remove()" class="ctrl-btn cm-btn-cancel" style="width:100%; height:auto; padding:12px; border-radius:12px; margin-top:8px;">Close</button>
-                </div>
-              `;
-            } else {
-              box.innerHTML = `
-                <h3>Render Failed</h3>
-                <p style="color:#ef4444;">Error: ${data.error}</p>
-                <div class="modal-actions" style="margin-top:20px;">
-                  <button onclick="this.closest('.modal').remove()" class="ctrl-btn cm-btn-cancel" style="width:100%; height:auto; padding:12px; border-radius:12px;">Close</button>
-                </div>
-              `;
-            }
-          } catch (e) {
-            console.error("Render trigger failed:", e);
-            box.innerHTML = `
-              <h3>Render Error</h3>
-              <p style="color:#ef4444;">Failed to contact server.</p>
-              <div class="modal-actions" style="margin-top:20px;">
-                <button onclick="this.closest('.modal').remove()" class="ctrl-btn cm-btn-cancel" style="width:100%; height:auto; padding:12px; border-radius:12px;">Close</button>
-              </div>
-            `;
-          }
-        };
-
-        const modal = document.createElement("div");
-        modal.id = modalId;
-        modal.className = "modal";
-        modal.style.display = "flex";
-        modal.innerHTML = `
-          <div class="modal-box" style="max-width:360px;">
-            <h3>ISO Recording Stopped</h3>
-            <p id="isoWaitingMsg" style="margin-bottom:15px;">Waiting for high-quality clips to upload...</p>
-            
-            <div id="isoProgressList" style="text-align:left; margin-bottom:20px; max-height:200px; overflow-y:auto; background:rgba(0,0,0,0.2); padding:10px; border-radius:8px;">
-              <!-- Individual camera bars will appear here -->
-            </div>
-
-            <div class="modal-actions" style="flex-direction:column; gap:8px;">
-              <button id="isoTriggerBtn" class="ctrl-btn" style="width:100%; height:auto; padding:12px; border-radius:12px; background:#3b82f6;">Render Now</button>
-              <button id="isoCancelBtn" class="ctrl-btn cm-btn-cancel" style="width:100%; height:auto; padding:12px; border-radius:12px;">Close</button>
-            </div>
-          </div>
-        `;
-        document.body.appendChild(modal);
-
-        const itb = document.getElementById("isoTriggerBtn");
-        const icb = document.getElementById("isoCancelBtn");
-        if (itb) itb.onclick = triggerRender;
-        if (icb) icb.onclick = () => modal.remove();
-
+        console.log("Redirecting to Download Manager...");
+        location.href = "downloads.html";
+        return;
       } else {
         const stopPromises = [];
         if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
