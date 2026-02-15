@@ -275,6 +275,72 @@
       border-radius: 10px;
       background: #000;
     }
+
+    /* ===== MOBILE RWD ===== */
+    @media (max-width: 900px) {
+      .director {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .panel.main-feed {
+        width: 100%;
+        aspect-ratio: 16/9;
+        flex-grow: 0;
+        flex-shrink: 0;
+        margin-bottom: 0;
+        /* Remove the top padding hack for mobile flex */
+        padding-top: 0;
+      }
+
+      .main-feed::before {
+        display: none;
+        /* Disable the aspect ratio hack since we use aspect-ratio property or rely on flex */
+      }
+
+      .main-feed video {
+        position: relative;
+        /* Normal flow */
+        width: 100%;
+        height: 100%;
+      }
+
+      .side-panel {
+        flex: 1;
+        width: 100%;
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 10px;
+        gap: 10px;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        align-items: center;
+      }
+
+      .side-title {
+        display: none;
+      }
+
+      .camera-slot {
+        width: 160px;
+        min-width: 160px;
+        height: 90%;
+        border-radius: 10px;
+      }
+
+      .camera-slot video {
+        height: 100%;
+        max-height: 120px;
+      }
+
+      .modal-box {
+        width: 90%;
+        max-width: 320px;
+      }
+    }
   </style>
 </head>
 
@@ -973,7 +1039,7 @@
 
     async function goToPlayback() {
       if (recordingState !== "idle") {
-        if (confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
+        if (await confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
           try {
             await stopRecording();
             // Allow time for downloads to initiate
@@ -1024,6 +1090,7 @@
       }
     });
   </script>
+  <script src="modal.js"></script>
   <script src="feedback.js"></script>
 </body>
 

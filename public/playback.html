@@ -601,8 +601,8 @@
 
         window.markGood = () => pauseAndAct(t => addMarker(t, "good", "Great Play"));
         window.markBad = () => pauseAndAct(t => addMarker(t, "bad", "Mistake"));
-        window.markNote = () => pauseAndAct(t => {
-            const txt = prompt("Enter note:");
+        window.markNote = () => pauseAndAct(async t => {
+            const txt = await prompt("Enter note:");
             if (txt) addMarker(t, "info", txt);
         });
 
@@ -619,9 +619,9 @@
             addMarker(outPoint, "info", "🎬 Clip OUT");
         };
 
-        document.getElementById("exportClip").onclick = () => {
+        document.getElementById("exportClip").onclick = async () => {
             if (inPoint === null || outPoint === null || outPoint <= inPoint) {
-                alert("Please set a valid IN and OUT point first.");
+                await alert("Please set a valid IN and OUT point first.");
                 return;
             }
 
@@ -634,7 +634,7 @@
             // This requires playing that specific segment in real-time (hacked speedy way)
             // For a robust solution, we'd need server-side ffmpeg, but client-side:
 
-            const confirmExport = confirm(`Export clip from Camera ${currentIdx + 1}?\nFrom ${fmt(inPoint)} to ${fmt(outPoint)}\n(The video will play during export)`);
+            const confirmExport = await confirm(`Export clip from Camera ${currentIdx + 1}?\nFrom ${fmt(inPoint)} to ${fmt(outPoint)}\n(The video will play during export)`);
             if (!confirmExport) return;
 
             const stream = sourceVideo.captureStream();
@@ -699,6 +699,7 @@
         });
 
     </script>
+    <script src="modal.js"></script>
 
 </body>
 

@@ -13,7 +13,6 @@
       --bg: #0f1115;
       --card: #161922;
       --border: #262b3d;
-      --border: #262b3d;
       --red: #b91c1c;
     }
 
@@ -71,9 +70,7 @@
       display: flex;
       align-items: center;
       padding: 0 16px;
-      /* Add padding */
       justify-content: center;
-      /* Center content */
       position: relative;
     }
 
@@ -129,8 +126,8 @@
     }
 
     .ctrl.end {
-      background: var(--red);
       border-color: var(--red);
+      background: rgba(185, 28, 28, 0.2);
     }
 
     .ctrl svg {
@@ -139,80 +136,42 @@
       fill: #fff;
     }
 
-    /* MODAL */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.85);
-      backdrop-filter: blur(4px);
+    /* Passcode Overlay */
+    #passcodeOverlay {
       display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 17, 21, 0.95);
+      z-index: 100;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      flex-direction: column;
       padding: 20px;
-    }
-
-    .modal {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 32px;
-      width: 100%;
-      max-width: 400px;
       text-align: center;
-      animation: modalSlide 0.3s ease-out;
     }
 
-    @keyframes modalSlide {
-      from {
-        transform: translateY(20px);
-        opacity: 0;
-      }
-
-      to {
-        transform: translateY(0);
-        opacity: 1;
-      }
+    #passInput {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 12px;
+      border-radius: 8px;
+      width: 100%;
+      max-width: 240px;
+      text-align: center;
+      font-size: 18px;
+      letter-spacing: 4px;
+      margin-bottom: 16px;
     }
 
-    .modal h3 {
-      margin: 0 0 12px;
-      font-size: 20px;
-    }
-
-    .modal p {
-      color: #9aa0b4;
-      margin-bottom: 24px;
-      line-height: 1.5;
-    }
-
-    .modal-btns {
-      display: flex;
-      gap: 12px;
-    }
-
-    .modal-btn {
-      flex: 1;
-      padding: 14px;
-      border-radius: 12px;
+    #joinBtn {
+      padding: 10px 24px;
+      background: #3b82f6;
       border: none;
+      border-radius: 8px;
       font-weight: 600;
+      color: white;
       cursor: pointer;
-      transition: opacity 0.2s;
-    }
-
-    .modal-btn:hover {
-      opacity: 0.9;
-    }
-
-    .btn-cancel {
-      background: var(--border);
-      color: #fff;
-    }
-
-    .btn-confirm {
-      background: var(--red);
-      color: #fff;
     }
   </style>
 </head>
@@ -233,7 +192,6 @@
     </div>
 
     <div class="controls">
-
       <!-- MIC -->
       <button id="micBtn" class="ctrl" onclick="toggleMic()">
         <svg viewBox="0 0 24 24">
@@ -256,42 +214,24 @@
           <path d="M3 5h8v14H3z" />
         </svg>
       </button>
-
     </div>
 
-  </div>
-
-  <!-- Custom Confirm Modal -->
-  <div id="confirmModal" class="modal-overlay">
-    <div class="modal">
-      <h3>Stop Streaming?</h3>
-      <p>This will end your session and take you back to the home page.</p>
-      <div class="modal-btns">
-        <button class="modal-btn btn-cancel" onclick="closeModal()">Cancel</button>
-        <button class="modal-btn btn-confirm" onclick="location.href='index.html'">Leave</button>
-      </div>
-    </div>
   </div>
 
   <!-- Passcode Overlay -->
-  <div id="passcodeOverlay"
-    style="display:none;position:absolute;inset:0;background:rgba(15,17,21,0.95);z-index:100;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
+  <div id="passcodeOverlay">
     <h3 style="margin-top:0;">Secured Stream</h3>
     <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">This stream requires a passcode for cameras to
       join.</p>
-    <input type="password" id="passInput" placeholder="Enter Passcode"
-      style="background:var(--bg);border:1px solid var(--border);color:#fff;padding:12px;border-radius:8px;width:100%;max-width:240px;text-align:center;font-size:18px;letter-spacing:4px;margin-bottom:16px;">
-    <button class="ctrl-btn" id="joinBtn"
-      style="padding:10px 24px;background:var(--blue);border:none;border-radius:8px;font-weight:600;color:white;cursor:pointer;">Join
-      Stream</button>
+    <input type="password" id="passInput" placeholder="Enter Passcode">
+    <button id="joinBtn">Join Stream</button>
     <div id="errorMsg" style="color:#ef4444;font-size:12px;margin-top:12px;display:none;">Invalid passcode. Please
       try again.</div>
   </div>
 
-  </div>
-
   <script src="/socket.io/socket.io.js"></script>
   <script src="feedback.js"></script>
+  <script src="modal.js"></script>
   <script>
     /* ===== STATE ===== */
     const streamId = new URLSearchParams(location.search).get("stream");
@@ -299,7 +239,7 @@
     const video = document.getElementById("video");
     const micBtn = document.getElementById("micBtn");
     const camBtn = document.getElementById("camBtn");
-    const streamTitle = document.getElementById("streamTitle");
+    const streamTitle = document.getElementById("streamTitle"); // Note: removed from HTML but variable might be used? (Updated HTML uses streamNameDisplay)
     const liveBadge = document.getElementById("liveBadge");
     const overlay = document.getElementById("passcodeOverlay");
     const passInput = document.getElementById("passInput");
@@ -512,18 +452,10 @@
       camBtn.classList.toggle("off", !camOn);
     }
 
-    function setLive(on) {
-      isLive = on;
-      liveBadge.style.display = on ? "inline" : "none";
-      video.style.transform = on ? `scale(1.05) rotate(${rotations[socket.id] || 0}deg)` : `rotate(${rotations[socket.id] || 0}deg)`;
-    }
-
-    function leave() {
-      document.getElementById("confirmModal").style.display = "flex";
-    }
-
-    function closeModal() {
-      document.getElementById("confirmModal").style.display = "none";
+    async function leave() {
+      if (await confirm("Stop Streaming?\n\nThis will end your session and take you back to the home page.", "destructive")) {
+        location.href = 'index.html';
+      }
     }
 
     /* ===== ORIENTATION ===== */
@@ -538,7 +470,7 @@
       rotations[socket.id] = rot;
       socket.emit("camera-rotate", { room: streamId, rotation: rot });
 
-      video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot} rot)`;
+      video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot}deg)`;
     }
     window.addEventListener("orientationchange", applyOrientation);
     setInterval(applyOrientation, 2000);
@@ -582,7 +514,6 @@
     });
 
   </script>
-
 </body>
 
 </html>

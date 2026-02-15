@@ -340,22 +340,6 @@
 
     </div>
 
-    <!-- Custom Confirm Modal -->
-    <div id="confirmModal" class="modal-overlay"
-        style="position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;">
-        <div class="modal"
-            style="background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 32px; width: 100%; max-width: 400px; text-align: center;">
-            <h3>Delete Stream?</h3>
-            <p style="color: var(--muted); margin-bottom: 24px;">This action cannot be undone. All stream settings will
-                be lost.</p>
-            <div class="modal-btns" style="display: flex; gap: 12px;">
-                <button class="modal-btn btn-cancel" onclick="closeModal()"
-                    style="flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: 600; cursor: pointer; background: var(--border); color: #fff;">Cancel</button>
-                <button class="modal-btn btn-confirm" id="confirmDeleteBtn"
-                    style="flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: 600; cursor: pointer; background: var(--red); color: #fff;">Delete</button>
-            </div>
-        </div>
-    </div>
 
     <script>
         let currentUser = null;
@@ -444,19 +428,10 @@
             location.href = "login.html";
         }
 
-        let streamToDelete = null;
-        function confirmDelete(id) {
-            streamToDelete = id;
-            document.getElementById("confirmModal").style.display = "flex";
-            document.getElementById("confirmDeleteBtn").onclick = async () => {
-                await deleteStream(streamToDelete);
-                closeModal();
-            };
-        }
-
-        function closeModal() {
-            document.getElementById("confirmModal").style.display = "none";
-            streamToDelete = null;
+        async function confirmDelete(id) {
+            if (await confirm("Delete Stream?\n\nThis action cannot be undone. All stream settings will be lost.", "destructive")) {
+                await deleteStream(id);
+            }
         }
 
         async function deleteStream(id) {
@@ -474,6 +449,7 @@
         }
     </script>
 
+    <script src="modal.js"></script>
     <script src="feedback.js"></script>
 </body>
 
