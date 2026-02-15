@@ -919,7 +919,7 @@
     function toggleRecord() {
       if (recordingState === "idle") startRecording();
       else if (recordingState === "recording") {
-        if (isIsoMode) stopRecording(); // ISO doesn't support pause, so treat as STOP
+        if (isIsoMode) stopRecording(); // ISO MODE: ALWAYS STOP, NO PAUSE
         else pauseRecording();
       }
       else if (recordingState === "paused") resumeRecording();
@@ -961,8 +961,12 @@
     }
 
     function startRecording() {
+      // Allow ISO start even if no stream, but warn if NO CAMERAS
+      const hasCameras = Object.keys(cameras).length > 0;
+      if (isIsoMode && !hasCameras) return alert("No cameras connected! Cannot start ISO recording.");
+
       const stream = document.getElementById("mainVideo").srcObject;
-      if (!stream && !isIsoMode) return alert("Select a camera first");
+      if (!isIsoMode && !stream) return alert("Select a camera first");
 
       recordingState = "recording";
       recordBtn.classList.add("active");
@@ -977,9 +981,15 @@
         isoSessionId = `session_${Date.now()}`;
         isoEdl = [];
 
-        // Log initial camera
+        // Log initial camera or First available if none selected
         if (activeCameraId) {
           isoEdl.push({ timestamp: 0, camId: activeCameraId });
+        } else if (hasCameras) {
+          // Auto-select first camera for EDL reference
+          const firstCam = Object.keys(cameras)[0];
+          activeCameraId = firstCam;
+          switchCamera(firstCam); // Force visual switch
+          isoEdl.push({ timestamp: 0, camId: firstCam });
         }
 
         socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
@@ -991,9 +1001,6 @@
           programRecorder.chunks = chunks;
           programRecorder.start();
         }
-        // Also ensure all camera recorders are running if needed? 
-        // (Legacy logic seemed to imply selective recording or multi-recording)
-        // For now, we stick to Main Program recording + Individual Camera recorders
         Object.keys(cameras).forEach(id => {
           if (cameras[id].stream) startCameraRecorder(id, cameras[id].stream);
         });
@@ -1003,6 +1010,7 @@
     }
 
     function pauseRecording() {
+      if (isIsoMode) return; // Should not be reached logic-wise but fail-safe
       // Pause logic is complex for ISO (distributed), so we might just BLOCK pause in ISO mode for MVP
       if (isIsoMode) {
         alert("Pause not supported in ISO mode yet.");
