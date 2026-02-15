@@ -586,11 +586,19 @@
       }
     });
 
-    socket.on("stop-iso", () => {
-      console.log("🛑 Stopping ISO Recording");
+    socket.on("stop-iso", (options) => {
+      console.log("🛑 Stopping ISO Recording. Options:", options);
       if (!isoRecorder || isoRecorder.state === "inactive") return;
 
       isoRecorder.onstop = () => {
+        if (options && options.save === false) {
+          console.log("🗑️ ISO Save skipped by director. Discarding blob.");
+          isoChunks = [];
+          liveBadge.textContent = "DONE"; 
+          setTimeout(() => liveBadge.style.display = "none", 1000);
+          return;
+        }
+        
         const blob = new Blob(isoChunks, { type: "video/webm" });
         uploadIso(blob);
       };

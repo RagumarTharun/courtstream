@@ -588,9 +588,9 @@ io.on("connection", socket => {
     socket.to(room).emit("start-iso", { sessionId });
   });
 
-  socket.on("stop-iso", ({ room }) => {
-    console.log(`🛑 Stopping ISO Recording for Room ${room}`);
-    socket.to(room).emit("stop-iso");
+  socket.on("stop-iso", ({ room, options }) => {
+    console.log(`🛑 Stopping ISO Recording for Room ${room}`, options);
+    socket.to(room).emit("stop-iso", options);
   });
 
   socket.on("iso-upload-complete", ({ room, filename }) => {
