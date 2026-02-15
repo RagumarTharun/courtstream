@@ -182,8 +182,24 @@ app.get("/me", (req, res) => {
   res.json(req.session.user);
 });
 
+// Multer storage configuration (assuming 'uploads' directory exists)
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, './public/uploads/');
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+const upload = multer({ storage: storage });
+
 /* =========================
-   UTILITY ROUTES
+   ISO STATE MANAGEMENT
+========================= */
+const sessionUploads = {}; // { sessionId: { camId: filePath } }
+
+/* =========================
+   API ROUTES
 ========================= */
 app.get("/api/turn-credentials", (req, res) => {
   // Return TURN credentials from environment variables for frontend security
@@ -246,6 +262,125 @@ app.get("/api/streams", (req, res) => {
       res.json(enriched);
     }
   );
+});
+
+// ISO Upload Endpoint
+app.post("/api/upload-iso", upload.single("video"), (req, res) => {
+  if (!req.file) return res.status(400).send("No file uploaded");
+
+  const { sessionId, camId } = req.body; // Sent by client via FormData
+
+  if (sessionId && camId) {
+    if (!sessionUploads[sessionId]) sessionUploads[sessionId] = {};
+    sessionUploads[sessionId][camId] = req.file.path;
+    console.log(`💾 ISO Upload Logged: Session ${sessionId} | Cam ${camId} -> ${req.file.filename}`);
+  }
+
+  res.json({
+    success: true,
+    filename: req.file.filename,
+    path: `/uploads/iso/${req.file.filename}`
+  });
+});
+
+// ISO Render Endpoint
+app.post("/api/render-iso", async (req, res) => {
+  const { sessionId, edl } = req.body;
+
+  if (!sessionId || !edl || !Array.isArray(edl) || edl.length === 0) {
+    return res.status(400).json({ error: "Invalid data" });
+  }
+
+  const uploads = sessionUploads[sessionId];
+  if (!uploads) {
+    return res.status(404).json({ error: "No recordings found for this session. Wait for uploads to finish." });
+  }
+
+  const outputFilename = `render_${sessionId}.mp4`;
+  const outputPath = path.join(__dirname, "public", "uploads", "iso", outputFilename);
+  console.log(`🎬 Starting Render for Session ${sessionId} (${edl.length} clips)...`);
+
+  // Create temp dir for segments
+  const tempDir = path.join(__dirname, "public", "uploads", "iso", "temp_" + sessionId);
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+
+  try {
+    const listPath = path.join(tempDir, "list.txt");
+    const segments = [];
+
+    // PROCESS CLIPS
+    for (let i = 0; i < edl.length; i++) {
+      const cut = edl[i];
+      const nextCut = edl[i + 1];
+
+      let duration = null;
+      if (nextCut) {
+        duration = (nextCut.timestamp - cut.timestamp) / 1000;
+      }
+
+      // Start time relative to recording start (ms -> s)
+      const startTime = cut.timestamp / 1000;
+      const camId = cut.camId;
+      const inputPath = uploads[camId];
+
+      if (!inputPath) {
+        console.warn(`⚠️ Skipped Clip ${i}: Missing file for Cam ${camId}`);
+        continue;
+      }
+
+      const segmentPath = path.join(tempDir, `seg_${i}.mp4`);
+      segments.push(segmentPath);
+
+      console.log(`✂️ Processing Clip ${i}: Cam ${camId} @ ${startTime}s (${duration ? duration + 's' : 'end'})`);
+
+      await new Promise((resolve, reject) => {
+        let cmd = ffmpeg(inputPath).setStartTime(startTime);
+        if (duration) cmd.setDuration(duration);
+
+        cmd
+          .outputOptions([
+            "-c:v libx264",
+            "-preset ultrafast",
+            "-crf 23",
+            "-c:a aac",
+            "-force_key_frames expr:gte(t,n_forced*2)" // Force keyframes for smoother concat
+          ])
+          .save(segmentPath)
+          .on("end", resolve)
+          .on("error", (err) => {
+            console.error(`Error processing clip ${i}:`, err.message);
+            reject(err);
+          });
+      });
+    }
+
+    // CONCAT
+    console.log("🔗 Concatenating segments...");
+    const fileListContent = segments.map(p => `file '${p}'`).join("\n");
+    fs.writeFileSync(listPath, fileListContent);
+
+    await new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(listPath)
+        .inputOptions(["-f concat", "-safe 0"])
+        .outputOptions("-c copy")
+        .save(outputPath)
+        .on("end", resolve)
+        .on("error", reject);
+    });
+
+    // Cleanup
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    console.log(`✅ Render Success: ${outputFilename}`);
+    res.json({ success: true, url: `/uploads/iso/${outputFilename}` });
+
+  } catch (e) {
+    console.error("❌ Render Failed:", e);
+    // Cleanup on error
+    if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post("/api/streams", (req, res) => {
@@ -412,6 +547,24 @@ io.on("connection", socket => {
 
   socket.on("reaction", ({ room, type }) => {
     io.to(room).emit("reaction", { type });
+  });
+
+  /* ===== ISO RECORDING EVENTS ===== */
+  socket.on("start-iso", ({ room, sessionId }) => {
+    // Relay to all cameras in the room
+    console.log(`🎥 Starting ISO Recording for Session ${sessionId} in Room ${room}`);
+    socket.to(room).emit("start-iso", { sessionId });
+  });
+
+  socket.on("stop-iso", ({ room }) => {
+    console.log(`🛑 Stopping ISO Recording for Room ${room}`);
+    socket.to(room).emit("stop-iso");
+  });
+
+  socket.on("iso-upload-complete", ({ room, filename }) => {
+    // Notify director that a camera has finished uploading
+    console.log(`✅ ISO Upload Complete: ${filename}`);
+    socket.to(room).emit("iso-upload-complete", { filename });
   });
 
   socket.on("disconnect", () => {

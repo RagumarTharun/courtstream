@@ -32,7 +32,60 @@
       height: 100vh;
     }
 
-    /* ===== LAYOUT ===== */
+    /* Switch Toggle */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 34px;
+      height: 20px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      transition: .4s;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+    }
+
+    input:checked+.slider {
+      background-color: var(--blue);
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(14px);
+    }
+
+    .slider.round {
+      border-radius: 20px;
+    }
+
+    .slider.round:before {
+      border-radius: 50%;
+    }
+
+    /* LAYOUT - GRID */
     .director {
       display: grid;
       grid-template-columns: 1fr 320px;
@@ -356,6 +409,15 @@
       <div class="stream-badge" id="streamBadge"></div>
 
       <div class="main-controls">
+        <!-- ISO TOGGLE -->
+        <div class="iso-toggle-wrapper" style="margin-right:12px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--muted);font-weight:600;">ISO REC</span>
+          <label class="switch">
+            <input type="checkbox" id="isoToggle">
+            <span class="slider round"></span>
+          </label>
+        </div>
+
         <!-- RECORD -->
         <button id="recordBtn" class="ctrl-btn" title="Record">
           <svg viewBox="0 0 24 24">
@@ -823,43 +885,123 @@
     startDrawLoop();
 
     /* ===== RECORDING UI ===== */
-    const recordBtn = document.getElementById("recordBtn");
-    const stopIcon = recordBtn.querySelector(".stop-icon");
-    const recIcon = recordBtn.querySelector(".rec-icon");
+    // ISO STATE
+    let isIsoMode = false;
+    let isoSessionId = null;
+    let isoEdl = []; // [{ timestamp, camId }]
 
-    recordBtn.onclick = () => {
-      if (recordingState === "idle") {
-        startRecording();
-      } else {
-        stopRecording();
+    const recordBar = document.getElementById("recordBar");
+    const recordTimer = document.getElementById("recordTimer");
+    const recordStatus = document.getElementById("recordStatus");
+    const recordBtn = document.getElementById("recordBtn");
+    const recIcon = document.querySelector(".rec-icon");
+    const stopIcon = document.querySelector(".stop-icon");
+    const isoToggle = document.getElementById("isoToggle");
+
+    recordBtn.onclick = toggleRecord;
+
+    isoToggle.onchange = (e) => {
+      // Prevent toggling while recording
+      if (recordingState !== "idle") {
+        e.preventDefault();
+        isoToggle.checked = !isoToggle.checked;
+        alert("Cannot switch mode while recording!");
+        return;
       }
+      isIsoMode = isoToggle.checked;
+      console.log("ISO Mode:", isIsoMode);
     };
 
-    document.getElementById("qrBtn").onclick = () => openQr();
+    function toggleRecord() {
+      if (recordingState === "idle") startRecording();
+      else if (recordingState === "recording") pauseRecording();
+      else if (recordingState === "paused") resumeRecording();
+    }
+
+    // UPDATED: Handle Camera Switching for EDL
+    function switchCamera(id) {
+      if (activeCameraId === id) return;
+      activeCameraId = id;
+
+      const cam = cameras[id];
+      const video = document.getElementById("mainVideo");
+      const ph = document.getElementById("placeholder");
+
+      if (cam && cam.stream) {
+        video.srcObject = cam.stream;
+        video.style.opacity = 1;
+        ph.style.display = "none";
+
+        // Log cut for ISO EDL
+        if (recordingState === "recording" && isIsoMode) {
+          isoEdl.push({
+            timestamp: Date.now() - recordStartTime,
+            camId: id
+          });
+        }
+      } else {
+        video.style.opacity = 0;
+        ph.style.display = "flex";
+      }
+
+      renderCameraStrip();
+      updateStreamBadge();
+
+      // Signal Live Status
+      Object.keys(cameras).forEach(cId => {
+        socket.emit("control", { to: cId, data: { type: "live", on: (cId === id), name: streamName } });
+      });
+    }
 
     function startRecording() {
-      if (recordingState !== "idle") return;
-
-      programChunks.length = 0;
-      programRecorder = createRecorder(programStream, programChunks);
-      programRecorder.start();
-
-      Object.keys(peers).forEach(id => {
-        if (peers[id].stream) startCameraRecorder(id, peers[id].stream);
-      });
+      const stream = document.getElementById("mainVideo").srcObject;
+      if (!stream && !isIsoMode) return alert("Select a camera first");
 
       recordingState = "recording";
       recordBtn.classList.add("active");
       recIcon.style.display = "none";
       stopIcon.style.display = "block";
       recordBar.style.display = "flex";
-      recordStatus.textContent = "REC";
+      recordStatus.textContent = isIsoMode ? "ISO REC" : "REC";
       recordStartTime = Date.now();
+
+      if (isIsoMode) {
+        // ISO MODE: Signal cameras to start
+        isoSessionId = `session_${Date.now()}`;
+        isoEdl = [];
+
+        // Log initial camera
+        if (activeCameraId) {
+          isoEdl.push({ timestamp: 0, camId: activeCameraId });
+        }
+
+        socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
+      } else {
+        // LEGACY MODE: Browser-side recording
+        if (!programRecorder) {
+          const chunks = [];
+          programRecorder = createRecorder(stream, chunks);
+          programRecorder.chunks = chunks;
+          programRecorder.start();
+        }
+        // Also ensure all camera recorders are running if needed? 
+        // (Legacy logic seemed to imply selective recording or multi-recording)
+        // For now, we stick to Main Program recording + Individual Camera recorders
+        Object.keys(cameras).forEach(id => {
+          if (cameras[id].stream) startCameraRecorder(id, cameras[id].stream);
+        });
+      }
+
       tickTimer();
     }
 
     function pauseRecording() {
-      if (recordingState !== "recording") return;
+      // Pause logic is complex for ISO (distributed), so we might just BLOCK pause in ISO mode for MVP
+      if (isIsoMode) {
+        alert("Pause not supported in ISO mode yet.");
+        return;
+      }
+
       if (programRecorder && programRecorder.state === "recording") programRecorder.pause();
       Object.values(cameraRecorders).forEach(r => r.recorder.state === "recording" && r.recorder.pause());
       recordingState = "paused";
@@ -869,7 +1011,8 @@
     }
 
     function resumeRecording() {
-      if (recordingState !== "paused") return;
+      if (isIsoMode) return;
+
       if (programRecorder && programRecorder.state === "paused") programRecorder.resume();
       Object.values(cameraRecorders).forEach(r => r.recorder.state === "paused" && r.recorder.resume());
       recordingState = "recording";
@@ -881,6 +1024,7 @@
 
     function stopRecording() {
       if (recordingState === "idle") return Promise.resolve();
+
       recordingState = "idle";
       recordBtn.classList.remove("active");
       recIcon.style.display = "block";
@@ -889,13 +1033,78 @@
       recordBar.style.display = "none";
       clearInterval(recordTimerInt);
 
-      const stopPromises = [];
-      if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
-      Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
+      if (isIsoMode) {
+        // ISO MODE: Signal stop and send EDL
+        socket.emit("stop-iso", { room: streamId });
 
-      return Promise.all(stopPromises).then(() => {
-        return downloadAllRecordings();
-      });
+        // Send EDL to server
+        alert("ISO Recording Stopped. Uploading metadata and waiting for cameras...");
+
+        fetch("/api/render-iso", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: isoSessionId,
+            edl: isoEdl,
+            resolution: "1080p" // Default
+          })
+        }).then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              const a = document.createElement("a");
+              a.href = data.url;
+              a.download = `iso_render_${isoSessionId}.mp4`;
+              a.textContent = "Click here to download ISO Render";
+              a.style.display = "block";
+              a.style.padding = "20px";
+              a.style.background = "#10b981";
+              a.style.color = "white";
+              a.style.textAlign = "center";
+              a.style.marginTop = "20px";
+
+              // Replace modal content or just alert for now MVP
+              // Better: Show a nice modal
+              const modal = document.createElement("div");
+              modal.style.position = "fixed";
+              modal.style.inset = "0";
+              modal.style.background = "rgba(0,0,0,0.8)";
+              modal.style.zIndex = "10000";
+              modal.style.display = "flex";
+              modal.style.alignItems = "center";
+              modal.style.justifyContent = "center";
+              modal.style.flexDirection = "column";
+
+              const h3 = document.createElement("h3");
+              h3.textContent = "Render Complete!";
+              modal.appendChild(h3);
+              modal.appendChild(a);
+
+              const close = document.createElement("button");
+              close.textContent = "Close";
+              close.style.marginTop = "10px";
+              close.onclick = () => modal.remove();
+              modal.appendChild(close);
+
+              document.body.appendChild(modal);
+            } else {
+              alert("Render Failed: " + data.error);
+            }
+          })
+          .catch(err => alert("Error: " + err));
+
+        return Promise.resolve();
+      } else {
+        // LEGACY MODE
+        const stopPromises = [];
+        if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
+        Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
+
+        return Promise.all(stopPromises).then(() => {
+          // Reset program recorder
+          programRecorder = null;
+          return downloadAllRecordings();
+        });
+      }
     }
 
     function tickTimer() {

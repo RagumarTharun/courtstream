@@ -513,6 +513,81 @@
       overlay.style.display = "none";
     });
 
+    /* ===== ISO RECORDING ===== */
+    let isoRecorder = null;
+    let isoChunks = [];
+
+    socket.on("start-iso", async ({ sessionId }) => {
+      console.log("🎥 Starting ISO Recording for Session:", sessionId);
+      if (!mediaStream) return;
+
+      isoChunks = [];
+      try {
+        // High Quality Options
+        const options = { mimeType: "video/webm;codecs=vp9,opus", videoBitsPerSecond: 2500000 };
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          // Fallback
+          delete options.mimeType;
+        }
+
+        isoRecorder = new MediaRecorder(mediaStream, options);
+        isoRecorder.ondataavailable = e => {
+          if (e.data && e.data.size > 0) isoChunks.push(e.data);
+        };
+        isoRecorder.start(1000); // 1s chunks
+
+        // Visual indicator
+        liveBadge.textContent = "REC";
+        liveBadge.style.background = "#b91c1c";
+        liveBadge.style.display = "inline-block";
+
+      } catch (e) {
+        console.error("Failed to start ISO recorder:", e);
+      }
+    });
+
+    socket.on("stop-iso", () => {
+      console.log("🛑 Stopping ISO Recording");
+      if (!isoRecorder || isoRecorder.state === "inactive") return;
+
+      isoRecorder.onstop = () => {
+        const blob = new Blob(isoChunks, { type: "video/webm" });
+        uploadIso(blob);
+      };
+      isoRecorder.stop();
+
+      liveBadge.style.display = "none";
+    });
+
+    async function uploadIso(blob) {
+      console.log("📤 Uploading ISO file...", blob.size);
+      liveBadge.textContent = "UPLOADING";
+      liveBadge.style.background = "#f59e0b"; // Orange
+      liveBadge.style.display = "inline-block";
+
+      const formData = new FormData();
+      formData.append("video", blob, `cam_${socket.id}.webm`);
+      formData.append("sessionId", "iso_upload"); // Metadata
+
+      try {
+        const res = await fetch("/api/upload-iso", {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          console.log("✅ Upload complete:", data.filename);
+          socket.emit("iso-upload-complete", { room: streamId, filename: data.filename });
+          liveBadge.textContent = "DONE";
+          liveBadge.style.background = "#10b981"; // Green
+          setTimeout(() => { liveBadge.style.display = "none"; }, 3000);
+        }
+      } catch (e) {
+        console.error("Upload failed:", e);
+        liveBadge.textContent = "ERROR";
+      }
+    }
   </script>
 </body>
 
