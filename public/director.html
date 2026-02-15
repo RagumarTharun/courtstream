@@ -414,6 +414,21 @@
     </div>
   </div>
 
+  <!-- MOBILE WARNING MODAL -->
+  <div class="modal" id="mobileWarning" style="z-index:9999;">
+    <div class="modal-box">
+      <h3>⚠️ Desktop Recommended</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">
+        The Director dashboard is optimized for larger screens. For the best experience, please use a laptop or desktop.
+      </p>
+      <div class="modal-actions">
+        <button class="ctrl-btn" onclick="document.getElementById('mobileWarning').style.display='none'">
+          Continue Anyway
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
@@ -423,6 +438,11 @@
     const streamId = params.get("stream");
     let streamName = params.get("name");
     let streamLabel = "";
+
+    // Mobile Warning Check
+    if (window.innerWidth < 900) {
+      document.getElementById("mobileWarning").style.display = "flex";
+    }
 
     async function updateStreamBadge() {
       let name = streamName;

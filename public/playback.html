@@ -448,6 +448,28 @@
 
     <input type="file" id="picker" multiple accept="video/*" hidden>
 
+    <div class="modal" id="mobileWarning"
+        style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;align-items:center;justify-content:center;">
+        <div
+            style="background:#161922;padding:20px;border-radius:14px;width:90%;max-width:320px;text-align:center;border:1px solid #262b3d;">
+            <h3 style="margin-top:0;">⚠️ Desktop Recommended</h3>
+            <p style="color:#9aa0b4;font-size:14px;margin-bottom:20px;">
+                The Playback Editor is optimized for larger screens (mouse & keyboard).
+            </p>
+            <button onclick="document.getElementById('mobileWarning').style.display='none'"
+                style="background:var(--blue);color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:600;">
+                Continue Anyway
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Mobile Warning Check
+        if (window.innerWidth < 900) {
+            document.getElementById("mobileWarning").style.display = "flex";
+        }
+    </script>
+
     <script>
         /* ===== STATE ===== */
         let videos = [];

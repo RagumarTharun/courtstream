@@ -316,8 +316,10 @@ app.get("/api/admin/stats", (req, res) => {
 /* =========================
    SOCKET.IO — WEBRTC (OLD WORKING LOGIC)
 ========================= */
+const roomViewers = {}; // room -> Set(socketId)
+
 io.on("connection", socket => {
-  console.log("🟢 SOCKET CONNECTED:", socket.id);
+  // console.log("🟢 SOCKET CONNECTED:", socket.id);
 
   socket.on("join", payload => {
     let room = payload;
@@ -363,6 +365,12 @@ io.on("connection", socket => {
       const clients = io.sockets.adapter.rooms.get(room) || new Set();
       const others = [...clients].filter(id => id !== socket.id);
 
+      if (isViewer) {
+        if (!roomViewers[room]) roomViewers[room] = new Set();
+        roomViewers[room].add(socket.id);
+        io.to(room).emit("viewer-count", roomViewers[room].size);
+      }
+
       // Send existing peers to the new joiner
       socket.emit("existing-peers", others.map(id => {
         const s = io.sockets.sockets.get(id);
@@ -393,12 +401,26 @@ io.on("connection", socket => {
   });
 
   socket.on("viewer-ready", ({ room }) => {
-    console.log(`📡 Relaying viewer-ready for ${socket.id} in room ${room}`);
+    // console.log(`📡 Relaying viewer-ready for ${socket.id} in room ${room}`);
     socket.to(room).emit("viewer-ready", { id: socket.id });
+  });
+
+  /* ===== ENGAGEMENT FEATURES ===== */
+  socket.on("chat-message", ({ room, name, text }) => {
+    io.to(room).emit("chat-message", { name, text, time: Date.now() });
+  });
+
+  socket.on("reaction", ({ room, type }) => {
+    io.to(room).emit("reaction", { type });
   });
 
   socket.on("disconnect", () => {
     if (socket.room) {
+      if (socket.data.role === 'viewer' && roomViewers[socket.room]) {
+        roomViewers[socket.room].delete(socket.id);
+        io.to(socket.room).emit("viewer-count", roomViewers[socket.room].size);
+      }
+
       const payload = { id: socket.id };
       socket.to(socket.room).emit("peer-left", payload);
       socket.to(socket.room).emit("camera-left", payload);
