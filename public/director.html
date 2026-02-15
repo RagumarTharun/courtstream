@@ -930,7 +930,7 @@
       if (activeCameraId === id) return;
       activeCameraId = id;
 
-      const cam = cameras[id];
+      const cam = peers[id];
       const video = document.getElementById("mainVideo");
       const ph = document.getElementById("placeholder");
 
@@ -955,7 +955,7 @@
       updateStreamBadge();
 
       // Signal Live Status
-      Object.keys(cameras).forEach(cId => {
+      Object.keys(peers).forEach(cId => {
         socket.emit("control", { to: cId, data: { type: "live", on: (cId === id), name: streamName } });
       });
     }
@@ -966,7 +966,7 @@
         alert("startRecording: Function Entered");
 
         // SAFE CHECK VARIABLES
-        const cams = (typeof cameras !== 'undefined') ? cameras : {};
+        const cams = (typeof peers !== 'undefined') ? peers : {};
         const camsCount = Object.keys(cams).length;
         const vidElem = document.getElementById("mainVideo");
         const hasStream = vidElem && !!vidElem.srcObject;
@@ -1016,7 +1016,7 @@
             isoEdl.push({ timestamp: 0, camId: activeCameraId });
           } else if (hasCameras) {
             // Auto-select first camera for EDL reference
-            const firstCam = Object.keys(cameras)[0];
+            const firstCam = Object.keys(peers)[0];
             activeCameraId = firstCam;
             switchCamera(firstCam); // Force visual switch
             isoEdl.push({ timestamp: 0, camId: firstCam });
@@ -1033,8 +1033,8 @@
             programRecorder.chunks = chunks;
             programRecorder.start();
           }
-          Object.keys(cameras).forEach(id => {
-            if (cameras[id].stream) startCameraRecorder(id, cameras[id].stream);
+          Object.keys(peers).forEach(id => {
+            if (peers[id].stream) startCameraRecorder(id, peers[id].stream);
           });
           alert("Legacy Recording Started");
         }
