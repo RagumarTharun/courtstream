@@ -411,23 +411,79 @@ app.post("/api/render-iso", async (req, res) => {
         });
     });
 
-    // Cleanup
+    // Cleanup segments
     fs.rmSync(tempDir, { recursive: true, force: true });
+
+    // --- NEW: Convert Source Files to MP4 for Download ---
+    broadcastProgress(90, "Converting source files to MP4...");
+    const sourceFilesInfo = [];
+    const uniqueCamIds = Object.keys(uploads);
+
+    for (let i = 0; i < uniqueCamIds.length; i++) {
+      const camId = uniqueCamIds[i];
+      const inputPath = uploads[camId];
+
+      // Skip if already MP4 (unlikely given current upload logic, but good for safety)
+      if (inputPath.endsWith(".mp4")) {
+        sourceFilesInfo.push({
+          camId,
+          url: `/uploads/iso/${path.basename(inputPath)}`,
+          filename: path.basename(inputPath)
+        });
+        continue;
+      }
+
+      const mp4Filename = path.basename(inputPath, path.extname(inputPath)) + ".mp4";
+      const mp4Path = path.join(__dirname, "public", "uploads", "iso", mp4Filename);
+
+      // Convert if doesn't exist
+      if (!fs.existsSync(mp4Path)) {
+        console.log(`🔄 Converting Source ${camId} to MP4...`);
+        broadcastProgress(90 + Math.floor((i / uniqueCamIds.length) * 9), `Converting Camera ${camId}...`);
+        await new Promise((resolve, reject) => {
+          ffmpeg(inputPath)
+            .outputOptions([
+              "-c:v libx264",
+              "-preset ultrafast",
+              "-crf 23",
+              "-c:a aac"
+            ])
+            .save(mp4Path)
+            .on("end", () => {
+              console.log(`✅ Converted ${camId} to MP4`);
+              resolve();
+            })
+            .on("error", (err) => {
+              console.error(`❌ Failed to convert ${camId}:`, err.message);
+              // Fallback to original if conversion fails
+              resolve();
+            });
+        });
+      }
+
+      // Add MP4 if exists, else fallback to original
+      if (fs.existsSync(mp4Path)) {
+        sourceFilesInfo.push({
+          camId,
+          url: `/uploads/iso/${mp4Filename}`,
+          filename: mp4Filename
+        });
+      } else {
+        sourceFilesInfo.push({
+          camId,
+          url: `/uploads/iso/${path.basename(inputPath)}`,
+          filename: path.basename(inputPath)
+        });
+      }
+    }
 
     broadcastProgress(100, "Render Complete");
     console.log(`✅ Render Success: ${outputFilename}`);
 
-    // Generate list of source files for download
-    const sourceFiles = Object.entries(uploads).map(([camId, filepath]) => ({
-      camId,
-      url: `/uploads/iso/${path.basename(filepath)}`,
-      filename: path.basename(filepath)
-    }));
-
     res.json({
       success: true,
       url: `/uploads/iso/${outputFilename}`,
-      sourceFiles
+      sourceFiles: sourceFilesInfo
     });
 
   } catch (e) {
