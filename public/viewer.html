@@ -242,6 +242,29 @@
         height: 36px;
         font-size: 18px;
       }
+
+      /* Feedback Button overrides for Mobile */
+      .feedback-fab {
+        top: 20px !important;
+        right: 86px !important;
+        bottom: auto !important;
+        width: 40px !important;
+        height: 40px !important;
+      }
+
+      .feedback-fab svg {
+        width: 18px !important;
+        height: 18px !important;
+      }
+    }
+
+    /* Feedback Button overrides for Desktop */
+    @media (min-width: 901px) {
+      .feedback-fab {
+        top: 24px !important;
+        right: 380px !important;
+        bottom: auto !important;
+      }
     }
   </style>
 </head>
