@@ -419,7 +419,7 @@
         </div>
 
         <!-- RECORD -->
-        <button id="recordBtn" class="ctrl-btn" title="Record">
+        <button id="recordBtn" class="ctrl-btn" title="Record" onclick="toggleRecord()">
           <svg viewBox="0 0 24 24">
             <path
               d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-4-4h8v-8H8v8z"
@@ -917,7 +917,10 @@
     };
 
     function toggleRecord() {
+      // DEBUG: Force feedback to confirm click
+      // alert("Record Clicked! State: " + recordingState);
       console.log("Record button clicked. State:", recordingState, "ISO:", isIsoMode);
+
       if (recordingState === "idle") startRecording();
       else stopRecording(); // STRICT START/STOP ONLY - NO PAUSE
     }
@@ -926,7 +929,7 @@
     function switchCamera(id) {
       if (activeCameraId === id) return;
       activeCameraId = id;
-      
+
       const cam = cameras[id];
       const video = document.getElementById("mainVideo");
       const ph = document.getElementById("placeholder");
@@ -935,7 +938,7 @@
         video.srcObject = cam.stream;
         video.style.opacity = 1;
         ph.style.display = "none";
-        
+
         // Log cut for ISO EDL
         if (recordingState === "recording" && isIsoMode) {
           isoEdl.push({
@@ -949,7 +952,7 @@
       }
 
       renderCameraStrip();
-      updateStreamBadge(); 
+      updateStreamBadge();
 
       // Signal Live Status
       Object.keys(cameras).forEach(cId => {
@@ -960,7 +963,7 @@
     function startRecording() {
       console.log("Attempting to start recording...");
       const hasCameras = Object.keys(cameras).length > 0;
-      
+
       // ISO MODE CHECKS
       if (isIsoMode) {
         if (!hasCameras) {
@@ -994,11 +997,11 @@
         if (activeCameraId) {
           isoEdl.push({ timestamp: 0, camId: activeCameraId });
         } else if (hasCameras) {
-            // Auto-select first camera for EDL reference
-            const firstCam = Object.keys(cameras)[0];
-            activeCameraId = firstCam;
-            switchCamera(firstCam); // Force visual switch
-            isoEdl.push({ timestamp: 0, camId: firstCam });
+          // Auto-select first camera for EDL reference
+          const firstCam = Object.keys(cameras)[0];
+          activeCameraId = firstCam;
+          switchCamera(firstCam); // Force visual switch
+          isoEdl.push({ timestamp: 0, camId: firstCam });
         }
 
         socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
@@ -1020,7 +1023,7 @@
     }
 
     // REMOVED PAUSE/RESUME FUNCTIONS AS REQUESTED
-    function pauseRecording() {} 
+    function pauseRecording() { }
 
 
     function resumeRecording() {
