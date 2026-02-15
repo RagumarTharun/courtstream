@@ -962,10 +962,11 @@
 
     function startRecording() {
       // DEBUG: Trace execution
-      alert("startRecording called");
-      console.log("Attempting to start recording...");
-
       const hasCameras = Object.keys(cameras).length > 0;
+      const stream = document.getElementById("mainVideo").srcObject;
+
+      alert(`startRecording called.\nISO: ${isIsoMode}\nCameras: ${Object.keys(cameras).length}\nMainStream: ${!!stream}`);
+      console.log("Attempting to start recording...");
 
       // ISO MODE CHECKS
       if (isIsoMode) {
