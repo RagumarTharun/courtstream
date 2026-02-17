@@ -615,6 +615,10 @@
         <div id="transferList" style="display: flex; flex-direction: column; gap: 8px;">
           <!-- Dynamic Transfer Rows -->
         </div>
+        <!-- Safety: Manual Bypass -->
+        <button onclick="startClientSideRender()"
+          style="margin-top: 20px; background: transparent; border: 1px dashed #475569; color: #64748b; font-size: 10px; cursor: pointer; padding: 4px; width: 100%;">Force
+          Render (Debug)</button>
       </div>
 
       <!-- COL 3: FINAL RENDER -->
@@ -849,44 +853,59 @@
       const p = peers[id];
       if (!p) return;
 
+      // console.log(`📨 Msg from ${id}, type: ${typeof data}`, data);
+
       if (typeof data === "string") {
-        const msg = JSON.parse(data);
-        if (msg.type === "meta") {
-          console.log(`📥 receiving file from ${id}:`, msg);
-          p.fileMeta = msg;
-          p.fileBuffer = [];
-          p.receivedSize = 0;
+        try {
+          const msg = JSON.parse(data);
+          if (msg.type === "meta") {
+            console.log(`📥 Receiving file from ${id}:`, msg);
+            p.fileMeta = msg;
+            p.fileBuffer = [];
+            p.receivedSize = 0;
 
-          // Show transfer UI
-          document.getElementById("transferModal").style.display = "flex";
+            // Show transfer UI
+            const dash = document.getElementById("transferModal");
+            if (dash.style.display !== "flex") dash.style.display = "flex";
 
-          // Ensure Program Listing exists
-          if (!document.getElementById("xfer_program")) {
-            updateTransferUI("program", 100, true);
-            const row = document.getElementById("xfer_program");
-            if (row) row.querySelector(".name").innerText = "Director Program (Local)";
+            // Ensure Program Listing exists
+            if (!document.getElementById("xfer_program")) {
+              updateTransferUI("program", 100, true);
+              const row = document.getElementById("xfer_program");
+              if (row) row.querySelector(".name").innerText = "Director Program (Local)";
+            }
+
+            updateTransferUI(id, 0);
+          } else if (msg.type === "end") {
+            console.log(`✅ File received from ${id}. Size: ${p.receivedSize}`);
+            const blob = new Blob(p.fileBuffer, { type: p.fileMeta ? p.fileMeta.mime : "video/webm" });
+            receivedRecordings[id] = blob;
+
+            // Mark this camera as done in UI
+            updateTransferUI(id, 100, true);
+
+            // Check if all needed transfers are done
+            checkTransfersComplete();
           }
-
-          updateTransferUI(id, 0);
-        } else if (msg.type === "end") {
-          console.log(`✅ File received from ${id}`);
-          const blob = new Blob(p.fileBuffer, { type: p.fileMeta.mime });
-          receivedRecordings[id] = blob;
-
-          // Mark this camera as done in UI
-          updateTransferUI(id, 100, true);
-
-          // Check if all needed transfers are done
-          checkTransfersComplete();
-        }
+        } catch (e) { console.error("Error parsing DC msg:", e); }
       } else {
         // Binary Chunk
+        if (!p.fileMeta) console.warn("Received binary before meta from", id);
+
+        // If data is Blob (shouldn't be with binaryType=arraybuffer, but safety check)
+        if (data instanceof Blob) {
+          console.warn("Received Blob instead of ArrayBuffer, converting...");
+          // This is async, might break order. binaryType fix should prevent this.
+          // data.arrayBuffer().then(buf => ... ) 
+          // For now assume ArrayBuffer due to explicit setting
+        }
+
         p.fileBuffer.push(data);
-        p.receivedSize += data.byteLength;
+        p.receivedSize += data.byteLength || data.size || 0;
 
         if (p.fileMeta && p.fileMeta.size > 0) {
           const pct = Math.round((p.receivedSize / p.fileMeta.size) * 100);
-          if (pct % 5 === 0) updateTransferUI(id, pct);
+          if (pct % 5 === 0 || pct === 100) updateTransferUI(id, pct);
         }
       }
     }
@@ -926,7 +945,11 @@
       // Check against active cameras locally known (from peers)
       // Note: director program is already local, so we just need peers
       const activePeers = Object.keys(peers).filter(pid => peers[pid].stream); // only active streams
-      const allReceived = activePeers.every(pid => receivedRecordings[pid]);
+
+      const missing = activePeers.filter(pid => !receivedRecordings[pid]);
+      const allReceived = missing.length === 0;
+
+      console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
 
       if (allReceived) {
         console.log("🎉 All ISO transfers complete. Checking render lock...");
@@ -1008,6 +1031,8 @@
 
       // Create Data Channel for File Transfer
       const dc = pc.createDataChannel("fileTransfer");
+      dc.binaryType = "arraybuffer"; // Ensure we get ArrayBuffers, not Blobs
+
       peers[id].dc = dc;
       peers[id].fileBuffer = [];
       peers[id].fileMeta = null;
