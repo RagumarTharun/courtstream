@@ -87,17 +87,18 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 10px;
       overflow: hidden;
+      position: relative;
     }
 
     video {
-      width: 90vw;
-      max-width: 420px;
-      max-height: 100%;
+      width: 100%;
+      height: 100%;
       background: #000;
       border-radius: 18px;
       object-fit: contain;
-      /* NO CROPPING */
+      /* Default portrait */
       transition: transform .25s ease;
     }
 
@@ -385,7 +386,7 @@
     </div>
 
     <!-- Upload Progress -->
-    <div id="uploadProgressOverlay">
+    <div id="uploadProgressOverlay" style="display:none;">
       <div style="font-size: 11px; font-weight: 600; color: #94a3b8;">Uploading High Quality Clip...</div>
       <div class="progress-bar">
         <div id="uploadProgressFill" class="progress-fill"></div>
@@ -535,67 +536,22 @@
     }
 
     async function getStreamWithFallback() {
-      const constraintsByPriority = [];
-
-      // High Res Strategy: Try 4K, then 1080p, then 720p
-      const resolutions = [
-        { width: { ideal: 4096 }, height: { ideal: 2160 } }, // 4K
-        { width: { ideal: 1920 }, height: { ideal: 1080 } }, // 1080p
-        { width: { ideal: 1280 }, height: { ideal: 720 } }   // 720p
+      // Start with a basic request that is most likely to succeed on any device
+      const basicConstraints = [
+        { video: { deviceId: videoDevices.length ? { exact: videoDevices[currentDeviceIndex].deviceId } : undefined, facingMode: facing }, audio: true },
+        { video: { facingMode: facing }, audio: true },
+        { video: true, audio: true }
       ];
 
-      if (videoDevices.length) {
-        // Try selected device with high res first
-        resolutions.forEach(res => {
-          constraintsByPriority.push({
-            video: {
-              deviceId: { exact: videoDevices[currentDeviceIndex].deviceId },
-              ...res
-            },
-            audio: true
-          });
-        });
-        // Fallback to basic device ID
-        constraintsByPriority.push({
-          video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } },
-          audio: true
-        });
-      }
-
-      // Fallback strategies based on facing mode
-      resolutions.forEach(res => {
-        constraintsByPriority.push({
-          video: { facingMode: { exact: facing }, ...res },
-          audio: true
-        });
-      });
-
-      constraintsByPriority.push({
-        video: { facingMode: { exact: facing } },
-        audio: true
-      });
-
-      constraintsByPriority.push({
-        video: { facingMode: { ideal: facing } },
-        audio: true
-      });
-
-      // Absolute fallback
-      constraintsByPriority.push({ video: true, audio: true });
-
       let lastError;
-      for (const constraints of constraintsByPriority) {
+      for (const constraints of basicConstraints) {
         try {
-          console.log("Trying stream constraints:", JSON.stringify(constraints));
-          const s = await navigator.mediaDevices.getUserMedia(constraints);
-          console.log("✅ Stream acquired with:", JSON.stringify(s.getVideoTracks()[0].getSettings()));
-          return s;
+          console.log("Probing camera with:", JSON.stringify(constraints));
+          return await navigator.mediaDevices.getUserMedia(constraints);
         } catch (err) {
-          console.warn("Constraint failed:", JSON.stringify(constraints), err.name, err.message);
           lastError = err;
         }
       }
-
       throw lastError;
     }
 
@@ -608,8 +564,33 @@
       }
 
       const stream = await getStreamWithFallback();
-
       video.srcObject = stream;
+
+      // DYNAMIC PROBING: Optimize for "Perfect Settings" individually for this phone
+      const track = stream.getVideoTracks()[0];
+      if (track && track.getCapabilities) {
+        try {
+          const caps = track.getCapabilities();
+          const settings = track.getSettings();
+          console.log("Device Capabilities:", JSON.stringify(caps));
+
+          const optimizedConstraints = {};
+
+          // Apply max supported resolution (Perfect settings for this specific sensor)
+          if (caps.width && caps.width.max) optimizedConstraints.width = { ideal: caps.width.max };
+          if (caps.height && caps.height.max) optimizedConstraints.height = { ideal: caps.height.max };
+
+          // Apply stable frame rate if possible
+          if (caps.frameRate && caps.frameRate.max) optimizedConstraints.frameRate = { ideal: 30 };
+
+          if (Object.keys(optimizedConstraints).length > 0) {
+            console.log("Applying optimized constraints for this phone:", JSON.stringify(optimizedConstraints));
+            await track.applyConstraints(optimizedConstraints).catch(e => console.warn("Failed to apply max res:", e));
+          }
+        } catch (e) {
+          console.warn("Capability probing failed:", e);
+        }
+      }
 
       if (!mediaStream) {
         stream.getTracks().forEach(t => {
@@ -966,21 +947,39 @@
     /* ===== ORIENTATION ===== */
     const rotations = {};
     function applyOrientation() {
-      const orient = window.orientation;
+      // Modern way to get orientation
+      let orient = 0;
+      if (screen.orientation && screen.orientation.angle !== undefined) {
+        orient = screen.orientation.angle;
+      } else {
+        orient = window.orientation || 0;
+      }
+
       let rot = 0;
       if (orient === 90) rot = -90;
       if (orient === -90) rot = 90;
       if (orient === 180) rot = 180;
 
-      rotations[socket.id] = rot;
-      socket.emit("camera-rotate", { room: streamId, rotation: rot });
+      // Signal Director (they need coordinates to match their fixed grid)
+      if (rotations[socket.id] !== rot) {
+        rotations[socket.id] = rot;
+        socket.emit("camera-rotate", { room: streamId, rotation: rot });
+      }
 
-      // If we are in landscape, the browser might already rotate the view.
-      // We only rotate if the CSS hasn't already handled it.
-      // For now, let's keep the rotation but ensure it doesn't break full screen.
-      video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot}deg)`;
+      // LOCAL PREVIEW: On mobile, the browser handles the video element orientation.
+      // We only apply scale if live, but don't force rotation unless it's a desktop browser 
+      // with a fixed window that doesn't physically rotate.
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        // CSS handles the layout rotation. JS rotation usually conflicts.
+        video.style.transform = isLive ? `scale(1.05)` : `none`;
+      } else {
+        video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot}deg)`;
+      }
     }
     window.addEventListener("orientationchange", applyOrientation);
+    if (screen.orientation) screen.orientation.addEventListener("change", applyOrientation);
     setInterval(applyOrientation, 2000);
 
     /* ===== ACCESS CHECK ===== */
