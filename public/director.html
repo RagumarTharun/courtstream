@@ -618,8 +618,8 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js"></script>
-  <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+  <script src="/lib/ffmpeg/ffmpeg.js"></script>
+  <script src="/lib/ffmpeg/ffmpeg-util.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
     /* ===== STREAM INFO ===== */
@@ -1425,9 +1425,11 @@
         // console.log("FFmpeg Log:", message);
       });
 
-      // Load with core URL to avoid CDN issues if needed, but defaults usually work for unpkg
+      // Load with local files
       await ffmpeg.load({
-        coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+        coreURL: '/lib/ffmpeg/ffmpeg-core.js',
+        wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
+        workerLoadURL: '/lib/ffmpeg/814.ffmpeg.js' // Explicitly load the worker chunk from valid origin
       });
 
       ffmpegRef = ffmpeg;
