@@ -408,6 +408,133 @@
         max-width: 320px;
       }
     }
+
+    /* DASHBOARD OVERLAY */
+    #transferModal {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 20000;
+      /* display: flex; set by JS */
+      flex-direction: column;
+      padding: 40px;
+      overflow-y: auto;
+    }
+
+    .dashboard-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .dashboard-header h1 {
+      font-size: 24px;
+      margin: 0;
+      color: white;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      /* height: 100%; // remove height constraints for scrolling */
+    }
+
+    .dashboard-col {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      min-height: 400px;
+    }
+
+    .dashboard-col h2 {
+      font-size: 13px;
+      margin: 0 0 20px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    .status-badge {
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #334155;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    .status-badge.processing {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+
+    .status-badge.success {
+      background: rgba(34, 197, 94, 0.2);
+      color: #4ade80;
+    }
+
+    .status-badge.pending {
+      background: rgba(148, 163, 184, 0.1);
+      color: #64748b;
+    }
+
+    .status-badge.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .file-item {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      /* allow for progress bar under text */
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    .file-item>div:first-child {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+
+    .dash-progress {
+      height: 6px;
+      background: #334155;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 4px;
+      width: 100%;
+    }
+
+    .dash-fill {
+      height: 100%;
+      background: #3b82f6;
+      transition: width 0.3s ease;
+    }
+
+    /* Mobile adjustments for dashboard */
+    @media (max-width: 900px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+    }
   </style>
 </head>
 
@@ -1367,10 +1494,10 @@
 
         if (mode === "instant" || mode === "both") {
           // Add placeholders for instant items
-          addToInstantList("Program Feed (Local)", "SAVING...");
+          addToInstantList("Program Feed (Local)", "WAITING...", "instant_program");
           Object.keys(peers).forEach(id => {
             const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
-            addToInstantList(name + " (Local)", "SAVING...");
+            addToInstantList(name + " (Local)", "WAITING...", `instant_${id}`);
           });
         } else {
           if (instantList) instantList.innerHTML = `<div style="color: #64748b; font-size: 14px; padding: 10px;">Instant files skipped.</div>`;
@@ -1475,12 +1602,45 @@
       }
     }
 
-    function addToInstantList(name, status) {
+    function addToInstantList(name, status, id = null) {
       const list = document.getElementById("instantList");
       const div = document.createElement("div");
       div.className = "file-item";
-      div.innerHTML = `<span>${name}</span> <span class="status-badge processing">${status}</span>`;
+      if (id) div.id = id;
+
+      div.innerHTML = `
+        <div>
+            <span>${name}</span> 
+            <span class="status-badge processing">${status}</span>
+        </div>
+        <!-- Optional Progress -->
+        <div class="dash-progress" style="display:none;"> <!-- Hidden by default, shown if needed -->
+             <div class="dash-fill" style="width: 0%"></div>
+        </div>
+      `;
       list.appendChild(div);
+      return div;
+    }
+
+    function updateInstantStatus(id, text, type = "processing", progress = -1) {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      const badge = el.querySelector(".status-badge");
+      if (badge) {
+        badge.innerText = text;
+        badge.className = `status-badge ${type}`;
+      }
+
+      const progBar = el.querySelector(".dash-progress");
+      const progFill = el.querySelector(".dash-fill");
+
+      if (progress >= 0 && progBar && progFill) {
+        progBar.style.display = "block";
+        progFill.style.width = `${progress}%`;
+      } else if (progress < 0 && progBar) {
+        progBar.style.display = "none";
+      }
     }
 
     function markInstantComplete() {
@@ -1876,40 +2036,53 @@
 
       // Program (live)
       if (programChunks.length) {
+        updateInstantStatus("instant_program", "CONVERTING...", "processing", 10);
         const webmBlob = new Blob(programChunks, { type: "video/webm" });
         try {
           // const mp4Blob = await convertToMp4(webmBlob, "live"); // Optional: skip conversion for speed in instant? 
           // User asked for instant feeds. Often webm is fine, but mp4 preferred. 
           // "instant_final"
+          updateInstantStatus("instant_program", "CONVERTING...", "processing", 50);
           const mp4Blob = await convertToMp4(webmBlob, "instant_final");
           downloadBlob(mp4Blob, `instant_final_${timestamp}.mp4`);
+          updateInstantStatus("instant_program", "SAVED", "success", 100);
         } catch (e) {
           console.warn("FFmpeg failed, downloading webm", e);
           downloadBlob(webmBlob, `instant_final_${timestamp}.webm`);
+          updateInstantStatus("instant_program", "SAVED (WebM)", "success", 100);
         }
       }
 
       // Each camera (Local Mirror)
       for (const [id, obj] of Object.entries(cameraRecorders)) {
+        const domId = `instant_${id}`;
         try {
           const p = peers[id];
           const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
 
           const camName = sanitizeName(rawName);
           const chunks = obj.chunks || [];
-          if (!chunks.length) continue;
+          if (!chunks.length) {
+            updateInstantStatus(domId, "EMPTY", "error");
+            continue;
+          }
 
+          updateInstantStatus(domId, "CONVERTING...", "processing", 10);
           const webmBlob = new Blob(chunks, { type: "video/webm" });
           // "instant_cameraname"
           try {
+            updateInstantStatus(domId, "CONVERTING...", "processing", 50);
             const mp4Blob = await convertToMp4(webmBlob, `instant_${camName}`);
             downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
+            updateInstantStatus(domId, "SAVED", "success", 100);
           } catch (e) {
             console.warn("FFmpeg failed (cam), downloading webm", e);
             downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
+            updateInstantStatus(domId, "SAVED (WebM)", "success", 100);
           }
         } catch (e) {
           console.error(`Error processing instant download for ${id}`, e);
+          updateInstantStatus(domId, "ERROR", "error");
         }
       }
 
