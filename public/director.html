@@ -580,7 +580,8 @@
   </div>
 
   <!-- POST-PRODUCTION DASHBOARD (FAKE REDIRECT) -->
-  <div id="transferModal" style="display:none;">
+  <!-- POST-PRODUCTION DASHBOARD (FAKE REDIRECT) -->
+  <div id="transferModal" style="display:none; z-index: 20000;">
     <div class="dashboard-header">
       <h1>🎬 Post-Production Studio</h1>
       <div style="color: #94a3b8; font-size: 14px; margin-top: 8px;">Processing your session... Do not close this tab.
@@ -1376,10 +1377,48 @@
       if (mode === "quality_all" || mode === "both") { // 'quality_all' replaces legacy 'all'
         document.getElementById("transferStatusBadge").className = "status-badge processing";
         document.getElementById("transferStatusBadge").innerText = "ACTIVE";
-        document.getElementById("transferList").innerHTML = ""; // Clear P2P list
+
+        const tList = document.getElementById("transferList");
+        tList.innerHTML = "";
+
+        // Add placeholders
+        Object.keys(peers).forEach(id => {
+          const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
+          const row = document.createElement("div");
+          row.id = `xfer_${id}`;
+          row.className = "file-item";
+          row.innerHTML = `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span class="name">${name}</span>
+                    <span class="pct" style="color: #94a3b8;">Waiting...</span>
+                </div>
+                <div class="dash-progress">
+                    <div class="progress-fill dash-fill" style="width: 0%"></div>
+                </div>
+            `;
+          tList.appendChild(row);
+        });
+
+        // Also placeholder for Program if needed (though it's local)
+        if (programChunks.length) {
+          const row = document.createElement("div");
+          row.id = `xfer_program`;
+          row.className = "file-item";
+          row.innerHTML = `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span class="name">Director Program (Local)</span>
+                    <span class="pct" style="color: #94a3b8;">Ready</span>
+                </div>
+                 <div class="dash-progress">
+                    <div class="progress-fill dash-fill" style="width: 100%; background: #10b981;"></div>
+                </div>
+            `;
+          tList.appendChild(row);
+        }
 
         document.getElementById("renderStatusBadge").className = "status-badge pending";
         document.getElementById("renderStatusBadge").innerText = "WAITING";
+        document.getElementById("renderStatusText").innerText = "Waiting for source transfers...";
       } else {
         document.getElementById("transferStatusBadge").className = "status-badge pending";
         document.getElementById("transferStatusBadge").innerText = "SKIPPED";
