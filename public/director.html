@@ -1609,9 +1609,11 @@
       if (id) div.id = id;
 
       div.innerHTML = `
-        <div>
-            <span>${name}</span> 
-            <span class="status-badge processing">${status}</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <span class="name">${name}</span> 
+            <div style="display:flex; align-items:center;">
+                <span class="status-badge processing">${status}</span>
+            </div>
         </div>
         <!-- Optional Progress -->
         <div class="dash-progress" style="display:none;"> <!-- Hidden by default, shown if needed -->
@@ -2057,6 +2059,42 @@
       }
     }
 
+    function enableInstantDownload(id, blob, filename) {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      const badge = el.querySelector(".status-badge");
+      if (badge) {
+        badge.className = "status-badge success";
+        badge.innerText = "READY";
+      }
+
+      // Remove existing button if any
+      const existingBtn = el.querySelector(".instant-dl-btn");
+      if (existingBtn) existingBtn.remove();
+
+      const btn = document.createElement("a");
+      btn.className = "instant-dl-btn";
+      btn.innerText = "Download";
+      btn.style.marginLeft = "10px";
+      btn.style.background = "#3b82f6";
+      btn.style.color = "white";
+      btn.style.padding = "4px 10px";
+      btn.style.borderRadius = "4px";
+      btn.style.textDecoration = "none";
+      btn.style.fontSize = "12px";
+      btn.style.cursor = "pointer";
+      btn.style.fontWeight = "600";
+
+      const url = URL.createObjectURL(blob);
+      btn.href = url;
+      btn.download = filename;
+
+      // Append to the inner wrapper (where status badge is)
+      const wrapper = el.querySelector("div > div");
+      if (wrapper) wrapper.appendChild(btn);
+    }
+
     async function downloadAllRecordings(retainProgram = false) {
       const timestamp = formatDate(Date.now());
       // const streamSafe = sanitizeName(streamLabel || "courtstream"); // User wants generic names
@@ -2071,12 +2109,15 @@
           // "instant_final"
           updateInstantStatus("instant_program", "CONVERTING...", "processing", 50);
           const mp4Blob = await convertToMp4(webmBlob, "instant_final");
-          downloadBlob(mp4Blob, `instant_final_${timestamp}.mp4`);
-          updateInstantStatus("instant_program", "SAVED", "success", 100);
+          // downloadBlob(mp4Blob, `instant_final_${timestamp}.mp4`);
+          enableInstantDownload("instant_program", mp4Blob, `instant_final_${timestamp}.mp4`);
+          // updateInstantStatus("instant_program", "SAVED", "success", 100);
+          updateInstantStatus("instant_program", "READY", "success", 100);
         } catch (e) {
           console.warn("FFmpeg failed, downloading webm", e);
-          downloadBlob(webmBlob, `instant_final_${timestamp}.webm`);
-          updateInstantStatus("instant_program", "SAVED (WebM)", "success", 100);
+          // downloadBlob(webmBlob, `instant_final_${timestamp}.webm`);
+          enableInstantDownload("instant_program", webmBlob, `instant_final_${timestamp}.webm`);
+          updateInstantStatus("instant_program", "READY (WebM)", "success", 100);
         }
       }
 
@@ -2100,12 +2141,14 @@
           try {
             updateInstantStatus(domId, "CONVERTING...", "processing", 50);
             const mp4Blob = await convertToMp4(webmBlob, `instant_${camName}`);
-            downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
-            updateInstantStatus(domId, "SAVED", "success", 100);
+            // downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
+            enableInstantDownload(domId, mp4Blob, `instant_${camName}_${timestamp}.mp4`);
+            updateInstantStatus(domId, "READY", "success", 100);
           } catch (e) {
             console.warn("FFmpeg failed (cam), downloading webm", e);
-            downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
-            updateInstantStatus(domId, "SAVED (WebM)", "success", 100);
+            // downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
+            enableInstantDownload(domId, webmBlob, `instant_${camName}_${timestamp}.webm`);
+            updateInstantStatus(domId, "READY (WebM)", "success", 100);
           }
         } catch (e) {
           console.error(`Error processing instant download for ${id}`, e);
