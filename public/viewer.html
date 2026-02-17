@@ -57,162 +57,6 @@
       object-fit: contain;
     }
 
-    /* ===== CHAT (RIGHT/BOTTOM) ===== */
-    .chat-container {
-      width: 350px;
-      background: var(--panel);
-      border-left: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      position: relative;
-    }
-
-    .chat-header {
-      padding: 14px;
-      border-bottom: 1px solid var(--border);
-      font-weight: 600;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .viewer-count {
-      background: #262b3d;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .msg {
-      font-size: 13px;
-      line-height: 1.4;
-      word-break: break-word;
-    }
-
-    .msg-name {
-      font-weight: 700;
-      color: var(--blue);
-      margin-right: 4px;
-    }
-
-    .chat-input-area {
-      padding: 14px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      gap: 8px;
-    }
-
-    .chat-input {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 20px;
-      outline: none;
-    }
-
-    .send-btn {
-      background: var(--blue);
-      border: none;
-      color: white;
-      padding: 8px 16px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-weight: 600;
-    }
-
-    /* ===== OVERLAYS & UI ===== */
-    .stream-info {
-      position: absolute;
-      top: 14px;
-      left: 14px;
-      z-index: 10;
-    }
-
-    .badge {
-      background: rgba(0, 0, 0, 0.6);
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 13px;
-      backdrop-filter: blur(4px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .live-dot {
-      width: 8px;
-      height: 8px;
-      background: var(--red);
-      border-radius: 50%;
-    }
-
-    /* REACTION FLOATING BUTTONS */
-    .reaction-bar {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
-      display: flex;
-      gap: 10px;
-      z-index: 10;
-    }
-
-    .react-btn {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      border: none;
-      background: rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(4px);
-      font-size: 20px;
-      cursor: pointer;
-      transition: transform 0.1s, background 0.2s;
-    }
-
-    .react-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-      transform: scale(1.1);
-    }
-
-    .react-btn:active {
-      transform: scale(0.9);
-    }
-
-    /* ANIMATED REACTIONS */
-    .floating-emoji {
-      position: absolute;
-      bottom: 60px;
-      right: 40px;
-      font-size: 24px;
-      pointer-events: none;
-      animation: floatUp 2s ease-out forwards;
-      z-index: 5;
-    }
-
-    @keyframes floatUp {
-      0% {
-        opacity: 1;
-        transform: translateY(0) scale(0.5);
-      }
-
-      100% {
-        opacity: 0;
-        transform: translateY(-100px) scale(1.5);
-      }
-    }
-
     /* ===== MOBILE RWD ===== */
     @media (max-width: 900px) {
       .viewer-layout {
@@ -222,31 +66,13 @@
       .player-container {
         flex: initial;
         width: 100%;
-        aspect-ratio: 16/9;
-      }
-
-      .chat-container {
-        width: 100%;
-        flex: 1;
-        border-left: none;
-        border-top: 1px solid var(--border);
-      }
-
-      .reaction-bar {
-        bottom: 10px;
-        right: 10px;
-      }
-
-      .react-btn {
-        width: 36px;
-        height: 36px;
-        font-size: 18px;
+        height: 100vh;
       }
 
       /* Feedback Button overrides for Mobile */
       .feedback-fab {
         top: 20px !important;
-        right: 86px !important;
+        right: 20px !important;
         bottom: auto !important;
         width: 40px !important;
         height: 40px !important;
@@ -283,30 +109,8 @@
         </div>
       </div>
 
-      <div class="reaction-bar">
-        <button class="react-btn" onclick="sendReaction('❤️')">❤️</button>
-        <button class="react-btn" onclick="sendReaction('🔥')">🔥</button>
-        <button class="react-btn" onclick="sendReaction('👏')">👏</button>
-        <button class="react-btn" onclick="toggleFullscreen()">⛶</button>
-      </div>
-
-      <!-- Container for flying emojis -->
-      <div id="reactionContainer"></div>
-    </div>
-
-    <!-- CHAT -->
-    <div class="chat-container">
-      <div class="chat-header">
-        <span>Live Chat</span>
-        <div class="viewer-count">👥 <span id="viewCount">0</span></div>
-      </div>
-      <div class="chat-messages" id="msgs">
-        <div class="msg" style="color:var(--muted);text-align:center;">Welcome to the chat!</div>
-      </div>
-      <div class="chat-input-area">
-        <input type="text" id="chatInput" class="chat-input" placeholder="Say something..." maxlength="100">
-        <button class="send-btn" onclick="sendMsg()">Send</button>
-      </div>
+      <button class="react-btn" onclick="toggleFullscreen()"
+        style="position:absolute; bottom:20px; right:20px; z-index:10;">⛶</button>
     </div>
   </div>
 
@@ -342,72 +146,6 @@
 
     // Update UI
     document.getElementById("streamName").innerText = streamName;
-
-    /* ===== CHAT & REACTIONS ===== */
-    const msgs = document.getElementById("msgs");
-    const chatInput = document.getElementById("chatInput");
-    const reactionContainer = document.getElementById("reactionContainer");
-    const viewCountEl = document.getElementById("viewCount");
-
-    function sendMsg() {
-      const text = chatInput.value.trim();
-      if (!text) return;
-      socket.emit("chat-message", { room: streamId, name: myName, text });
-      chatInput.value = "";
-    }
-
-    chatInput.onkeydown = (e) => {
-      if (e.key === "Enter") sendMsg();
-    }
-
-    socket.on("chat-message", ({ name, text }) => {
-      const div = document.createElement("div");
-      div.className = "msg";
-      div.innerHTML = `<span class="msg-name">${name}:</span> ${text}`; // Trusted text only? careful with xss, but this is a demo
-      div.textContent = ""; // Safety first
-
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "msg-name";
-      nameSpan.innerText = name + ": ";
-
-      const textSpan = document.createElement("span");
-      textSpan.innerText = text;
-
-      div.appendChild(nameSpan);
-      div.appendChild(textSpan);
-
-      msgs.appendChild(div);
-      msgs.scrollTop = msgs.scrollHeight;
-    });
-
-    function sendReaction(type) {
-      socket.emit("reaction", { room: streamId, type });
-      showFloatingReaction(type); // Show local immediately
-    }
-
-    socket.on("reaction", ({ type }) => {
-      showFloatingReaction(type);
-    });
-
-    socket.on("viewer-count", count => {
-      viewCountEl.innerText = count;
-    });
-
-    function showFloatingReaction(char) {
-      const el = document.createElement("div");
-      el.className = "floating-emoji";
-      el.innerText = char;
-      // Randomize horizontal start slightly
-      el.style.right = (20 + Math.random() * 40) + "px";
-      reactionContainer.appendChild(el);
-      setTimeout(() => el.remove(), 2000);
-    }
-
-    function toggleFullscreen() {
-      const el = document.querySelector(".player-container");
-      if (!document.fullscreenElement) el.requestFullscreen();
-      else document.exitFullscreen();
-    }
 
     /* ===== WEBRTC LOGIC (Existing) ===== */
     const video = document.getElementById("v");
@@ -489,5 +227,8 @@
       }
     });
 
-  </script>
-</body>
+    function toggleFullscreen() {
+      const el = document.querySelector(".player-container");
+      if (!document.fullscreenElement) el.requestFullscreen();
+      else document.exitFullscreen();
+    }

@@ -217,11 +217,20 @@
       </div>
     </div>
 
-    <div class="preview">
+    <div class="preview" style="position:relative;">
       <video id="video" autoplay muted playsinline></video>
+      <div id="gridOverlay" class="grid-overlay"></div>
     </div>
 
     <div class="controls">
+      <!-- SETTINGS (New) -->
+      <button class="ctrl" onclick="toggleSettings()" style="background:#334155; border-color:#475569;">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+        </svg>
+      </button>
+
       <!-- MIC -->
       <button id="micBtn" class="ctrl" onclick="toggleMic()">
         <svg viewBox="0 0 24 24">
@@ -254,7 +263,99 @@
       </div>
     </div>
 
+    <!-- SETTINGS OVERLAY -->
+    <div id="settingsOverlay"
+      style="display:none; position:fixed; bottom:100px; left:20px; right:20px; background:rgba(22,25,34,0.95); border:1px solid var(--border); border-radius:16px; padding:20px; z-index:40; flex-direction:column; gap:16px; backdrop-filter:blur(8px);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span style="font-weight:600; font-size:14px;">Camera Settings</span>
+        <button onclick="toggleSettings()"
+          style="background:none; border:none; color:#fff; font-size:20px; padding:0; cursor:pointer;">&times;</button>
+      </div>
+
+      <!-- ZOOM -->
+      <div id="zoomControl" style="display:none; flex-direction:column; gap:8px;">
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:#94a3b8;">
+          <span>Zoom</span>
+          <span id="zoomVal">1.0x</span>
+        </div>
+        <input type="range" id="zoomSlider" min="1" max="5" step="0.1" value="1"
+          style="width:100%; accent-color: #3b82f6;">
+      </div>
+
+      <!-- BRIGHTNESS / EXPOSURE -->
+      <div id="brightnessControl" style="display:none; flex-direction:column; gap:8px;">
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:#94a3b8;">
+          <span>Brightness</span>
+          <span id="brightnessVal">0</span>
+        </div>
+        <input type="range" id="brightnessSlider" min="-2" max="2" step="0.1" value="0"
+          style="width:100%; accent-color: #3b82f6;">
+      </div>
+
+      <!-- GRID TOGGLE -->
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <span style="font-size:14px;">Grid Overlay</span>
+        <label class="switch" style="position:relative; display:inline-block; width:40px; height:24px;">
+          <input type="checkbox" id="gridToggle" onchange="toggleGrid()">
+          <span class="slider"
+            style="position:absolute; cursor:pointer; inset:0; background-color:#334155; transition:.4s; border-radius:34px;"></span>
+          <span class="slider-knob"
+            style="position:absolute; content:''; height:16px; width:16px; left:4px; bottom:4px; background-color:white; transition:.4s; border-radius:50%;"></span>
+        </label>
+      </div>
+    </div>
+
   </div>
+
+  <!-- Style for Slider Toggle -->
+  <style>
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .switch input:checked+.slider {
+      background-color: #3b82f6;
+    }
+
+    .switch input:checked+.slider .slider-knob {
+      transform: translateX(16px);
+    }
+
+    /* Grid Overlay */
+    .grid-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: none;
+      z-index: 10;
+    }
+
+    .grid-overlay::before {
+      content: "";
+      position: absolute;
+      top: 33.33%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.3);
+      box-shadow: 0 33.33vh 0 0 rgba(255, 255, 255, 0.3);
+      /* Second horizontal line */
+    }
+
+    .grid-overlay::after {
+      content: "";
+      position: absolute;
+      left: 33.33%;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.3);
+      box-shadow: 33.33vw 0 0 0 rgba(255, 255, 255, 0.3);
+      /* Second vertical line */
+    }
+  </style>
 
   <!-- Passcode Overlay -->
   <div id="passcodeOverlay">
@@ -498,6 +599,84 @@
 
 
     /* ===== ACTIONS ===== */
+    const settingsOverlay = document.getElementById("settingsOverlay");
+    const zoomControl = document.getElementById("zoomControl");
+    const brightnessControl = document.getElementById("brightnessControl");
+    const zoomSlider = document.getElementById("zoomSlider");
+    const brightnessSlider = document.getElementById("brightnessSlider");
+
+    function toggleSettings() {
+      const isVisible = settingsOverlay.style.display === "flex";
+      settingsOverlay.style.display = isVisible ? "none" : "flex";
+      if (!isVisible) checkCapabilities(); // Check when opening
+    }
+
+    function toggleGrid() {
+      const grid = document.getElementById("gridOverlay");
+      const isOn = document.getElementById("gridToggle").checked;
+      grid.style.display = isOn ? "block" : "none";
+    }
+
+    // Capability Check
+    let trackCapabilities = null;
+
+    async function checkCapabilities() {
+      if (!mediaStream) return;
+      const track = mediaStream.getVideoTracks()[0];
+      if (!track) return;
+
+      try {
+        trackCapabilities = track.getCapabilities();
+
+        // ZOOM
+        if (trackCapabilities.zoom) {
+          zoomControl.style.display = "flex";
+          zoomSlider.min = trackCapabilities.zoom.min;
+          zoomSlider.max = trackCapabilities.zoom.max;
+          zoomSlider.step = trackCapabilities.zoom.step || 0.1;
+          // Don't reset value if already set by user, unless it's first load
+        } else {
+          zoomControl.style.display = "none";
+        }
+
+        // BRIGHTNESS (or ExposureCompensation)
+        if (trackCapabilities.exposureCompensation) {
+          brightnessControl.style.display = "flex";
+          brightnessSlider.min = trackCapabilities.exposureCompensation.min;
+          brightnessSlider.max = trackCapabilities.exposureCompensation.max;
+          brightnessSlider.step = trackCapabilities.exposureCompensation.step || 0.1;
+        } else {
+          brightnessControl.style.display = "none";
+        }
+      } catch (e) {
+        console.warn("Error getting capabilities:", e);
+      }
+    }
+
+    // Apply Settings
+    async function applyConstraint(name, value) {
+      if (!mediaStream) return;
+      const track = mediaStream.getVideoTracks()[0];
+      const constraints = { advanced: [{ [name]: value }] };
+      try {
+        await track.applyConstraints(constraints);
+      } catch (e) {
+        console.warn("Failed to apply constraint:", name, e);
+      }
+    }
+
+    zoomSlider.oninput = (e) => {
+      const val = parseFloat(e.target.value);
+      document.getElementById("zoomVal").innerText = val + "x";
+      applyConstraint("zoom", val);
+    };
+
+    brightnessSlider.oninput = (e) => {
+      const val = parseFloat(e.target.value);
+      document.getElementById("brightnessVal").innerText = val;
+      applyConstraint("exposureCompensation", val);
+    };
+
     function toggleMic() {
       micOn = !micOn;
       if (mediaStream) {
@@ -513,6 +692,22 @@
       }
       camBtn.classList.toggle("off", !camOn);
     }
+
+    // Exit Warning
+    window.addEventListener("beforeunload", (e) => {
+      // If uploading or transferring, warn
+      if (isoRecorder && isoRecorder.state === "recording") {
+        e.preventDefault();
+        e.returnValue = "Recording in progress. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+      const badge = document.getElementById("liveBadge");
+      if (badge && (badge.textContent === "SENDING" || badge.textContent === "UPLOADING")) {
+        e.preventDefault();
+        e.returnValue = "Upload in progress. Leaving will corrupt the file.";
+        return e.returnValue;
+      }
+    });
 
     async function leave() {
       if (await confirm("Stop Streaming?\n\nThis will end your session and take you back to the home page.", "destructive")) {

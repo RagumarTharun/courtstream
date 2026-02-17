@@ -188,18 +188,40 @@
       background: rgba(15, 17, 21, .85);
       border: 1px solid var(--border);
       color: #fff;
-      width: 40px;
       height: 40px;
-      border-radius: 50%;
+      border-radius: 20px;
+      /* Pill shape ready */
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 0 12px;
+      /* Pad for icon */
+      min-width: 40px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .ctrl-btn span {
+      display: none;
+      margin-left: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateX(-5px);
       transition: all 0.2s;
     }
 
     .ctrl-btn:hover {
       background: var(--border);
+      padding-right: 16px;
+    }
+
+    .ctrl-btn:hover span {
+      display: inline-block;
+      opacity: 1;
+      transform: translateX(0);
     }
 
     .ctrl-btn.active {
@@ -555,26 +577,29 @@
 
         <!-- RECORD -->
         <button id="recordBtn" class="ctrl-btn" title="Record" onclick="toggleRecord()">
-          <svg viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="8" fill="white" class="rec-icon" />
-            <rect x="6" y="6" width="12" height="12" fill="white" class="stop-icon" style="display:none" />
+          <svg viewBox="0 0 24 24" width="24" height="24">
+            <circle cx="12" cy="12" r="6" fill="white" class="rec-icon" />
+            <rect x="8" y="8" width="8" height="8" fill="white" class="stop-icon" style="display:none" />
           </svg>
+          <span class="rec-text">Record</span>
         </button>
 
         <!-- PLAYBACK -->
         <button id="playbackBtn" class="ctrl-btn" title="Playback Editor" onclick="goToPlayback()">
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" width="24" height="24">
             <path fill="white"
               d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
           </svg>
+          <span>Playback</span>
         </button>
 
         <!-- QR CODE -->
         <button id="qrBtn" class="ctrl-btn" title="Camera QR Code" onclick="openQr()">
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" width="24" height="24">
             <path fill="white"
               d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm0-2h2v2h-2v-2zm-6 4h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2z" />
           </svg>
+          <span>Share QR</span>
         </button>
       </div>
 
@@ -1952,303 +1977,304 @@
           await ffmpeg.exec(cmdArgs);
 
           segments.push(segmentName);
-          updateRenderProgress(60 + Math.floor((i / isoEdl.length) * 20), `Processed Cut ${i + 1}/${isoEdl.length}`);
-        }
+          // Helper to add dl button (Reusing enableInstantDownload style basically, but we need to create the row first)
+          const addRenderedFileRow = (blob, name, label) => {
+            const btnList = document.getElementById("downloadButtons");
+            const row = document.createElement("div");
+            row.className = "file-item";
+            row.style.marginBottom = "8px";
 
-        // 4. Concat Segments
-        updateRenderProgress(85, "Stitching Final Mix...");
-        const concatList = segments.map(s => `file '${s}'`).join("\n");
-        await ffmpeg.writeFile("list.txt", concatList);
+            row.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="name">${label}</span>
+                    <div style="display:flex; align-items:center;">
+                        <span class="status-badge success">READY</span>
+                    </div>
+                </div>
+            `;
 
-        await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
-
-        // 5. Success
-        updateRenderProgress(100, "Done!");
-
-        const finalData = await ffmpeg.readFile("final_mix.mp4");
-        const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
-
-        // Prepare Downloads UI
-        document.getElementById("renderPhase").style.display = "none";
-        document.getElementById("completePhase").style.display = "block";
-        const btnList = document.getElementById("downloadButtons");
-        btnList.innerHTML = "";
-
-        const timestamp = formatDate(Date.now());
-
-        // Helper to add dl button
-        // Helper to add dl button
-        const addBtn = (blob, name, label, isPrimary = false) => {
-          const url = URL.createObjectURL(blob);
-          const btn = document.createElement("a");
-
-          if (isPrimary) {
-            btn.className = "btn-premium";
-            btn.innerHTML = `<span style="font-size:1.1em">⬇</span> ${label}`;
-          } else {
-            btn.className = "btn-outline"; // Re-use existing outline class
-            btn.style.display = "block";
-            btn.style.padding = "10px";
-            btn.style.textAlign = "center";
-            btn.style.border = "1px solid #334155";
-            btn.style.borderRadius = "8px";
-            btn.style.color = "#94a3b8";
+            // Create download button manually to attach event
+            const btn = document.createElement("a");
+            btn.className = "instant-dl-btn";
+            btn.innerText = "Download";
+            btn.style.marginLeft = "10px";
+            btn.style.background = "#3b82f6";
+            btn.style.color = "white";
+            btn.style.padding = "4px 10px";
+            btn.style.borderRadius = "4px";
             btn.style.textDecoration = "none";
-            btn.style.marginBottom = "8px";
-            btn.innerText = label;
+            btn.style.fontSize = "12px";
+            btn.style.cursor = "pointer";
+            btn.style.fontWeight = "600";
+
+            const url = URL.createObjectURL(blob);
+            btn.href = url;
+            btn.download = name;
+
+            // Append to inner container
+            row.querySelector("div").appendChild(btn);
+            btnList.appendChild(row);
+          };
+
+          addRenderedFileRow(finalBlob, `quality_final_${timestamp}.mp4`, "Final Mix (Rendered)");
+
+          // Add Source Buttons
+          for (const [id, mp4Name] of Object.entries(mp4Files)) {
+            const data = await ffmpeg.readFile(mp4Name);
+            const blob = new Blob([data.buffer], { type: "video/mp4" });
+
+            let safeName = "program";
+            let label = "Program Source";
+
+            if (id !== "director_program") {
+              const p = peers[id];
+              const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
+              safeName = sanitizeName(rawName);
+              label = `Source: ${rawName}`;
+            }
+
+            const name = `quality_${safeName}_${timestamp}.mp4`;
+            addRenderedFileRow(blob, name, label);
           }
 
-          btn.href = url;
-          btn.download = name;
-          btnList.appendChild(btn);
-        };
+          // Cleanup FS
+          try {
+            await ffmpeg.deleteFile("final_mix.mp4");
+            await ffmpeg.deleteFile("list.txt");
+            for (const s of segments) await ffmpeg.deleteFile(s);
+            for (const f of Object.values(mp4Files)) await ffmpeg.deleteFile(f);
+          } catch (e) { }
 
-        addBtn(finalBlob, `quality_final_${timestamp}.mp4`, "Download Final Mix", true);
+          // Final Cleanup of Memory
+          programChunks.length = 0;
 
-        // Add Source Buttons
-        for (const [id, mp4Name] of Object.entries(mp4Files)) {
-          const data = await ffmpeg.readFile(mp4Name);
-          const blob = new Blob([data.buffer], { type: "video/mp4" });
+          // Custom "Return to Director" Button
+          const completePhase = document.getElementById("completePhase");
 
-          let safeName = "program";
-          let label = "Program Source";
+          // Remove old buttons if present (cleared by innerHTML="" earlier)
+          // Add "Return to Director" button
+          const returnBtn = document.createElement("button");
+          returnBtn.className = "modal-btn";
+          returnBtn.style.marginTop = "20px";
+          returnBtn.style.width = "100%";
+          returnBtn.innerText = "Return to Director";
+          returnBtn.onclick = () => location.reload();
+          completePhase.appendChild(returnBtn);
 
-          if (id !== "director_program") {
-            const p = peers[id];
-            const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
-            safeName = sanitizeName(rawName);
-            label = `Source: ${rawName}`;
+        } catch (e) {
+          console.error("Client Render Error:", e);
+          alert("Rendering failed: " + e.message);
+          const badge = document.getElementById("renderStatusBadge");
+          if (badge) {
+            badge.className = "status-badge"; // Remove others
+            badge.style.background = "#ef4444";
+            badge.innerText = "ERROR";
           }
+          // document.getElementById("transferModal").style.display = "none"; // Keep dashboard open to see error
 
-          const name = `quality_${safeName}_${timestamp}.mp4`;
-          addBtn(blob, name, label, false);
-        }
-
-        // Cleanup FS
-        try {
-          await ffmpeg.deleteFile("final_mix.mp4");
-          await ffmpeg.deleteFile("list.txt");
-          for (const s of segments) await ffmpeg.deleteFile(s);
-          for (const f of Object.values(mp4Files)) await ffmpeg.deleteFile(f);
-        } catch (e) { }
-
-        // Final Cleanup of Memory
-        programChunks.length = 0;
-
-      } catch (e) {
-        console.error("Client Render Error:", e);
-        alert("Rendering failed: " + e.message);
-        const badge = document.getElementById("renderStatusBadge");
-        if (badge) {
-          badge.className = "status-badge"; // Remove others
-          badge.style.background = "#ef4444";
-          badge.innerText = "ERROR";
-        }
-        // document.getElementById("transferModal").style.display = "none"; // Keep dashboard open to see error
-
-        // Retry Button
-        const btnList = document.getElementById("downloadButtons");
-        if (btnList) {
-          btnList.innerHTML = `
+          // Retry Button
+          const btnList = document.getElementById("downloadButtons");
+          if (btnList) {
+            btnList.innerHTML = `
                 <button onclick="startClientSideRender()" class="modal-btn" style="background:#ef4444; width:100%; margin-top:10px;">
                     Retry Render
                 </button>
             `;
-          document.getElementById("completePhase").style.display = "block";
+            document.getElementById("completePhase").style.display = "block";
+          }
         }
       }
-    }
 
     function enableInstantDownload(id, blob, filename) {
-      const el = document.getElementById(id);
-      if (!el) return;
+        const el = document.getElementById(id);
+        if (!el) return;
 
-      const badge = el.querySelector(".status-badge");
-      if (badge) {
-        badge.className = "status-badge success";
-        badge.innerText = "READY";
-      }
-
-      // Remove existing button if any
-      const existingBtn = el.querySelector(".instant-dl-btn");
-      if (existingBtn) existingBtn.remove();
-
-      const btn = document.createElement("a");
-      btn.className = "instant-dl-btn";
-      btn.innerText = "Download";
-      btn.style.marginLeft = "10px";
-      btn.style.background = "#3b82f6";
-      btn.style.color = "white";
-      btn.style.padding = "4px 10px";
-      btn.style.borderRadius = "4px";
-      btn.style.textDecoration = "none";
-      btn.style.fontSize = "12px";
-      btn.style.cursor = "pointer";
-      btn.style.fontWeight = "600";
-
-      const url = URL.createObjectURL(blob);
-      btn.href = url;
-      btn.download = filename;
-
-      // Append to the inner wrapper (where status badge is)
-      const wrapper = el.querySelector("div > div");
-      if (wrapper) wrapper.appendChild(btn);
-    }
-
-    async function downloadAllRecordings(retainProgram = false) {
-      const timestamp = formatDate(Date.now());
-      // const streamSafe = sanitizeName(streamLabel || "courtstream"); // User wants generic names
-
-      // Program (live)
-      if (programChunks.length) {
-        updateInstantStatus("instant_program", "CONVERTING...", "processing", 10);
-        const webmBlob = new Blob(programChunks, { type: "video/webm" });
-        try {
-          // const mp4Blob = await convertToMp4(webmBlob, "live"); // Optional: skip conversion for speed in instant? 
-          // User asked for instant feeds. Often webm is fine, but mp4 preferred. 
-          // "instant_final"
-          updateInstantStatus("instant_program", "CONVERTING...", "processing", 50);
-          const mp4Blob = await convertToMp4(webmBlob, "instant_final");
-          // downloadBlob(mp4Blob, `instant_final_${timestamp}.mp4`);
-          enableInstantDownload("instant_program", mp4Blob, `instant_final_${timestamp}.mp4`);
-          // updateInstantStatus("instant_program", "SAVED", "success", 100);
-          updateInstantStatus("instant_program", "READY", "success", 100);
-        } catch (e) {
-          console.warn("FFmpeg failed, downloading webm", e);
-          // downloadBlob(webmBlob, `instant_final_${timestamp}.webm`);
-          enableInstantDownload("instant_program", webmBlob, `instant_final_${timestamp}.webm`);
-          updateInstantStatus("instant_program", "READY (WebM)", "success", 100);
+        const badge = el.querySelector(".status-badge");
+        if (badge) {
+          badge.className = "status-badge success";
+          badge.innerText = "READY";
         }
+
+        // Remove existing button if any
+        const existingBtn = el.querySelector(".instant-dl-btn");
+        if (existingBtn) existingBtn.remove();
+
+        const btn = document.createElement("a");
+        btn.className = "instant-dl-btn";
+        btn.innerText = "Download";
+        btn.style.marginLeft = "10px";
+        btn.style.background = "#3b82f6";
+        btn.style.color = "white";
+        btn.style.padding = "4px 10px";
+        btn.style.borderRadius = "4px";
+        btn.style.textDecoration = "none";
+        btn.style.fontSize = "12px";
+        btn.style.cursor = "pointer";
+        btn.style.fontWeight = "600";
+
+        const url = URL.createObjectURL(blob);
+        btn.href = url;
+        btn.download = filename;
+
+        // Append to the inner wrapper (where status badge is)
+        const wrapper = el.querySelector("div > div");
+        if (wrapper) wrapper.appendChild(btn);
       }
 
-      // Each camera (Local Mirror)
-      for (const [id, obj] of Object.entries(cameraRecorders)) {
-        const domId = `instant_${id}`;
-        try {
-          const p = peers[id];
-          const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
+      async function downloadAllRecordings(retainProgram = false) {
+        const timestamp = formatDate(Date.now());
+        // const streamSafe = sanitizeName(streamLabel || "courtstream"); // User wants generic names
 
-          const camName = sanitizeName(rawName);
-          const chunks = obj.chunks || [];
-          if (!chunks.length) {
-            updateInstantStatus(domId, "EMPTY", "error");
-            continue;
-          }
-
-          updateInstantStatus(domId, "CONVERTING...", "processing", 10);
-          const webmBlob = new Blob(chunks, { type: "video/webm" });
-          // "instant_cameraname"
+        // Program (live)
+        if (programChunks.length) {
+          updateInstantStatus("instant_program", "CONVERTING...", "processing", 10);
+          const webmBlob = new Blob(programChunks, { type: "video/webm" });
           try {
-            updateInstantStatus(domId, "CONVERTING...", "processing", 50);
-            const mp4Blob = await convertToMp4(webmBlob, `instant_${camName}`);
-            // downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
-            enableInstantDownload(domId, mp4Blob, `instant_${camName}_${timestamp}.mp4`);
-            updateInstantStatus(domId, "READY", "success", 100);
+            // const mp4Blob = await convertToMp4(webmBlob, "live"); // Optional: skip conversion for speed in instant? 
+            // User asked for instant feeds. Often webm is fine, but mp4 preferred. 
+            // "instant_final"
+            updateInstantStatus("instant_program", "CONVERTING...", "processing", 50);
+            const mp4Blob = await convertToMp4(webmBlob, "instant_final");
+            // downloadBlob(mp4Blob, `instant_final_${timestamp}.mp4`);
+            enableInstantDownload("instant_program", mp4Blob, `instant_final_${timestamp}.mp4`);
+            // updateInstantStatus("instant_program", "SAVED", "success", 100);
+            updateInstantStatus("instant_program", "READY", "success", 100);
           } catch (e) {
-            console.warn("FFmpeg failed (cam), downloading webm", e);
-            // downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
-            enableInstantDownload(domId, webmBlob, `instant_${camName}_${timestamp}.webm`);
-            updateInstantStatus(domId, "READY (WebM)", "success", 100);
+            console.warn("FFmpeg failed, downloading webm", e);
+            // downloadBlob(webmBlob, `instant_final_${timestamp}.webm`);
+            enableInstantDownload("instant_program", webmBlob, `instant_final_${timestamp}.webm`);
+            updateInstantStatus("instant_program", "READY (WebM)", "success", 100);
           }
-        } catch (e) {
-          console.error(`Error processing instant download for ${id}`, e);
-          updateInstantStatus(domId, "ERROR", "error");
         }
-      }
 
-      if (!retainProgram) {
-        programChunks.length = 0;
-      }
-      // Camera recorders are local mirrors, not needed for Quality Render (which uses P2P transfer)
-      Object.keys(cameraRecorders).forEach(id => delete cameraRecorders[id]);
-    }
-
-    function downloadBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }
-
-    /* ===== QR ===== */
-    function openQr() {
-      const modal = document.getElementById("qrModal");
-      const box = document.getElementById("qrCode");
-      const linkBox = document.getElementById("qrLink");
-      box.innerHTML = "";
-
-      const url = `https://courtstream.live/camera-live.html?stream=${encodeURIComponent(streamId)}&name=${encodeURIComponent(streamLabel || "")}`;
-      new QRCode(box, {
-        text: url,
-        width: 200,
-        height: 200,
-        colorDark: "#ffffff",
-        colorLight: "#161922"
-      });
-      linkBox.textContent = url;
-      modal.style.display = "flex";
-    }
-
-    function closeQr() {
-      document.getElementById("qrModal").style.display = "none";
-    }
-
-    async function goToPlayback() {
-      if (recordingState !== "idle") {
-        if (await confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
+        // Each camera (Local Mirror)
+        for (const [id, obj] of Object.entries(cameraRecorders)) {
+          const domId = `instant_${id}`;
           try {
-            await stopRecording();
-            // Allow time for downloads to initiate
-            setTimeout(() => location.href = "playback.html", 1500);
+            const p = peers[id];
+            const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
+
+            const camName = sanitizeName(rawName);
+            const chunks = obj.chunks || [];
+            if (!chunks.length) {
+              updateInstantStatus(domId, "EMPTY", "error");
+              continue;
+            }
+
+            updateInstantStatus(domId, "CONVERTING...", "processing", 10);
+            const webmBlob = new Blob(chunks, { type: "video/webm" });
+            // "instant_cameraname"
+            try {
+              updateInstantStatus(domId, "CONVERTING...", "processing", 50);
+              const mp4Blob = await convertToMp4(webmBlob, `instant_${camName}`);
+              // downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
+              enableInstantDownload(domId, mp4Blob, `instant_${camName}_${timestamp}.mp4`);
+              updateInstantStatus(domId, "READY", "success", 100);
+            } catch (e) {
+              console.warn("FFmpeg failed (cam), downloading webm", e);
+              // downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
+              enableInstantDownload(domId, webmBlob, `instant_${camName}_${timestamp}.webm`);
+              updateInstantStatus(domId, "READY (WebM)", "success", 100);
+            }
           } catch (e) {
-            console.error(e);
-            alert("Error stopping recording: " + e);
+            console.error(`Error processing instant download for ${id}`, e);
+            updateInstantStatus(domId, "ERROR", "error");
           }
         }
-      } else {
-        location.href = "playback.html";
-      }
-    }
 
-    /* ===== SIGNAL ===== */
-    socket.on("signal", async ({ from, data }) => {
-      const p = peers[from];
-      const v = viewers[from];
-      if (!p && !v) {
-        console.log("📡 Director: Signal from unknown peer", from);
-        return;
+        if (!retainProgram) {
+          programChunks.length = 0;
+        }
+        // Camera recorders are local mirrors, not needed for Quality Render (which uses P2P transfer)
+        Object.keys(cameraRecorders).forEach(id => delete cameraRecorders[id]);
       }
 
-      try {
-        if (data.type) {
-          console.log(`📡 Director: Received ${data.type} from`, from);
-          if (p) await p.pc.setRemoteDescription(new RTCSessionDescription(data));
-          if (v) await v.pc.setRemoteDescription(new RTCSessionDescription(data));
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      /* ===== QR ===== */
+      function openQr() {
+        const modal = document.getElementById("qrModal");
+        const box = document.getElementById("qrCode");
+        const linkBox = document.getElementById("qrLink");
+        box.innerHTML = "";
+
+        const url = `https://courtstream.live/camera-live.html?stream=${encodeURIComponent(streamId)}&name=${encodeURIComponent(streamLabel || "")}`;
+        new QRCode(box, {
+          text: url,
+          width: 200,
+          height: 200,
+          colorDark: "#ffffff",
+          colorLight: "#161922"
+        });
+        linkBox.textContent = url;
+        modal.style.display = "flex";
+      }
+
+      function closeQr() {
+        document.getElementById("qrModal").style.display = "none";
+      }
+
+      async function goToPlayback() {
+        if (recordingState !== "idle") {
+          if (await confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
+            try {
+              await stopRecording();
+              // Allow time for downloads to initiate
+              setTimeout(() => location.href = "playback.html", 1500);
+            } catch (e) {
+              console.error(e);
+              alert("Error stopping recording: " + e);
+            }
+          }
         } else {
-          // Robust candidate handling
-          let cand = null;
-          if (data.candidate !== undefined && typeof data.candidate === 'string') {
-            cand = data;
-          } else if (data.candidate && data.candidate.candidate !== undefined) {
-            cand = data.candidate;
-          } else if (data.sdpMid !== undefined) {
-            cand = data;
-          }
-
-          if (cand) {
-            console.log("✅ Director: Adding ICE candidate from", from);
-            if (p) await p.pc.addIceCandidate(new RTCIceCandidate(cand));
-            if (v) await v.pc.addIceCandidate(new RTCIceCandidate(cand));
-          }
+          location.href = "playback.html";
         }
-      } catch (e) {
-        console.warn("Signal error:", e);
       }
-    });
+
+      /* ===== SIGNAL ===== */
+      socket.on("signal", async ({ from, data }) => {
+        const p = peers[from];
+        const v = viewers[from];
+        if (!p && !v) {
+          console.log("📡 Director: Signal from unknown peer", from);
+          return;
+        }
+
+        try {
+          if (data.type) {
+            console.log(`📡 Director: Received ${data.type} from`, from);
+            if (p) await p.pc.setRemoteDescription(new RTCSessionDescription(data));
+            if (v) await v.pc.setRemoteDescription(new RTCSessionDescription(data));
+          } else {
+            // Robust candidate handling
+            let cand = null;
+            if (data.candidate !== undefined && typeof data.candidate === 'string') {
+              cand = data;
+            } else if (data.candidate && data.candidate.candidate !== undefined) {
+              cand = data.candidate;
+            } else if (data.sdpMid !== undefined) {
+              cand = data;
+            }
+
+            if (cand) {
+              console.log("✅ Director: Adding ICE candidate from", from);
+              if (p) await p.pc.addIceCandidate(new RTCIceCandidate(cand));
+              if (v) await v.pc.addIceCandidate(new RTCIceCandidate(cand));
+            }
+          }
+        } catch (e) {
+          console.warn("Signal error:", e);
+        }
+      });
   </script>
   <script src="feedback.js"></script>
   <div id="renderProgressPanel"
