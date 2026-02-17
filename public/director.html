@@ -714,6 +714,10 @@
     const programChunks = [];
     const cameraRecorders = {}; // id -> { recorder, chunks }
 
+    // Safety Lock for FFmpeg to prevent "Both" mode collision
+    let isDownloadingInstant = false;
+    let isRenderPending = false;
+
     /* ===== JOIN ===== */
     socket.emit("join", { room: streamId, role: "director" });
 
@@ -925,10 +929,15 @@
       const allReceived = activePeers.every(pid => receivedRecordings[pid]);
 
       if (allReceived) {
-        console.log("🎉 All ISO transfers complete. Starting Client-Side Render...");
+        console.log("🎉 All ISO transfers complete. Checking render lock...");
         setTimeout(() => {
-          document.getElementById("transferModal").style.display = "none";
-          startClientSideRender();
+          if (isDownloadingInstant) {
+            console.log("⏳ Instant download in progress. Queuing render...");
+            isRenderPending = true;
+          } else {
+            console.log("🚀 Starting Client-Side Render...");
+            startClientSideRender();
+          }
         }, 1000);
       }
     }
@@ -1367,11 +1376,21 @@
 
       // 3. PROCESS BASED ON MODE
       if (mode === "instant") {
+        isDownloadingInstant = true;
         await downloadAllRecordings(false);
+        isDownloadingInstant = false;
         markInstantComplete();
       } else if (mode === "both") {
+        isDownloadingInstant = true;
         await downloadAllRecordings(true); // Retain program chunks for later render
+        isDownloadingInstant = false;
         markInstantComplete();
+        // Check if render was requested while we were downloading
+        if (isRenderPending) {
+          console.log("🔄 Instant download finished. Starting pending render...");
+          startClientSideRender();
+          isRenderPending = false;
+        }
       } else if (mode === "quality_program") {
         // Local Render only
         startClientSideRender();
@@ -1557,9 +1576,10 @@
       document.getElementById("renderStatusBadge").className = "status-badge processing";
       document.getElementById("renderStatusBadge").innerText = "RENDER";
 
-      document.getElementById("transferPhase").style.display = "none"; // Hide transfer details if we want? Or keep them visible?
+      // document.getElementById("transferPhase").style.display = "none"; // REMOVED: Element no longer exists
       // Let's keep transfer visible in col 2, but show render in col 3
-      document.getElementById("renderPhase").style.display = "block";
+      const renderPhase = document.getElementById("renderPhase");
+      if (renderPhase) renderPhase.style.display = "block";
 
       const status = document.getElementById("renderStatusText");
       const bar = document.getElementById("renderProgressBar");
@@ -1764,7 +1784,13 @@
       } catch (e) {
         console.error("Client Render Error:", e);
         alert("Rendering failed: " + e.message);
-        document.getElementById("transferModal").style.display = "none";
+        const badge = document.getElementById("renderStatusBadge");
+        if (badge) {
+          badge.className = "status-badge"; // Remove others
+          badge.style.background = "#ef4444";
+          badge.innerText = "ERROR";
+        }
+        // document.getElementById("transferModal").style.display = "none"; // Keep dashboard open to see error
       }
     }
 
