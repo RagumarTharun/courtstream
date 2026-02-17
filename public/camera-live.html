@@ -62,63 +62,76 @@
       inset: 0;
       display: flex;
       flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+      background: #000;
     }
 
-    /* HEADER */
+    /* HEADER / BADGE CHIP */
     .header {
-      height: 56px;
-      display: flex;
-      align-items: center;
-      padding: 0 16px;
-      justify-content: center;
-      position: relative;
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 40;
+      pointer-events: none;
     }
 
     .header-title {
-      font-size: 15px;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      padding: 6px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 13px;
       font-weight: 600;
       display: flex;
       align-items: center;
+      gap: 8px;
     }
 
     /* PREVIEW */
     .preview {
       flex: 1;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 10px;
       overflow: hidden;
-      position: relative;
+      width: 100%;
+      height: 100%;
     }
 
     video {
       width: 100%;
       height: 100%;
       background: #000;
-      border-radius: 18px;
       object-fit: contain;
-      /* Default portrait */
-      transition: transform .25s ease;
+      /* Default */
+      transition: transform 0.3s ease;
     }
 
     /* CONTROLS */
     .controls {
+      position: relative;
+      z-index: 50;
       display: flex;
       justify-content: center;
-      gap: 24px;
-      padding: 18px 0 24px;
+      gap: 20px;
+      padding: 20px;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
     }
 
     .ctrl {
-      width: 56px;
-      height: 56px;
+      width: 52px;
+      height: 52px;
       border-radius: 50%;
-      border: 2px solid var(--border);
-      background: var(--card);
+      border: 1.5px solid rgba(255, 255, 255, 0.2);
+      background: rgba(22, 25, 34, 0.8);
       display: flex;
       align-items: center;
       justify-content: center;
+      backdrop-filter: blur(4px);
+      -webkit-tap-highlight-color: transparent;
     }
 
     .ctrl.off {
@@ -271,51 +284,46 @@
       width: 40px;
     }
 
-    /* LANDSCAPE FIXES */
+    /* LANDSCAPE FIXES (RWD) */
     @media (orientation: landscape) {
       .page {
-        flex-direction: row;
-      }
-
-      .header {
-        position: absolute;
-        top: 0;
-        left: 0;
-        z-index: 30;
-        width: auto;
-        padding: 10px;
-        background: rgba(0, 0, 0, 0.5);
-        border-radius: 0 0 12px 0;
+        flex-direction: row-reverse;
+        /* Controls on the right */
       }
 
       .preview {
-        width: 100vw;
-        height: 100vh;
-        flex: none;
+        flex: 1;
+        width: calc(100% - 100px);
+        /* Leave room for side controls */
       }
 
       video {
-        width: 100%;
-        height: 100%;
-        max-width: none;
-        max-height: none;
         border-radius: 0;
         object-fit: cover;
-        /* Fill screen */
+        /* Fill in landscape */
       }
 
       .controls {
-        position: absolute;
-        bottom: 20px;
-        right: 20px;
+        width: 100px;
+        height: 100dvh;
         flex-direction: column;
-        gap: 16px;
+        justify-content: center;
+        background: linear-gradient(to left, rgba(0, 0, 0, 0.8), transparent);
         padding: 0;
-        z-index: 30;
+        gap: 24px;
       }
 
-      /* Adjust control Sliders in landscape if needed, 
-         but absolute positioning relative to preview (which is now full screen) works fine. */
+      .header {
+        top: 20px;
+        left: 20px;
+      }
+
+      /* Adjust floating buttons in landscape */
+      .feedback-fab {
+        top: 20px !important;
+        right: 120px !important;
+        /* Move away from lateral controls */
+      }
     }
   </style>
 </head>
@@ -536,19 +544,35 @@
     }
 
     async function getStreamWithFallback() {
-      // Start with a basic request that is most likely to succeed on any device
-      const basicConstraints = [
-        { video: { deviceId: videoDevices.length ? { exact: videoDevices[currentDeviceIndex].deviceId } : undefined, facingMode: facing }, audio: true },
-        { video: { facingMode: facing }, audio: true },
-        { video: true, audio: true }
+      const attempts = [
+        // 1. High quality ideal with audio
+        { video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true },
+        // 2. Facing mode ideal with audio
+        { video: { facingMode: { ideal: facing } }, audio: true },
+        // 3. Video only (many old Androids fail if mic is in use or restricted)
+        { video: { facingMode: { ideal: facing } }, audio: false },
+        // 4. Absolute basic video
+        { video: true, audio: false }
       ];
 
       let lastError;
-      for (const constraints of basicConstraints) {
+      for (const constraints of attempts) {
         try {
-          console.log("Probing camera with:", JSON.stringify(constraints));
-          return await navigator.mediaDevices.getUserMedia(constraints);
+          console.log("Ultra-Resilient Probe:", JSON.stringify(constraints));
+          const s = await navigator.mediaDevices.getUserMedia(constraints);
+
+          // If we got video only, try to add audio track afterwards instead of failing the whole thing
+          if (constraints.audio === false) {
+            try {
+              const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              audioStream.getAudioTracks().forEach(t => s.addTrack(t));
+              console.log("✅ Added audio track later");
+            } catch (e) { console.warn("Mic failed, proceeding video-only", e); }
+          }
+          console.log("✅ Stream acquired with:", JSON.stringify(s.getVideoTracks()[0].getSettings()));
+          return s;
         } catch (err) {
+          console.warn("Probe failed:", JSON.stringify(constraints), err.name);
           lastError = err;
         }
       }
@@ -947,7 +971,6 @@
     /* ===== ORIENTATION ===== */
     const rotations = {};
     function applyOrientation() {
-      // Modern way to get orientation
       let orient = 0;
       if (screen.orientation && screen.orientation.angle !== undefined) {
         orient = screen.orientation.angle;
@@ -966,17 +989,12 @@
         socket.emit("camera-rotate", { room: streamId, rotation: rot });
       }
 
-      // LOCAL PREVIEW: On mobile, the browser handles the video element orientation.
-      // We only apply scale if live, but don't force rotation unless it's a desktop browser 
-      // with a fixed window that doesn't physically rotate.
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-      if (isMobile) {
-        // CSS handles the layout rotation. JS rotation usually conflicts.
-        video.style.transform = isLive ? `scale(1.05)` : `none`;
-      } else {
-        video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot}deg)`;
-      }
+      // LOCAL PREVIEW RWD: 
+      // In portrait, we use object-fit: contain.
+      // In landscape, we use object-fit: cover via CSS.
+      // We only apply a subtle scale for "Live" status, but don't fight the browser's native rotation.
+      const isLandscape = Math.abs(orient) === 90;
+      video.style.transform = isLive ? `scale(1.05)` : `none`;
     }
     window.addEventListener("orientationchange", applyOrientation);
     if (screen.orientation) screen.orientation.addEventListener("change", applyOrientation);
