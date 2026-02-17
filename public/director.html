@@ -562,11 +562,11 @@
       </p>
 
       <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
-        <button class="ctrl-btn" onclick="handleQualitySave('all')"
+        <button class="ctrl-btn" onclick="handleQualitySave('quality_all')"
           style="width:100%; border-radius:8px; padding:12px;">
           All Camera Feeds + Program
         </button>
-        <button class="ctrl-btn" onclick="handleQualitySave('program')"
+        <button class="ctrl-btn" onclick="handleQualitySave('quality_program')"
           style="width:100%; border-radius:8px; padding:12px;">
           Program Feed Only (Edited)
         </button>
@@ -1373,7 +1373,7 @@
         instantList.innerHTML = `<div style="color: #64748b; font-size: 14px; padding: 10px;">Instant files skipped.</div>`;
       }
 
-      if (mode === "all" || mode === "both") { // 'all' is legacy for 'quality'
+      if (mode === "quality_all" || mode === "both") { // 'quality_all' replaces legacy 'all'
         document.getElementById("transferStatusBadge").className = "status-badge processing";
         document.getElementById("transferStatusBadge").innerText = "ACTIVE";
         document.getElementById("transferList").innerHTML = ""; // Clear P2P list
@@ -1419,6 +1419,9 @@
       } else if (mode === "quality_program") {
         // Local Render only
         startClientSideRender();
+      } else if (mode === "quality_all") {
+        // Just wait for transfers, logic handled by events
+        console.log("⏳ Waiting for P2P transfers for Quality All...");
       }
 
       // If quality/both, P2P transfer starts automatically via socket/webrtc events
