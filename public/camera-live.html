@@ -64,26 +64,28 @@
       background: #000;
     }
 
-    /* HEADER / BADGE CHIP */
+    /* HEADER / FLOATING CHIP */
     .header {
       position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 40;
+      top: 16px;
+      left: 16px;
+      z-index: 100;
       pointer-events: none;
     }
 
     .header-title {
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(8px);
-      padding: 6px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      font-size: 13px;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      font-size: 14px;
       font-weight: 600;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
     }
 
     /* PREVIEW */
@@ -373,29 +375,13 @@
     /* LANDSCAPE FIXES (Main Page) */
     @media (orientation: landscape) {
       .page {
-        flex-direction: row;
-        /* Header left, Preview/Controls right */
-      }
-
-      .header {
-        position: relative;
-        top: 0;
-        left: 0;
-        width: 140px;
-        height: 100dvh;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        padding: 0 10px;
-        background: rgba(0, 0, 0, 0.4);
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
-        z-index: 70;
-        pointer-events: auto;
+        flex-direction: row-reverse;
       }
 
       .preview {
         flex: 1;
         width: auto;
+        height: 100dvh;
       }
 
       video {
@@ -421,14 +407,13 @@
 
   <div class="page">
 
-    <div class="header">
-      <div class="header-title">
-        <span id="streamNameDisplay">Camera Ready</span>
-        <span id="liveBadge" class="live-indicator">LIVE</span>
-      </div>
-    </div>
-
     <div class="preview" style="position:relative;">
+      <div class="header">
+        <div class="header-title">
+          <span id="streamNameDisplay">Camera Ready</span>
+          <span id="liveBadge" class="live-indicator">LIVE</span>
+        </div>
+      </div>
       <video id="video" autoplay muted playsinline></video>
       <div id="gridOverlay" class="grid-overlay"></div>
 
