@@ -827,6 +827,14 @@
 
           // Show transfer UI
           document.getElementById("transferModal").style.display = "flex";
+
+          // Ensure Program Listing exists
+          if (!document.getElementById("xfer_program")) {
+            updateTransferUI("program", 100, true);
+            const row = document.getElementById("xfer_program");
+            if (row) row.querySelector(".name").innerText = "Director Program (Local)";
+          }
+
           updateTransferUI(id, 0);
         } else if (msg.type === "end") {
           console.log(`✅ File received from ${id}`);
@@ -1354,7 +1362,10 @@
       const type = getSupportedMime();
       const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
       rec.ondataavailable = e => {
-        if (e.data && e.data.size) chunks.push(e.data);
+        if (e.data && e.data.size > 0) {
+          chunks.push(e.data);
+          // console.log(`Captured chunk: ${e.data.size} bytes`);
+        }
       };
       return rec;
     }
@@ -1470,18 +1481,28 @@
 
       try {
         updateRenderProgress(5, "Loading FFmpeg...");
+        // Ensure program recorder is fully stopped and chunks available
+        if (programRecorder && programRecorder.state !== "inactive") {
+          await stopRecorder(programRecorder);
+        }
+
+        console.log("Starting Render. Program Chunks:", programChunks.length);
+
         const { ffmpeg, fetchFile } = await ensureFFmpeg();
 
         // 1. Prepare Inputs
         const sourceFiles = [];
         const activeCamIds = Object.keys(receivedRecordings);
 
-        // Add Director Program
-        if (programChunks.length) {
+        // Add Director Program (Live Mix)
+        if (programChunks.length > 0) {
           const progBlob = new Blob(programChunks, { type: "video/webm" });
+          console.log("Program Blob Size:", progBlob.size);
           const name = "director_program.webm";
           await ffmpeg.writeFile(name, await fetchFile(progBlob));
           sourceFiles.push({ id: "director_program", name, isWebm: true });
+        } else {
+          console.warn("No program chunks found! The live mix will be missing.");
         }
 
         // Add Camera Recordings
