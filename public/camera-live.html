@@ -64,28 +64,26 @@
       background: #000;
     }
 
-    /* HEADER / FLOATING CHIP */
+    /* HEADER / BADGE CHIP */
     .header {
       position: absolute;
-      top: 16px;
-      left: 16px;
-      z-index: 100;
+      top: 20px;
+      left: 20px;
+      z-index: 40;
       pointer-events: none;
     }
 
     .header-title {
-      background: rgba(0, 0, 0, 0.5);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      padding: 8px 16px;
-      border-radius: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      font-size: 14px;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      padding: 6px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 13px;
       font-weight: 600;
       display: flex;
       align-items: center;
-      gap: 10px;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+      gap: 8px;
     }
 
     /* PREVIEW */
@@ -375,13 +373,29 @@
     /* LANDSCAPE FIXES (Main Page) */
     @media (orientation: landscape) {
       .page {
-        flex-direction: row-reverse;
+        flex-direction: row;
+        /* Header left, Preview/Controls right */
+      }
+
+      .header {
+        position: relative;
+        top: 0;
+        left: 0;
+        width: 140px;
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 10px;
+        background: rgba(0, 0, 0, 0.4);
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        z-index: 70;
+        pointer-events: auto;
       }
 
       .preview {
         flex: 1;
         width: auto;
-        height: 100dvh;
       }
 
       video {
@@ -407,13 +421,14 @@
 
   <div class="page">
 
-    <div class="preview" style="position:relative;">
-      <div class="header">
-        <div class="header-title">
-          <span id="streamNameDisplay">Camera Ready</span>
-          <span id="liveBadge" class="live-indicator">LIVE</span>
-        </div>
+    <div class="header">
+      <div class="header-title">
+        <span id="streamNameDisplay">Camera Ready</span>
+        <span id="liveBadge" class="live-indicator">LIVE</span>
       </div>
+    </div>
+
+    <div class="preview" style="position:relative;">
       <video id="video" autoplay muted playsinline></video>
       <div id="gridOverlay" class="grid-overlay"></div>
 
@@ -635,7 +650,7 @@
     let videoSender;
     let micOn = true;
     let camOn = true;
-    let facing = "environment";
+    let facing = "user";
     let directorId = null;
     let isLive = false;
     let videoDevices = [];
@@ -663,8 +678,15 @@
     const socket = io();
     /* ===== CAMERA ===== */
     async function loadVideoDevices() {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      videoDevices = devices.filter(d => d.kind === "videoinput");
+      try {
+        // Must ask for permission first to get labels
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        videoDevices = devices.filter(d => d.kind === "videoinput");
+      } catch (e) {
+        console.warn("Permission/Enumerate Error:", e);
+      }
+
       if (!videoDevices.length) return;
 
       const currentId = mediaStream && mediaStream.getVideoTracks()[0]
@@ -686,8 +708,12 @@
       });
 
       if (backIndex >= 0) {
+        console.log("Found back camera, switching default.");
         currentDeviceIndex = backIndex;
         facing = "environment";
+      } else {
+        console.log("No back camera found, staying with default (user/webcam).");
+        facing = "user";
       }
     }
 
@@ -707,7 +733,10 @@
           lastError = err;
         }
       }
-      throw lastError;
+      if (lastError) {
+        alert("Could not start camera: " + lastError.message + "\n\nPlease ensure you have granted camera permissions.");
+        throw lastError;
+      }
     }
 
     async function startCamera() {
