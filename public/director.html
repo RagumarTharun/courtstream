@@ -579,9 +579,48 @@
     </div>
   </div>
 
+  <!-- Transfer/Render Modal -->
+  <div id="transferModal" class="modal-overlay" style="display:none; z-index: 200;">
+    <div class="modal-box" style="width: 500px;">
+      <h2 style="margin-top:0;">Processing ISO...</h2>
+
+      <!-- Transfer Phase -->
+      <div id="transferPhase">
+        <div class="modal-text" style="margin-bottom: 16px;">Receiving files from cameras... Do not close this tab.
+        </div>
+        <div id="transferList" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+          <!-- Dynamic Rows -->
+        </div>
+      </div>
+
+      <!-- Render Phase -->
+      <div id="renderPhase" style="display:none;">
+        <div class="modal-text" style="margin-bottom: 16px;">Rendering final mix... <span
+            id="renderStatusText">Starting...</span></div>
+        <div class="progress-bar" style="height: 12px; background: #334155; border-radius: 6px; overflow: hidden;">
+          <div id="renderProgressBar" style="height: 100%; width: 0%; background: #3b82f6; transition: width 0.2s;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Complete Phase -->
+      <div id="completePhase" style="display:none; text-align: center;">
+        <div style="color: #10b981; font-weight: 700; font-size: 18px; margin-bottom: 16px;">✅ Processing Complete!
+        </div>
+        <div id="downloadButtons" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Buttons -->
+        </div>
+        <button class="modal-btn" onclick="document.getElementById('transferModal').style.display='none'"
+          style="margin-top: 24px;">Close</button>
+      </div>
+
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
   <script>
     /* ===== STREAM INFO ===== */
     const params = new URLSearchParams(location.search);
@@ -771,6 +810,86 @@
       }
     }
 
+    /* ===== FILE RECEIVER ===== */
+    const receivedRecordings = {}; // Store completed blobs by camera ID
+
+    function handleDataMessage(id, data) {
+      const p = peers[id];
+      if (!p) return;
+
+      if (typeof data === "string") {
+        const msg = JSON.parse(data);
+        if (msg.type === "meta") {
+          console.log(`📥 receiving file from ${id}:`, msg);
+          p.fileMeta = msg;
+          p.fileBuffer = [];
+          p.receivedSize = 0;
+
+          // Show transfer UI
+          document.getElementById("transferModal").style.display = "flex";
+          updateTransferUI(id, 0);
+        } else if (msg.type === "end") {
+          console.log(`✅ File received from ${id}`);
+          const blob = new Blob(p.fileBuffer, { type: p.fileMeta.mime });
+          receivedRecordings[id] = blob;
+
+          // Mark this camera as done in UI
+          updateTransferUI(id, 100, true);
+
+          // Check if all needed transfers are done
+          checkTransfersComplete();
+        }
+      } else {
+        // Binary Chunk
+        p.fileBuffer.push(data);
+        p.receivedSize += data.byteLength;
+
+        if (p.fileMeta && p.fileMeta.size > 0) {
+          const pct = Math.round((p.receivedSize / p.fileMeta.size) * 100);
+          if (pct % 5 === 0) updateTransferUI(id, pct);
+        }
+      }
+    }
+
+    function updateTransferUI(id, percent, done = false) {
+      let row = document.getElementById(`xfer_${id}`);
+      if (!row) {
+        const list = document.getElementById("transferList");
+        row = document.createElement("div");
+        row.id = `xfer_${id}`;
+        row.className = "cam-row";
+        row.innerHTML = `
+                <div class="cam-info">
+                    <span class="name">Camera ${id.substring(0, 4)}</span>
+                    <span class="pct">0%</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-fill"></div>
+                </div>
+            `;
+        list.appendChild(row);
+      }
+
+      row.querySelector(".progress-fill").style.width = percent + "%";
+      row.querySelector(".pct").innerText = percent + "%";
+      if (done) row.querySelector(".progress-fill").classList.add("done");
+    }
+
+    async function checkTransfersComplete() {
+      // Check against active cameras locally known (from peers)
+      // Note: director program is already local, so we just need peers
+      const activePeers = Object.keys(peers).filter(pid => peers[pid].stream); // only active streams
+      const allReceived = activePeers.every(pid => receivedRecordings[pid]);
+
+      if (allReceived) {
+        console.log("🎉 All ISO transfers complete. Starting Client-Side Render...");
+        setTimeout(() => {
+          document.getElementById("transferModal").style.display = "none";
+          startClientSideRender();
+        }, 1000);
+      }
+    }
+
     async function createPeer(id) {
       if (!id || peers[id]) return;
 
@@ -834,6 +953,16 @@
           socket.emit("signal", { to: id, data: e.candidate });
         }
       };
+
+      // Create Data Channel for File Transfer
+      const dc = pc.createDataChannel("fileTransfer");
+      peers[id].dc = dc;
+      peers[id].fileBuffer = [];
+      peers[id].fileMeta = null;
+      peers[id].receivedSize = 0;
+
+      dc.onopen = () => console.log(`✅ Data Channel Open with ${id}`);
+      dc.onmessage = (event) => handleDataMessage(id, event.data);
 
       pc.createOffer()
         .then(o => pc.setLocalDescription(o))
@@ -1166,90 +1295,12 @@
         downloadAllRecordings();
       }
 
-      // QUALITY (ALL) or BOTH: Redirect to Downloads for Server Processing
-      if (mode === "all" || mode === "both") {
-        // Gather expected uploads (active cameras + program?)
-        // Note: In "all" mode, Director generally doesn't upload program, but we might want to?
-        // The original code didn't upload director program in "all" mode, only cameras.
-        // If we want director program in "all" mode too, we should uncomment uploading it.
-        // For now, assuming "all" means just cameras + server-side mixing.
 
-        const expected = Object.keys(peers); // All connected cameras are expected to upload
-        localStorage.setItem("isoSessionId", isoSessionId);
-        localStorage.setItem("isoStreamId", streamId);
-        localStorage.setItem("isoEdl", JSON.stringify(isoEdl));
-        localStorage.setItem("isoExpectedUploads", JSON.stringify(expected));
-
-        console.log("Redirecting to Download Manager...");
-        setTimeout(() => location.href = "downloads.html", 1000);
-        return;
-      }
-
-      // QUALITY (PROGRAM ONLY): Upload Local Program Blob -> Server ISO
-      if (mode === "program") {
-        if (programChunks.length) {
-          const blob = new Blob(programChunks, { type: "video/webm" });
-
-          // We upload immediately, so expected upload is just ourselves
-          const expected = ["director_program"];
-          localStorage.setItem("isoExpectedUploads", JSON.stringify(expected));
-
-          await uploadDirectorProgram(blob, isoSessionId);
-
-          // Mock EDL for just one clip
-          const simpleEdl = [{ timestamp: 0, camId: "director_program" }];
-
-          localStorage.setItem("isoSessionId", isoSessionId);
-          localStorage.setItem("isoStreamId", streamId);
-          localStorage.setItem("isoEdl", JSON.stringify(simpleEdl));
-
-          location.href = "downloads.html";
-        } else {
-          alert("No program footage recorded.");
-        }
-      }
 
       // Cleanup
       programRecorder = null;
-      Object.keys(cameraRecorders).forEach(id => delete cameraRecorders[id]);
-      programChunks.length = 0;
-    }
-
-    function uploadDirectorProgram(blob, sessionId) {
-      return new Promise((resolve, reject) => {
-        const formData = new FormData();
-        formData.append("video", blob, `director_program.webm`);
-        formData.append("sessionId", sessionId);
-        formData.append("camId", "director_program");
-
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/upload-iso", true);
-
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
-            // Emit progress so downloads.html can see it
-            socket.emit("iso-upload-progress", { room: streamId, progress: percent });
-          }
-        };
-
-        xhr.onload = () => {
-          if (xhr.status === 200) {
-            try {
-              const data = JSON.parse(xhr.responseText);
-              socket.emit("iso-upload-complete", { room: streamId, filename: data.filename });
-              resolve(data);
-            } catch (e) {
-              reject(e);
-            }
-          } else {
-            reject(new Error("Upload failed"));
-          }
-        };
-
-        xhr.onerror = () => reject(new Error("Network error during upload"));
-        xhr.send(formData);
-      });
+      // Object.keys(cameraRecorders).forEach(id => delete cameraRecorders[id]); // Already done in downloadAllRecordings
+      // programChunks.length = 0; // Already done in downloadAllRecordings
     }
 
     /* ===== RENDER PROGRESS ===== */
@@ -1358,26 +1409,227 @@
 
     /* ===== MP4 CONVERSION ===== */
     let ffmpegInstance = null;
+    let ffmpegRef = null; // Store the ffmpeg object
+    let fetchFileRef = null;
+
     async function ensureFFmpeg() {
-      if (ffmpegInstance) return ffmpegInstance;
-      const { createFFmpeg, fetchFile } = FFmpeg;
-      const ffmpeg = createFFmpeg({ log: false });
-      await ffmpeg.load();
-      ffmpegInstance = { ffmpeg, fetchFile };
-      return ffmpegInstance;
+      if (ffmpegInstance) return { ffmpeg: ffmpegRef, fetchFile: fetchFileRef };
+
+      console.log("Loading FFmpeg.wasm v0.12...");
+      const { FFmpeg } = window.FFmpegWASM;
+      const { fetchFile } = window.FFmpegUtil;
+
+      const ffmpeg = new FFmpeg();
+
+      ffmpeg.on("log", ({ message }) => {
+        // console.log("FFmpeg Log:", message);
+      });
+
+      // Load with core URL to avoid CDN issues if needed, but defaults usually work for unpkg
+      await ffmpeg.load({
+        coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+      });
+
+      ffmpegRef = ffmpeg;
+      fetchFileRef = fetchFile;
+      ffmpegInstance = true;
+      return { ffmpeg, fetchFile };
     }
 
     async function convertToMp4(blob, baseName) {
+      // This legacy function might not be used in the new flow but updating just in case
       const { ffmpeg, fetchFile } = await ensureFFmpeg();
       const input = `${baseName}.webm`;
       const output = `${baseName}.mp4`;
 
-      ffmpeg.FS("writeFile", input, await fetchFile(blob));
-      await ffmpeg.run("-i", input, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", "-movflags", "+faststart", output);
-      const data = ffmpeg.FS("readFile", output);
-      ffmpeg.FS("unlink", input);
-      ffmpeg.FS("unlink", output);
+      await ffmpeg.writeFile(input, await fetchFile(blob));
+      await ffmpeg.exec(["-i", input, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", output]);
+      const data = await ffmpeg.readFile(output);
+
+      // Cleanup not strictly necessary here if we do it in batch, but good practice
+      await ffmpeg.deleteFile(input);
+      await ffmpeg.deleteFile(output);
+
       return new Blob([data.buffer], { type: "video/mp4" });
+    }
+
+    /* ===== CLIENT SIDE RENDERING ===== */
+    async function startClientSideRender() {
+      // UI Switch
+      document.getElementById("transferPhase").style.display = "none";
+      document.getElementById("renderPhase").style.display = "block";
+      const status = document.getElementById("renderStatusText");
+      const bar = document.getElementById("renderProgressBar");
+
+      const updateRenderProgress = (pct, text) => {
+        if (text) status.innerText = text;
+        bar.style.width = pct + "%";
+      };
+
+      try {
+        updateRenderProgress(5, "Loading FFmpeg...");
+        const { ffmpeg, fetchFile } = await ensureFFmpeg();
+
+        // 1. Prepare Inputs
+        const sourceFiles = [];
+        const activeCamIds = Object.keys(receivedRecordings);
+
+        // Add Director Program
+        if (programChunks.length) {
+          const progBlob = new Blob(programChunks, { type: "video/webm" });
+          const name = "director_program.webm";
+          await ffmpeg.writeFile(name, await fetchFile(progBlob));
+          sourceFiles.push({ id: "director_program", name, isWebm: true });
+        }
+
+        // Add Camera Recordings
+        for (let i = 0; i < activeCamIds.length; i++) {
+          const id = activeCamIds[i];
+          const blob = receivedRecordings[id];
+          const name = `cam_${id}.webm`;
+          updateRenderProgress(10 + Math.floor((i / activeCamIds.length) * 10), `Writing ${name}...`);
+          await ffmpeg.writeFile(name, await fetchFile(blob));
+          sourceFiles.push({ id, name, isWebm: true });
+        }
+
+        // 2. Transcode All to MP4 (common format for easy concat)
+        // Even though we concat, converting to MP4 first ensures consistent framerates/codecs
+        const mp4Files = {};
+
+        for (let i = 0; i < sourceFiles.length; i++) {
+          const f = sourceFiles[i];
+          const outName = f.name.replace(".webm", ".mp4");
+          updateRenderProgress(20 + Math.floor((i / sourceFiles.length) * 30), `Converting ${f.name} to MP4...`);
+
+          await ffmpeg.exec([
+            "-i", f.name,
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            "-c:a", "aac",
+            outName
+          ]);
+
+          mp4Files[f.id] = outName;
+          // Cleanup webm
+          try { await ffmpeg.deleteFile(f.name); } catch (e) { }
+        }
+
+        // 3. Process EDL for Final Mix
+        updateRenderProgress(60, "Processing Cuts...");
+        const segments = [];
+
+        for (let i = 0; i < isoEdl.length; i++) {
+          const cut = isoEdl[i];
+          const nextCut = isoEdl[i + 1];
+          let duration = null;
+          if (nextCut) {
+            duration = (nextCut.timestamp - cut.timestamp) / 1000;
+          }
+          const startTime = cut.timestamp / 1000;
+
+          // If camId not in mp4Files (maybe camera dropped), fallback to program or black?
+          // For now, skip or use program if available
+          let inputFile = mp4Files[cut.camId];
+          if (!inputFile) {
+            console.warn(`Missing file for cut ${i} (Cam ${cut.camId}), using program fallback`);
+            inputFile = mp4Files["director_program"];
+          }
+          if (!inputFile) continue; // Skip if absolutely nothing
+
+          const segmentName = `seg_${i}.mp4`;
+          // Construct command args
+          const cmdArgs = [
+            "-ss", String(startTime),
+            "-i", inputFile
+          ];
+
+          if (duration) {
+            cmdArgs.push("-t", String(duration));
+          }
+
+          cmdArgs.push(
+            "-c:v", "libx264", "-preset", "ultrafast",
+            "-c:a", "aac",
+            segmentName
+          );
+
+          await ffmpeg.exec(cmdArgs);
+
+          segments.push(segmentName);
+          updateRenderProgress(60 + Math.floor((i / isoEdl.length) * 20), `Processed Cut ${i + 1}/${isoEdl.length}`);
+        }
+
+        // 4. Concat Segments
+        updateRenderProgress(85, "Stitching Final Mix...");
+        const concatList = segments.map(s => `file '${s}'`).join("\n");
+        await ffmpeg.writeFile("list.txt", concatList);
+
+        await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
+
+        // 5. Success
+        updateRenderProgress(100, "Done!");
+
+        const finalData = await ffmpeg.readFile("final_mix.mp4");
+        const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
+
+        // Prepare Downloads UI
+        document.getElementById("renderPhase").style.display = "none";
+        document.getElementById("completePhase").style.display = "block";
+        const btnList = document.getElementById("downloadButtons");
+        btnList.innerHTML = "";
+
+        // Helper to add dl button
+        const addBtn = (blob, name, label) => {
+          const url = URL.createObjectURL(blob);
+          const btn = document.createElement("a");
+          btn.className = "modal-btn";
+          btn.style.background = "#3b82f6";
+          btn.style.marginBottom = "8px";
+          btn.style.textDecoration = "none";
+          btn.style.display = "block";
+          btn.innerText = label;
+          btn.href = url;
+          btn.download = name;
+          btnList.appendChild(btn);
+        };
+
+        addBtn(finalBlob, `final_mix_${isoSessionId}.mp4`, "Download Final Mix");
+
+        // Add Source Buttons
+        for (const [id, mp4Name] of Object.entries(mp4Files)) {
+          const data = await ffmpeg.readFile(mp4Name);
+          const blob = new Blob([data.buffer], { type: "video/mp4" });
+          const label = id === "director_program" ? "Program Source" : `Camera ${id.substring(0, 4)} Source`;
+          const name = `source_${id}_${isoSessionId}.mp4`;
+
+          const btn = document.createElement("a");
+          btn.className = "btn-outline"; // Styled slightly differently? reuse class
+          btn.style.display = "block";
+          btn.style.padding = "10px";
+          btn.style.textAlign = "center";
+          btn.style.border = "1px solid #334155";
+          btn.style.borderRadius = "8px";
+          btn.style.color = "white";
+          btn.style.textDecoration = "none";
+          btn.style.marginTop = "4px";
+          btn.innerText = label;
+          btn.href = URL.createObjectURL(blob);
+          btn.download = name;
+          btnList.appendChild(btn);
+        }
+
+        // Cleanup FS
+        try {
+          await ffmpeg.deleteFile("final_mix.mp4");
+          await ffmpeg.deleteFile("list.txt");
+          for (const s of segments) await ffmpeg.deleteFile(s);
+          for (const f of Object.values(mp4Files)) await ffmpeg.deleteFile(f);
+        } catch (e) { }
+
+      } catch (e) {
+        console.error("Client Render Error:", e);
+        alert("Rendering failed: " + e.message);
+        document.getElementById("transferModal").style.display = "none";
+      }
     }
 
     async function downloadAllRecordings() {

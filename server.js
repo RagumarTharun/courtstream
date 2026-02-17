@@ -28,8 +28,10 @@ const UPLOADS_ISO = path.join(UPLOADS_BASE, "iso");
 
 const app = express();
 app.use(helmet({
-  contentSecurityPolicy: false, // Disabled for WebRTC/Socket.IO
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: { policy: "same-origin" },
+  crossOriginEmbedderPolicy: { policy: "require-corp" }
 }));
 app.set("trust proxy", 1); // For Oracle/Nginx reverse proxy
 const server = http.createServer(app);

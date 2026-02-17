@@ -408,6 +408,7 @@
     async function initWebRTC() {
       const config = await getTurnConfig();
       pc = new RTCPeerConnection(config);
+      setupDataChannel();
 
       checkAccess();
       startCamera(); // Ensure camera starts after PC is initialized to add tracks
@@ -469,6 +470,29 @@
           }
         }
       });
+    }
+
+    /* ===== DATA CHANNEL ===== */
+    let dataChannel = null;
+    function setupDataChannel() {
+      if (!pc) return;
+      // Director creates the channel usually (offerer), but we can creating it here too if negotiated
+      // However, director sends OFFER. So Director should create Data Channel.
+      // We just need to handle ondatachannel.
+
+      pc.ondatachannel = (event) => {
+        console.log("📡 Data Channel Received:", event.channel.label);
+        dataChannel = event.channel;
+        dataChannel.onopen = () => console.log("✅ Data Channel Open");
+        dataChannel.onmessage = handleMessage;
+      };
+    }
+
+    function handleMessage(event) {
+      const msg = JSON.parse(event.data);
+      if (msg.type === "ack") {
+        // handle flow control if needed
+      }
     }
     initWebRTC();
 
@@ -594,18 +618,81 @@
         if (options && options.save === false) {
           console.log("🗑️ ISO Save skipped by director. Discarding blob.");
           isoChunks = [];
-          liveBadge.textContent = "DONE"; 
+          liveBadge.textContent = "DONE";
           setTimeout(() => liveBadge.style.display = "none", 1000);
           return;
         }
-        
+
         const blob = new Blob(isoChunks, { type: "video/webm" });
-        uploadIso(blob);
+        isoChunks = []; // Free memory
+
+        if (dataChannel && dataChannel.readyState === "open") {
+          console.log("🚀 Starting P2P Transfer to Director...");
+          transferRecording(blob);
+        } else {
+          console.error("❌ Data Channel not open. Cannot transfer.");
+          alert("Connection to Director lost. Cannot transfer recording.");
+          liveBadge.style.display = "none";
+        }
       };
       isoRecorder.stop();
-
-      liveBadge.style.display = "none";
+      liveBadge.innerHTML = "SENDING";
     });
+
+    async function transferRecording(blob) {
+      const CHUNK_SIZE = 16 * 1024; // 16KB safe chunk size
+      const totalSize = blob.size;
+      const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
+
+      // metadata
+      dataChannel.send(JSON.stringify({
+        type: "meta",
+        size: totalSize,
+        mime: blob.type,
+        name: `camera_${socket.id}.webm`
+      }));
+
+      const buffer = await blob.arrayBuffer();
+      const overlay = document.getElementById("uploadProgressOverlay");
+      const fill = document.getElementById("uploadProgressFill");
+
+      overlay.style.display = "flex";
+
+      const updateProgress = (p) => {
+        fill.style.width = p + "%";
+      };
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, totalSize);
+        const chunk = buffer.slice(start, end);
+
+        // Wait for buffer to clear if backpressure is high
+        // Max buffer size for Chrome is high, but we should be gentle
+        while (dataChannel.bufferedAmount > 256 * 1024) { // 256KB buffer limit for flow control
+          await new Promise(r => setTimeout(r, 10));
+        }
+
+        try {
+          dataChannel.send(chunk);
+        } catch (e) {
+          console.error("Tx Error:", e);
+          break;
+        }
+
+        if (i % 20 === 0) {
+          updateProgress(Math.floor((i / totalChunks) * 100));
+        }
+      }
+
+      updateProgress(100);
+      dataChannel.send(JSON.stringify({ type: "end" }));
+      console.log("✅ Transfer Complete");
+      setTimeout(() => {
+        overlay.style.display = "none";
+        liveBadge.style.display = "none";
+      }, 1000);
+    }
 
     async function uploadIso(blob) {
       console.log("📤 Uploading ISO file using XHR...", blob.size);
