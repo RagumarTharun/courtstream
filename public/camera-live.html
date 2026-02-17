@@ -174,34 +174,121 @@
       cursor: pointer;
     }
 
-    /* UPLOAD PROGRESS */
-    #uploadProgressOverlay {
-      display: none;
+    /* On-Screen Controls */
+    .on-screen-ctrl {
       position: absolute;
-      bottom: 100px;
-      left: 20px;
-      right: 20px;
-      background: rgba(0, 0, 0, 0.85);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
-      z-index: 50;
+      z-index: 20;
+      background: rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(4px);
+      border-radius: 20px;
+      padding: 8px;
+      display: flex;
       flex-direction: column;
-      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.3s;
     }
 
-    .progress-bar {
-      height: 6px;
-      background: #1e293b;
-      border-radius: 3px;
-      overflow: hidden;
+    /* Range Input Customization */
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
     }
 
-    .progress-fill {
-      height: 100%;
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 20px;
+      width: 20px;
+      border-radius: 50%;
       background: #3b82f6;
-      width: 0%;
-      transition: width 0.1s linear;
+      cursor: pointer;
+      margin-top: -8px;
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+    }
+
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 4px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 2px;
+    }
+
+    /* Vertical Range Transformation */
+    .vertical-range {
+      width: 150px;
+      height: 40px;
+      transform: rotate(-90deg);
+      transform-origin: center;
+      margin: 60px -55px;
+      /* Adjust spacing for rotation */
+    }
+
+    /* RIGHT SIDE: ZOOM */
+    .os-zoom {
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 200px;
+      width: 40px;
+    }
+
+    /* LEFT SIDE: EXPOSURE */
+    .os-exposure {
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 200px;
+      width: 40px;
+    }
+
+    /* LANDSCAPE FIXES */
+    @media (orientation: landscape) {
+      .page {
+        flex-direction: row;
+      }
+
+      .header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 30;
+        width: auto;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 0 0 12px 0;
+      }
+
+      .preview {
+        width: 100vw;
+        height: 100vh;
+        flex: none;
+      }
+
+      video {
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        max-height: none;
+        border-radius: 0;
+        object-fit: cover;
+        /* Fill screen */
+      }
+
+      .controls {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        flex-direction: column;
+        gap: 16px;
+        padding: 0;
+        z-index: 30;
+      }
+
+      /* Adjust control Sliders in landscape if needed, 
+         but absolute positioning relative to preview (which is now full screen) works fine. */
     }
   </style>
 </head>
@@ -220,14 +307,27 @@
     <div class="preview" style="position:relative;">
       <video id="video" autoplay muted playsinline></video>
       <div id="gridOverlay" class="grid-overlay"></div>
+
+      <!-- ON SCREEN ZOOM (Right) -->
+      <div id="osZoom" class="on-screen-ctrl os-zoom" style="display:none;">
+        <span style="font-size:10px; margin-bottom:10px;">🔍</span>
+        <input type="range" id="zoomSlider" class="vertical-range" min="1" max="5" step="0.1" value="1">
+        <span id="zoomVal" style="font-size:10px; margin-top:10px;">1.0x</span>
+      </div>
+
+      <!-- ON SCREEN EXPOSURE (Left) -->
+      <div id="osExposure" class="on-screen-ctrl os-exposure" style="display:none;">
+        <span style="font-size:10px; margin-bottom:10px;">☀️</span>
+        <input type="range" id="brightnessSlider" class="vertical-range" min="-2" max="2" step="0.5" value="0">
+        <span id="brightnessVal" style="font-size:10px; margin-top:10px;">0</span>
+      </div>
     </div>
 
     <div class="controls">
-      <!-- SETTINGS (New) -->
-      <button class="ctrl" onclick="toggleSettings()" style="background:#334155; border-color:#475569;">
+      <!-- GRID TOGGLE -->
+      <button class="ctrl" onclick="toggleGrid()" style="background:#334155; border-color:#475569;">
         <svg viewBox="0 0 24 24">
-          <path
-            d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+          <path fill="none" stroke="white" stroke-width="2" d="M3 3h18v18H3zM9 3v18M15 3v18M3 9h18M3 15h18" />
         </svg>
       </button>
 
@@ -263,47 +363,7 @@
       </div>
     </div>
 
-    <!-- SETTINGS OVERLAY -->
-    <div id="settingsOverlay"
-      style="display:none; position:fixed; bottom:100px; left:20px; right:20px; background:rgba(22,25,34,0.95); border:1px solid var(--border); border-radius:16px; padding:20px; z-index:40; flex-direction:column; gap:16px; backdrop-filter:blur(8px);">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-        <span style="font-weight:600; font-size:14px;">Camera Settings</span>
-        <button onclick="toggleSettings()"
-          style="background:none; border:none; color:#fff; font-size:20px; padding:0; cursor:pointer;">&times;</button>
-      </div>
 
-      <!-- ZOOM -->
-      <div id="zoomControl" style="display:none; flex-direction:column; gap:8px;">
-        <div style="display:flex; justify-content:space-between; font-size:12px; color:#94a3b8;">
-          <span>Zoom</span>
-          <span id="zoomVal">1.0x</span>
-        </div>
-        <input type="range" id="zoomSlider" min="1" max="5" step="0.1" value="1"
-          style="width:100%; accent-color: #3b82f6;">
-      </div>
-
-      <!-- BRIGHTNESS / EXPOSURE -->
-      <div id="brightnessControl" style="display:none; flex-direction:column; gap:8px;">
-        <div style="display:flex; justify-content:space-between; font-size:12px; color:#94a3b8;">
-          <span>Brightness</span>
-          <span id="brightnessVal">0</span>
-        </div>
-        <input type="range" id="brightnessSlider" min="-2" max="2" step="0.1" value="0"
-          style="width:100%; accent-color: #3b82f6;">
-      </div>
-
-      <!-- GRID TOGGLE -->
-      <div style="display:flex; align-items:center; justify-content:space-between;">
-        <span style="font-size:14px;">Grid Overlay</span>
-        <label class="switch" style="position:relative; display:inline-block; width:40px; height:24px;">
-          <input type="checkbox" id="gridToggle" onchange="toggleGrid()">
-          <span class="slider"
-            style="position:absolute; cursor:pointer; inset:0; background-color:#334155; transition:.4s; border-radius:34px;"></span>
-          <span class="slider-knob"
-            style="position:absolute; content:''; height:16px; width:16px; left:4px; bottom:4px; background-color:white; transition:.4s; border-radius:50%;"></span>
-        </label>
-      </div>
-    </div>
 
   </div>
 
@@ -448,12 +508,38 @@
     async function getStreamWithFallback() {
       const constraintsByPriority = [];
 
+      // High Res Strategy: Try 4K, then 1080p, then 720p
+      const resolutions = [
+        { width: { ideal: 4096 }, height: { ideal: 2160 } }, // 4K
+        { width: { ideal: 1920 }, height: { ideal: 1080 } }, // 1080p
+        { width: { ideal: 1280 }, height: { ideal: 720 } }   // 720p
+      ];
+
       if (videoDevices.length) {
+        // Try selected device with high res first
+        resolutions.forEach(res => {
+          constraintsByPriority.push({
+            video: {
+              deviceId: { exact: videoDevices[currentDeviceIndex].deviceId },
+              ...res
+            },
+            audio: true
+          });
+        });
+        // Fallback to basic device ID
         constraintsByPriority.push({
           video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } },
           audio: true
         });
       }
+
+      // Fallback strategies based on facing mode
+      resolutions.forEach(res => {
+        constraintsByPriority.push({
+          video: { facingMode: { exact: facing }, ...res },
+          audio: true
+        });
+      });
 
       constraintsByPriority.push({
         video: { facingMode: { exact: facing } },
@@ -468,6 +554,7 @@
       let lastError;
       for (const constraints of constraintsByPriority) {
         try {
+          // console.log("Trying constraints:", JSON.stringify(constraints));
           return await navigator.mediaDevices.getUserMedia(constraints);
         } catch (err) {
           lastError = err;
@@ -599,23 +686,24 @@
 
 
     /* ===== ACTIONS ===== */
-    const settingsOverlay = document.getElementById("settingsOverlay");
-    const zoomControl = document.getElementById("zoomControl");
-    const brightnessControl = document.getElementById("brightnessControl");
+    // const settingsOverlay = document.getElementById("settingsOverlay"); // Removed
+    const zoomControl = document.getElementById("osZoom");
+    const brightnessControl = document.getElementById("osExposure");
     const zoomSlider = document.getElementById("zoomSlider");
     const brightnessSlider = document.getElementById("brightnessSlider");
 
-    function toggleSettings() {
-      const isVisible = settingsOverlay.style.display === "flex";
-      settingsOverlay.style.display = isVisible ? "none" : "flex";
-      if (!isVisible) checkCapabilities(); // Check when opening
-    }
+    // function toggleSettings() { ... } // Removed
 
     function toggleGrid() {
       const grid = document.getElementById("gridOverlay");
-      const isOn = document.getElementById("gridToggle").checked;
-      grid.style.display = isOn ? "block" : "none";
+      // No checkbox anymore, just toggle visibility state
+      const isHidden = getComputedStyle(grid).display === "none";
+      grid.style.display = isHidden ? "block" : "none";
     }
+
+    // Call checkCapabilities after stream start
+    // Logic moved to startCamera() or we can poll occasionally
+    setInterval(checkCapabilities, 2000); // Poll for capabilities as they might appear late
 
     // Capability Check
     let trackCapabilities = null;
@@ -727,6 +815,9 @@
       rotations[socket.id] = rot;
       socket.emit("camera-rotate", { room: streamId, rotation: rot });
 
+      // If we are in landscape, the browser might already rotate the view.
+      // We only rotate if the CSS hasn't already handled it.
+      // For now, let's keep the rotation but ensure it doesn't break full screen.
       video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot}deg)`;
     }
     window.addEventListener("orientationchange", applyOrientation);
