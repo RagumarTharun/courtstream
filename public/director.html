@@ -1820,8 +1820,21 @@
       const status = document.getElementById("renderStatusText");
       const bar = document.getElementById("renderProgressBar");
 
+      let renderStartTime = Date.now();
       const updateRenderProgress = (pct, text) => {
-        if (text) status.innerText = text;
+        let statusText = text;
+        if (pct > 0 && pct < 100) {
+          const elapsed = (Date.now() - renderStartTime) / 1000;
+          const estimatedTotal = elapsed / (pct / 100);
+          const remaining = Math.max(0, estimatedTotal - elapsed);
+          // const remStr = remaining > 60 ? `${Math.ceil(remaining/60)}m left` : `${Math.ceil(remaining)}s left`;
+          const remStr = remaining > 60
+            ? `${Math.floor(remaining / 60)}m ${Math.ceil(remaining % 60)}s left`
+            : `${Math.ceil(remaining)}s left`;
+
+          statusText += ` <div class='time-remaining'>~${remStr}</div>`;
+        }
+        if (text) status.innerHTML = statusText;
         bar.style.width = pct + "%";
       };
 
@@ -1863,10 +1876,15 @@
         for (let i = 0; i < activeCamIds.length; i++) {
           const id = activeCamIds[i];
           const blob = receivedRecordings[id];
+          if (!blob) continue;
+
           const name = `cam_${id}.webm`;
           updateRenderProgress(10 + Math.floor((i / activeCamIds.length) * 10), `Writing ${name}...`);
           await ffmpeg.writeFile(name, await fetchFile(blob));
           sourceFiles.push({ id, name, isWebm: true });
+
+          // MEMORY OPTIMIZATION: Clear the heavy blob from JS memory now that it's in FFmpeg FS
+          receivedRecordings[id] = null;
         }
 
         // 2. Transcode All to MP4 (common format for easy concat)
@@ -1880,7 +1898,7 @@
 
           await ffmpeg.exec([
             "-i", f.name,
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
             "-c:a", "aac",
             outName
           ]);
@@ -1957,21 +1975,33 @@
         const timestamp = formatDate(Date.now());
 
         // Helper to add dl button
-        const addBtn = (blob, name, label) => {
+        // Helper to add dl button
+        const addBtn = (blob, name, label, isPrimary = false) => {
           const url = URL.createObjectURL(blob);
           const btn = document.createElement("a");
-          btn.className = "modal-btn";
-          btn.style.background = "#3b82f6";
-          btn.style.marginBottom = "8px";
-          btn.style.textDecoration = "none";
-          btn.style.display = "block";
-          btn.innerText = label;
+
+          if (isPrimary) {
+            btn.className = "btn-premium";
+            btn.innerHTML = `<span style="font-size:1.1em">⬇</span> ${label}`;
+          } else {
+            btn.className = "btn-outline"; // Re-use existing outline class
+            btn.style.display = "block";
+            btn.style.padding = "10px";
+            btn.style.textAlign = "center";
+            btn.style.border = "1px solid #334155";
+            btn.style.borderRadius = "8px";
+            btn.style.color = "#94a3b8";
+            btn.style.textDecoration = "none";
+            btn.style.marginBottom = "8px";
+            btn.innerText = label;
+          }
+
           btn.href = url;
           btn.download = name;
           btnList.appendChild(btn);
         };
 
-        addBtn(finalBlob, `quality_final_${timestamp}.mp4`, "Download Quality Final Mix");
+        addBtn(finalBlob, `quality_final_${timestamp}.mp4`, "Download Final Mix", true);
 
         // Add Source Buttons
         for (const [id, mp4Name] of Object.entries(mp4Files)) {
@@ -1989,21 +2019,7 @@
           }
 
           const name = `quality_${safeName}_${timestamp}.mp4`;
-
-          const btn = document.createElement("a");
-          btn.className = "btn-outline";
-          btn.style.display = "block";
-          btn.style.padding = "10px";
-          btn.style.textAlign = "center";
-          btn.style.border = "1px solid #334155";
-          btn.style.borderRadius = "8px";
-          btn.style.color = "white";
-          btn.style.textDecoration = "none";
-          btn.style.marginTop = "4px";
-          btn.innerText = label;
-          btn.href = URL.createObjectURL(blob);
-          btn.download = name;
-          btnList.appendChild(btn);
+          addBtn(blob, name, label, false);
         }
 
         // Cleanup FS
@@ -2027,6 +2043,17 @@
           badge.innerText = "ERROR";
         }
         // document.getElementById("transferModal").style.display = "none"; // Keep dashboard open to see error
+
+        // Retry Button
+        const btnList = document.getElementById("downloadButtons");
+        if (btnList) {
+          btnList.innerHTML = `
+                <button onclick="startClientSideRender()" class="modal-btn" style="background:#ef4444; width:100%; margin-top:10px;">
+                    Retry Render
+                </button>
+            `;
+          document.getElementById("completePhase").style.display = "block";
+        }
       }
     }
 
