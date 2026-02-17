@@ -1299,8 +1299,10 @@
       // 3. PROCESS BASED ON MODE
 
       // INSTANT or BOTH: Download Local Files
-      if (mode === "instant" || mode === "both") {
-        downloadAllRecordings();
+      if (mode === "instant") {
+        downloadAllRecordings(false);
+      } else if (mode === "both") {
+        downloadAllRecordings(true); // Retain program chunks for later render
       }
 
 
@@ -1600,6 +1602,8 @@
         const btnList = document.getElementById("downloadButtons");
         btnList.innerHTML = "";
 
+        const timestamp = formatDate(Date.now());
+
         // Helper to add dl button
         const addBtn = (blob, name, label) => {
           const url = URL.createObjectURL(blob);
@@ -1615,17 +1619,27 @@
           btnList.appendChild(btn);
         };
 
-        addBtn(finalBlob, `final_mix_${isoSessionId}.mp4`, "Download Final Mix");
+        addBtn(finalBlob, `quality_final_${timestamp}.mp4`, "Download Quality Final Mix");
 
         // Add Source Buttons
         for (const [id, mp4Name] of Object.entries(mp4Files)) {
           const data = await ffmpeg.readFile(mp4Name);
           const blob = new Blob([data.buffer], { type: "video/mp4" });
-          const label = id === "director_program" ? "Program Source" : `Camera ${id.substring(0, 4)} Source`;
-          const name = `source_${id}_${isoSessionId}.mp4`;
+
+          let safeName = "program";
+          let label = "Program Source";
+
+          if (id !== "director_program") {
+            const p = peers[id];
+            const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
+            safeName = sanitizeName(rawName);
+            label = `Source: ${rawName}`;
+          }
+
+          const name = `quality_${safeName}_${timestamp}.mp4`;
 
           const btn = document.createElement("a");
-          btn.className = "btn-outline"; // Styled slightly differently? reuse class
+          btn.className = "btn-outline";
           btn.style.display = "block";
           btn.style.padding = "10px";
           btn.style.textAlign = "center";
@@ -1648,6 +1662,9 @@
           for (const f of Object.values(mp4Files)) await ffmpeg.deleteFile(f);
         } catch (e) { }
 
+        // Final Cleanup of Memory
+        programChunks.length = 0;
+
       } catch (e) {
         console.error("Client Render Error:", e);
         alert("Rendering failed: " + e.message);
@@ -1655,39 +1672,46 @@
       }
     }
 
-    async function downloadAllRecordings() {
+    async function downloadAllRecordings(retainProgram = false) {
       const timestamp = formatDate(Date.now());
-      const streamSafe = sanitizeName(streamLabel || "courtstream");
+      // const streamSafe = sanitizeName(streamLabel || "courtstream"); // User wants generic names
 
       // Program (live)
       if (programChunks.length) {
         const webmBlob = new Blob(programChunks, { type: "video/webm" });
         try {
-          const mp4Blob = await convertToMp4(webmBlob, "live");
-          downloadBlob(mp4Blob, `${streamSafe}_live_${timestamp}.mp4`);
+          // const mp4Blob = await convertToMp4(webmBlob, "live"); // Optional: skip conversion for speed in instant? 
+          // User asked for instant feeds. Often webm is fine, but mp4 preferred. 
+          // "instant_final"
+          const mp4Blob = await convertToMp4(webmBlob, "instant_final");
+          downloadBlob(mp4Blob, `instant_final_${timestamp}.mp4`);
         } catch (e) {
           console.warn("FFmpeg failed, downloading webm", e);
-          downloadBlob(webmBlob, `${streamSafe}_live_${timestamp}.webm`);
+          downloadBlob(webmBlob, `instant_final_${timestamp}.webm`);
         }
       }
 
-      // Each camera
+      // Each camera (Local Mirror)
       for (const [id, obj] of Object.entries(cameraRecorders)) {
-        const camName = sanitizeName(peers[id]?.name || "camera");
+        const camName = sanitizeName(peers[id]?.name || `cameraname_${id.substring(0, 4)}`);
         const chunks = obj.chunks || [];
         if (!chunks.length) continue;
 
         const webmBlob = new Blob(chunks, { type: "video/webm" });
+        // "instant_cameraname"
         try {
-          const mp4Blob = await convertToMp4(webmBlob, camName);
-          downloadBlob(mp4Blob, `${streamSafe}_${camName}_${timestamp}.mp4`);
+          const mp4Blob = await convertToMp4(webmBlob, `instant_${camName}`);
+          downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
         } catch (e) {
           console.warn("FFmpeg failed, downloading webm", e);
-          downloadBlob(webmBlob, `${streamSafe}_${camName}_${timestamp}.webm`);
+          downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
         }
       }
 
-      programChunks.length = 0;
+      if (!retainProgram) {
+        programChunks.length = 0;
+      }
+      // Camera recorders are local mirrors, not needed for Quality Render (which uses P2P transfer)
       Object.keys(cameraRecorders).forEach(id => delete cameraRecorders[id]);
     }
 
