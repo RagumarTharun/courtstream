@@ -1348,122 +1348,131 @@
 
     async function stopAndFinalize(mode) {
       console.log("Finalizing Recording with mode:", mode);
-      recordingState = "idle";
-      recordBtn.classList.remove("active");
-      recIcon.style.display = "block";
-      stopIcon.style.display = "none";
-      recordBar.style.display = "none";
-      clearInterval(recordTimerInt);
 
-      // Show Dashboard ("Fake Redirect")
+      // 1. IMMEDIATE UI FEEDBACK
       const dash = document.getElementById("transferModal");
-      dash.style.display = "flex";
+      if (dash) dash.style.display = "flex";
 
-      // Update Dashboard Statuses based on mode
-      const instantList = document.getElementById("instantList");
-      instantList.innerHTML = ""; // Clear previous
+      try {
+        recordingState = "idle";
+        recordBtn.classList.remove("active");
+        recIcon.style.display = "block";
+        stopIcon.style.display = "none";
+        recordBar.style.display = "none";
+        clearInterval(recordTimerInt);
 
-      if (mode === "instant" || mode === "both") {
-        // Add placeholders for instant items
-        addToInstantList("Program Feed (Local)", "SAVING...");
-        Object.keys(peers).forEach(id => {
-          const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
-          addToInstantList(name + " (Local)", "SAVING...");
-        });
-      } else {
-        instantList.innerHTML = `<div style="color: #64748b; font-size: 14px; padding: 10px;">Instant files skipped.</div>`;
-      }
+        // Update Dashboard Statuses based on mode
+        const instantList = document.getElementById("instantList");
+        if (instantList) instantList.innerHTML = ""; // Clear previous
 
-      if (mode === "quality_all" || mode === "both") { // 'quality_all' replaces legacy 'all'
-        document.getElementById("transferStatusBadge").className = "status-badge processing";
-        document.getElementById("transferStatusBadge").innerText = "ACTIVE";
-
-        const tList = document.getElementById("transferList");
-        tList.innerHTML = "";
-
-        // Add placeholders
-        Object.keys(peers).forEach(id => {
-          const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
-          const row = document.createElement("div");
-          row.id = `xfer_${id}`;
-          row.className = "file-item";
-          row.innerHTML = `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span class="name">${name}</span>
-                    <span class="pct" style="color: #94a3b8;">Waiting...</span>
-                </div>
-                <div class="dash-progress">
-                    <div class="progress-fill dash-fill" style="width: 0%"></div>
-                </div>
-            `;
-          tList.appendChild(row);
-        });
-
-        // Also placeholder for Program if needed (though it's local)
-        if (programChunks.length) {
-          const row = document.createElement("div");
-          row.id = `xfer_program`;
-          row.className = "file-item";
-          row.innerHTML = `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span class="name">Director Program (Local)</span>
-                    <span class="pct" style="color: #94a3b8;">Ready</span>
-                </div>
-                 <div class="dash-progress">
-                    <div class="progress-fill dash-fill" style="width: 100%; background: #10b981;"></div>
-                </div>
-            `;
-          tList.appendChild(row);
+        if (mode === "instant" || mode === "both") {
+          // Add placeholders for instant items
+          addToInstantList("Program Feed (Local)", "SAVING...");
+          Object.keys(peers).forEach(id => {
+            const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
+            addToInstantList(name + " (Local)", "SAVING...");
+          });
+        } else {
+          if (instantList) instantList.innerHTML = `<div style="color: #64748b; font-size: 14px; padding: 10px;">Instant files skipped.</div>`;
         }
 
-        document.getElementById("renderStatusBadge").className = "status-badge pending";
-        document.getElementById("renderStatusBadge").innerText = "WAITING";
-        document.getElementById("renderStatusText").innerText = "Waiting for source transfers...";
-      } else {
-        document.getElementById("transferStatusBadge").className = "status-badge pending";
-        document.getElementById("transferStatusBadge").innerText = "SKIPPED";
-        document.getElementById("renderStatusBadge").className = "status-badge pending";
-        document.getElementById("renderStatusBadge").innerText = "SKIPPED";
-      }
+        if (mode === "quality_all" || mode === "both") {
+          document.getElementById("transferStatusBadge").className = "status-badge processing";
+          document.getElementById("transferStatusBadge").innerText = "ACTIVE";
 
-      // 1. SIGNAL CAMERAS
-      // For "both" or "quality_all", we need P2P transfer
-      const saveToIso = (mode === "quality_all" || mode === "both");
-      socket.emit("stop-iso", { room: streamId, options: { save: saveToIso } });
+          const tList = document.getElementById("transferList");
+          if (tList) {
+            tList.innerHTML = "";
 
-      // 2. STOP LOCAL RECORDERS
-      const stopPromises = [];
-      if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
-      Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
+            // Add placeholders
+            Object.keys(peers).forEach(id => {
+              const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
+              const row = document.createElement("div");
+              row.id = `xfer_${id}`;
+              row.className = "file-item";
+              row.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span class="name">${name}</span>
+                            <span class="pct" style="color: #94a3b8;">Waiting...</span>
+                        </div>
+                        <div class="dash-progress">
+                            <div class="progress-fill dash-fill" style="width: 0%"></div>
+                        </div>
+                    `;
+              tList.appendChild(row);
+            });
 
-      await Promise.all(stopPromises);
+            // Program placeholder
+            if (programChunks.length) {
+              const row = document.createElement("div");
+              row.id = `xfer_program`;
+              row.className = "file-item";
+              row.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span class="name">Director Program (Local)</span>
+                            <span class="pct" style="color: #94a3b8;">Ready</span>
+                        </div>
+                         <div class="dash-progress">
+                            <div class="progress-fill dash-fill" style="width: 100%; background: #10b981;"></div>
+                        </div>
+                    `;
+              tList.appendChild(row);
+            }
+          }
 
-      // 3. PROCESS BASED ON MODE
-      if (mode === "instant") {
-        isDownloadingInstant = true;
-        await downloadAllRecordings(false);
-        isDownloadingInstant = false;
-        markInstantComplete();
-      } else if (mode === "both") {
-        isDownloadingInstant = true;
-        await downloadAllRecordings(true); // Retain program chunks for later render
-        isDownloadingInstant = false;
-        markInstantComplete();
-        // Check if render was requested while we were downloading
-        if (isRenderPending) {
-          console.log("🔄 Instant download finished. Starting pending render...");
+          document.getElementById("renderStatusBadge").className = "status-badge pending";
+          document.getElementById("renderStatusBadge").innerText = "WAITING";
+          const rText = document.getElementById("renderStatusText");
+          if (rText) rText.innerText = "Waiting for source transfers...";
+        } else {
+          document.getElementById("transferStatusBadge").className = "status-badge pending";
+          document.getElementById("transferStatusBadge").innerText = "SKIPPED";
+          document.getElementById("renderStatusBadge").className = "status-badge pending";
+          document.getElementById("renderStatusBadge").innerText = "SKIPPED";
+        }
+
+        // 1. SIGNAL CAMERAS
+        // For "both" or "quality_all", we need P2P transfer
+        const saveToIso = (mode === "quality_all" || mode === "both");
+        socket.emit("stop-iso", { room: streamId, options: { save: saveToIso } });
+
+        // 2. STOP LOCAL RECORDERS
+        const stopPromises = [];
+        if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
+        Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
+
+        await Promise.all(stopPromises);
+
+        // 3. PROCESS BASED ON MODE
+        if (mode === "instant") {
+          isDownloadingInstant = true;
+          await downloadAllRecordings(false);
+          isDownloadingInstant = false;
+          markInstantComplete();
+        } else if (mode === "both") {
+          isDownloadingInstant = true;
+          await downloadAllRecordings(true); // Retain program chunks for later render
+          isDownloadingInstant = false;
+          markInstantComplete();
+          // Check if render was requested while we were downloading
+          if (isRenderPending) {
+            console.log("🔄 Instant download finished. Starting pending render...");
+            startClientSideRender();
+            isRenderPending = false;
+          }
+        } else if (mode === "quality_program") {
+          // Local Render only
           startClientSideRender();
-          isRenderPending = false;
+        } else if (mode === "quality_all") {
+          // Just wait for transfers, logic handled by events
+          console.log("⏳ Waiting for P2P transfers for Quality All...");
         }
-      } else if (mode === "quality_program") {
-        // Local Render only
-        startClientSideRender();
-      } else if (mode === "quality_all") {
-        // Just wait for transfers, logic handled by events
-        console.log("⏳ Waiting for P2P transfers for Quality All...");
-      }
 
-      // If quality/both, P2P transfer starts automatically via socket/webrtc events
+        // If quality/both, P2P transfer starts automatically via socket/webrtc events
+      } catch (e) {
+        console.error("CRITICAL ERROR in stopAndFinalize:", e);
+        alert("Error finalizing session: " + e.message);
+      }
     }
 
     function addToInstantList(name, status) {
@@ -1882,18 +1891,25 @@
 
       // Each camera (Local Mirror)
       for (const [id, obj] of Object.entries(cameraRecorders)) {
-        const camName = sanitizeName(peers[id]?.name || `cameraname_${id.substring(0, 4)}`);
-        const chunks = obj.chunks || [];
-        if (!chunks.length) continue;
-
-        const webmBlob = new Blob(chunks, { type: "video/webm" });
-        // "instant_cameraname"
         try {
-          const mp4Blob = await convertToMp4(webmBlob, `instant_${camName}`);
-          downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
+          const p = peers[id];
+          const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
+
+          const camName = sanitizeName(rawName);
+          const chunks = obj.chunks || [];
+          if (!chunks.length) continue;
+
+          const webmBlob = new Blob(chunks, { type: "video/webm" });
+          // "instant_cameraname"
+          try {
+            const mp4Blob = await convertToMp4(webmBlob, `instant_${camName}`);
+            downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
+          } catch (e) {
+            console.warn("FFmpeg failed (cam), downloading webm", e);
+            downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
+          }
         } catch (e) {
-          console.warn("FFmpeg failed, downloading webm", e);
-          downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
+          console.error(`Error processing instant download for ${id}`, e);
         }
       }
 
