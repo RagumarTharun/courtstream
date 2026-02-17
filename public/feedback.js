@@ -1,7 +1,7 @@
 (function () {
-    // 1. Inject Styles
-    const style = document.createElement("style");
-    style.innerHTML = `
+  // 1. Inject Styles
+  const style = document.createElement("style");
+  style.innerHTML = `
       /* FAB */
       .feedback-fab {
         position: fixed;
@@ -102,11 +102,11 @@
         100% { transform: scale(0.95); opacity: 0.8; }
       }
     `;
-    document.head.appendChild(style);
+  document.head.appendChild(style);
 
-    // 2. Inject HTML
-    const container = document.createElement("div");
-    container.innerHTML = `
+  // 2. Inject HTML
+  const container = document.createElement("div");
+  container.innerHTML = `
       <!-- FAB -->
       <div class="feedback-fab" id="fbFab" title="Submit Feedback">
         <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
@@ -144,73 +144,83 @@
         </svg>
       </div>
     `;
-    document.body.appendChild(container);
+  document.body.appendChild(container);
 
-    // 3. Logic
-    const fab = document.getElementById("fbFab");
-    const overlay = document.getElementById("fbOverlay");
-    const cancelBtn = document.getElementById("fbCancel");
-    const submitBtn = document.getElementById("fbSubmit");
-    const descInput = document.getElementById("fbDesc");
-    const catInput = document.getElementById("fbCategory");
-    const loader = document.getElementById("appLoader");
+  // 3. Logic
+  const fab = document.getElementById("fbFab");
+  const overlay = document.getElementById("fbOverlay");
+  const cancelBtn = document.getElementById("fbCancel");
+  const submitBtn = document.getElementById("fbSubmit");
+  const descInput = document.getElementById("fbDesc");
+  const catInput = document.getElementById("fbCategory");
+  const loader = document.getElementById("appLoader");
 
-    // Toggle Modal
-    fab.onclick = () => overlay.classList.add("open");
-    const close = () => {
-        overlay.classList.remove("open");
-        descInput.value = "";
-    };
-    cancelBtn.onclick = close;
-    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  if (window.HIDE_FEEDBACK_FAB) {
+    if (fab) fab.style.display = "none";
+  }
 
-    // Submit
-    submitBtn.onclick = async () => {
-        const desc = descInput.value.trim();
-        if (!desc) return alert("Please enter a description.");
+  // Expose Global Method
+  window.openFeedbackModal = () => {
+    overlay.classList.add("open");
+  };
 
-        submitBtn.disabled = true;
-        submitBtn.innerText = "Sending...";
+  // Toggle Modal
+  if (fab) fab.onclick = window.openFeedbackModal;
 
-        try {
-            const payload = {
-                page_url: window.location.href,
-                category: catInput.value,
-                description: desc,
-                metadata: {
-                    userAgent: navigator.userAgent,
-                    screen: `${window.screen.width}x${window.screen.height}`,
-                    language: navigator.language
-                }
-            };
+  const close = () => {
+    overlay.classList.remove("open");
+    descInput.value = "";
+  };
+  cancelBtn.onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
-            const res = await fetch("/api/feedback", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
+  // Submit
+  submitBtn.onclick = async () => {
+    const desc = descInput.value.trim();
+    if (!desc) return alert("Please enter a description.");
 
-            if (res.ok) {
-                alert("Thank you for your feedback!");
-                close();
-            } else {
-                alert("Failed to send feedback. Please try again.");
-            }
-        } catch (e) {
-            console.error(e);
-            alert("Error sending feedback.");
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.innerText = "Send Feedback";
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Sending...";
+
+    try {
+      const payload = {
+        page_url: window.location.href,
+        category: catInput.value,
+        description: desc,
+        metadata: {
+          userAgent: navigator.userAgent,
+          screen: `${window.screen.width}x${window.screen.height}`,
+          language: navigator.language
         }
-    };
+      };
 
-    // Loader Logic
-    window.addEventListener("load", () => {
-        setTimeout(() => {
-            loader.style.opacity = "0";
-            setTimeout(() => loader.remove(), 500);
-        }, 600); // Slight delay to show off animation
-    });
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        alert("Thank you for your feedback!");
+        close();
+      } else {
+        alert("Failed to send feedback. Please try again.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error sending feedback.");
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerText = "Send Feedback";
+    }
+  };
+
+  // Loader Logic
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      loader.style.opacity = "0";
+      setTimeout(() => loader.remove(), 500);
+    }, 600); // Slight delay to show off animation
+  });
 
 })();

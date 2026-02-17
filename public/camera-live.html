@@ -16,12 +16,9 @@
       --red: #b91c1c;
     }
 
-    /* Feedback Button Override - Top Right */
+    /* Feedback Button Override - Controlled by modular feedback.js */
     .feedback-fab {
-      top: 24px !important;
-      right: 24px !important;
-      bottom: auto !important;
-      left: auto !important;
+      display: none !important;
     }
 
     .live-indicator {
@@ -376,12 +373,29 @@
     /* LANDSCAPE FIXES (Main Page) */
     @media (orientation: landscape) {
       .page {
-        flex-direction: row-reverse;
+        flex-direction: row;
+        /* Header left, Preview/Controls right */
+      }
+
+      .header {
+        position: relative;
+        top: 0;
+        left: 0;
+        width: 140px;
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 10px;
+        background: rgba(0, 0, 0, 0.4);
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        z-index: 70;
+        pointer-events: auto;
       }
 
       .preview {
         flex: 1;
-        width: calc(100% - 120px);
+        width: auto;
       }
 
       video {
@@ -398,12 +412,6 @@
         padding: 0;
         gap: 24px;
         z-index: 60;
-      }
-
-      .header {
-        top: 10px;
-        left: 10px;
-        z-index: 70;
       }
     }
   </style>
@@ -484,7 +492,7 @@
         <div class="settings-group">
           <!-- Feedback -->
           <div class="settings-control-block">
-            <button onclick="window.location.href='https://courtstream.live/feedback'"
+            <button onclick="window.openFeedbackModal()"
               style="width: 100%; padding: 14px; background: #3b82f6; border: none; border-radius: 16px; color: white; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px;">
               <svg style="width:20px; height:20px; fill:currentColor" viewBox="0 0 24 24">
                 <path
@@ -621,6 +629,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script>window.HIDE_FEEDBACK_FAB = true;</script>
   <script src="feedback.js"></script>
   <script src="modal.js"></script>
   <script>
@@ -1154,22 +1163,35 @@
 
     /* ===== ACCESS CHECK ===== */
     async function checkAccess() {
+      // Set initial name from URL if present
+      if (streamName) {
+        document.getElementById("streamNameDisplay").innerText = streamName;
+      }
+
       try {
         const res = await fetch("/api/streams");
         const all = await res.json();
         const stream = all.find(s => s.id === streamId);
 
-        if (stream && stream.camera_access === "protected") {
-          console.log("🔒 Camera: Protected stream detected");
-          overlay.style.display = "flex";
-          joinBtn.onclick = () => {
-            const pass = passInput.value.trim();
-            if (!pass) return;
-            socket.emit("join", { room: streamId, role: "camera", password: pass });
-          };
+        if (stream) {
+          // Update display name from server record
+          document.getElementById("streamNameDisplay").innerText = stream.name || streamId;
+
+          if (stream.camera_access === "protected") {
+            console.log("🔒 Camera: Protected stream detected");
+            overlay.style.display = "flex";
+            joinBtn.onclick = () => {
+              const pass = passInput.value.trim();
+              if (!pass) return;
+              socket.emit("join", { room: streamId, role: "camera", password: pass });
+            };
+          } else {
+            console.log("🔓 Camera: Public stream detected");
+            overlay.style.display = "none";
+            socket.emit("join", { room: streamId, role: "camera" });
+          }
         } else {
-          console.log("🔓 Camera: Public stream detected");
-          overlay.style.display = "none";
+          console.warn("Stream not found in registry");
           socket.emit("join", { room: streamId, role: "camera" });
         }
       } catch (e) {
