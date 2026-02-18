@@ -654,7 +654,7 @@
     let directorId = null;
     let isLive = false;
     let videoDevices = [];
-    let currentDeviceIndex = 0;
+    let currentDeviceIndex = -1;
     let hasPickedDefault = false;
     let resolveCameraReady;
     const cameraReady = new Promise(r => { resolveCameraReady = r; });
@@ -708,8 +708,12 @@
       });
 
       if (backIndex >= 0) {
-        console.log("Found back camera, forcing environmental mode.");
+        console.log("Found back camera by label, using ID:", videoDevices[backIndex].label);
         currentDeviceIndex = backIndex;
+        facing = "environment";
+      } else {
+        console.log("No back camera found by label. Relying on facingMode.");
+        // Do NOT set currentDeviceIndex to arbitrary 0. Leave it -1.
         facing = "environment";
       }
     }
@@ -718,7 +722,7 @@
       const attempts = [];
 
       // 1. Specific Device ID if found (Strongest)
-      if (videoDevices[currentDeviceIndex] && facing === "environment") {
+      if (currentDeviceIndex >= 0 && videoDevices[currentDeviceIndex] && facing === "environment") {
         attempts.push({ video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } }, audio: true });
       }
 
