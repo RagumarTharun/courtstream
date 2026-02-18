@@ -650,7 +650,7 @@
     let videoSender;
     let micOn = true;
     let camOn = true;
-    let facing = "user";
+    let facing = "environment";
     let directorId = null;
     let isLive = false;
     let videoDevices = [];
@@ -711,9 +711,6 @@
         console.log("Found back camera, switching default.");
         currentDeviceIndex = backIndex;
         facing = "environment";
-      } else {
-        console.log("No back camera found, staying with default (user/webcam).");
-        facing = "user";
       }
     }
 
