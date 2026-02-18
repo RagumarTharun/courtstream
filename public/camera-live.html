@@ -708,25 +708,36 @@
       });
 
       if (backIndex >= 0) {
-        console.log("Found back camera, switching default.");
+        console.log("Found back camera, forcing environmental mode.");
         currentDeviceIndex = backIndex;
         facing = "environment";
       }
     }
 
     async function getStreamWithFallback() {
-      const attempts = [
-        { video: { facingMode: facing }, audio: true },
-        { video: true, audio: true },
-        { video: true }
-      ];
+      const attempts = [];
+
+      // 1. Specific Device ID if found (Strongest)
+      if (videoDevices[currentDeviceIndex] && facing === "environment") {
+        attempts.push({ video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } }, audio: true });
+      }
+
+      // 2. Exact Environment Facing (Strong)
+      attempts.push({ video: { facingMode: { exact: "environment" } }, audio: true });
+
+      // 3. Ideal Environment Facing (Weak)
+      attempts.push({ video: { facingMode: "environment" }, audio: true });
+
+      // 4. Any Camera (Fallback)
+      attempts.push({ video: true, audio: true });
 
       let lastError;
       for (const constraints of attempts) {
         try {
-          console.log("Restoration Probe:", JSON.stringify(constraints));
+          console.log("Camera Probe:", JSON.stringify(constraints));
           return await navigator.mediaDevices.getUserMedia(constraints);
         } catch (err) {
+          console.warn("Probe failed:", err.name);
           lastError = err;
         }
       }
