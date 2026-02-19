@@ -984,6 +984,29 @@
       if (v) v.style.transform = `rotate(${rotation}deg)`;
     });
 
+    /* ===== SIGNAL HANDLER (CRITICAL FIX) ===== */
+    socket.on("signal", async ({ from, data }) => {
+      // console.log("📡 Signal from:", from, data.type || "candidate");
+      const p = peers[from];
+      if (!p) {
+        // If we get a signal from someone we don't have a peer for, 
+        // it might be a race condition or a viewer. Ignored for now.
+        return;
+      }
+
+      try {
+        if (data.description || data.type === "answer") {
+          console.log("✅ Received ANSWER from", from);
+          await p.pc.setRemoteDescription(new RTCSessionDescription(data));
+        } else if (data.candidate) {
+          // console.log("🧊 Received CANDIDATE from", from);
+          await p.pc.addIceCandidate(new RTCIceCandidate(data));
+        }
+      } catch (e) {
+        console.error("❌ Signal Error with " + from, e);
+      }
+    });
+
     /* ===== CREATE CAMERA PEER ===== */
     let cameraCount = 0;
     let turnConfig = null;
@@ -1178,7 +1201,12 @@
       pc.addTransceiver("video", { direction: "recvonly" });
       pc.addTransceiver("audio", { direction: "recvonly" });
 
+      // DOUBLE CHECK DOM FOR DUPLICATES
+      const existingSlot = document.getElementById(`slot-${id}`);
+      if (existingSlot) existingSlot.remove();
+
       const slot = document.createElement("div");
+      slot.id = `slot-${id}`;
       slot.className = "camera-slot";
 
       const nameInput = document.createElement("input");
