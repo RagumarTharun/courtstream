@@ -1474,14 +1474,14 @@
     }
 
     async function stopAndFinalize(mode) {
-      console.log("Finalizing Recording with mode:", mode);
+      console.log("Finalizing Recording (Selection Mode)...");
 
-      // 1. UI FEEDBACK - Show Dash immediately so user knows something is happening
+      // 1. UI FEEDBACK
       const dash = document.getElementById("transferModal");
       if (dash) dash.style.display = "flex";
 
       try {
-        console.log("🛑 Stopping session & Finalizing...");
+        console.log("🛑 Stopping session...");
 
         // 2. STOP RECORDING STATE (Local)
         recordingState = "idle";
@@ -1490,15 +1490,10 @@
         if (recBtn) recBtn.classList.remove("recording", "active");
 
         // Update Icons
-        const recIcon = document.querySelector(".rec-icon");
-        const stopIcon = document.querySelector(".stop-icon");
-        if (recIcon) recIcon.style.display = "block";
-        if (stopIcon) stopIcon.style.display = "none";
-
-        const recordBar = document.getElementById("recordBar");
-        if (recordBar) recordBar.style.display = "none";
-        const recordTimer = document.getElementById("recordTimer");
-        if (recordTimer) recordTimer.innerText = "00:00:00";
+        document.querySelector(".rec-icon").style.display = "block";
+        document.querySelector(".stop-icon").style.display = "none";
+        document.getElementById("recordBar").style.display = "none";
+        document.getElementById("recordTimer").innerText = "00:00:00";
 
         // 3. STOP LOCAL RECORDER INSTANCES
         const stopPromises = [];
@@ -1507,24 +1502,14 @@
 
         await Promise.all(stopPromises);
 
-        // 4. IMMEDIATE: Download Director Program (Instant)
-        // This gives the user a safety copy right away.
-        await downloadInstantProgram();
-
-        // 5. IF "INSTANT ONLY" WAS SELECTED
-        // If user specifically asked for "Instant", they might not want to wait for P2P.
-        // However, the new "Linear Workflow" implies we always do Final Mix.
-        // Let's assume we ALWAYS trigger P2P for robustness, unless mode is explicitly "instant_stop_only" (not implemented).
-        // Updates UI for transfers.
-
-        // Setup Transfer UI Placeholders
+        // 4. SETUP TRANSFER UI
+        // We wait for transfers before showing selection modal.
         const tList = document.getElementById("transferList");
         if (tList) {
           tList.innerHTML = "";
-          // Add placeholders for active peers
+          // Active Peers
           Object.keys(peers).forEach(id => {
             const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
-            // We'll update this row when data arrives
             const row = document.createElement("div");
             row.id = `xfer_${id}`;
             row.className = "file-item";
@@ -1540,7 +1525,7 @@
             tList.appendChild(row);
           });
 
-          // Program placeholder
+          // Program placeholder (Local is always ready basically)
           if (programChunks.length) {
             const row = document.createElement("div");
             row.id = `xfer_program`;
@@ -1548,7 +1533,7 @@
             row.innerHTML = `
                   <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                       <span class="name">Director Program (Local)</span>
-                      <span class="pct" style="color: #94a3b8;">Ready</span>
+                      <span class="pct" style="color: #10b981;">Ready</span>
                   </div>
                    <div class="dash-progress">
                       <div class="progress-fill dash-fill" style="width: 100%; background: #10b981;"></div>
@@ -1558,18 +1543,17 @@
           }
         }
 
-        // 6. SIGNAL SAVE TO CAMERAS (Triggers P2P)
-        // Cameras will stop recording and start sending their blobs via Data Channel.
+        // 5. SIGNAL SAVE TO CAMERAS (Triggers P2P)
         Object.keys(peers).forEach(id => {
           socket.emit("control", { to: id, data: { type: "stop-iso", save: "transfer" } });
         });
 
         console.log("⏳ Requests sent. Waiting for P2P transfers...");
 
-        // If we have no peers, we might need to manually trigger render if we have program?
-        if (Object.keys(peers).length === 0 && programChunks.length > 0) {
-          console.log("No peers to wait for. Starting local-only render...");
-          startClientSideRender();
+        // If NO peers, trigger selection immediately (only local program)
+        if (Object.keys(peers).length === 0) {
+          console.log("No peers. Showing selection immediately.");
+          setTimeout(showDownloadSelectionModal, 1000);
         }
 
       } catch (e) {
@@ -1578,23 +1562,122 @@
       }
     }
 
-    async function downloadInstantProgram() {
-      if (!programChunks.length) return;
-      console.log("⬇️ Downloading Instant Program...");
-      const blob = new Blob(programChunks, { type: "video/webm" });
+    async function checkTransfersComplete() {
+      const activePeers = Object.keys(peers).filter(pid => peers[pid].stream);
+      const missing = activePeers.filter(pid => !receivedRecordings[pid]);
+      const allReceived = missing.length === 0;
+
+      console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
+
+      if (allReceived) {
+        console.log("🎉 All ISO transfers complete. Showing Selection Modal...");
+        setTimeout(() => {
+          showDownloadSelectionModal();
+        }, 1000);
+      }
+    }
+
+    function showDownloadSelectionModal() {
+      // Hide Transfer Modal
+      document.getElementById("transferModal").style.display = "none";
+
+      // Ensure Selection Modal Exists or Reuse existing modal structure
+      // We'll reuse the "completePhase" div but inject our new UI
+      const container = document.getElementById("completePhase");
+      if (!container) return; // Should exist
+
+      // Show render phase container but empty
+      document.getElementById("renderPhase").style.display = "block";
+
+      // Inject Selection UI
       const timestamp = formatDate(Date.now());
-      // Trigger immediate download
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `director_program_instant_${timestamp}.webm`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+
+      let html = `
+            <div style="max-width: 600px; margin: 0 auto; background: #161922; border: 1px solid #262b3d; border-radius: 12px; padding: 24px;">
+                <h2 style="margin-top:0; color:white; display:flex; align-items:center; gap:10px;">
+                    Download Selection
+                    <span style="font-size:12px; background:#334155; padding:2px 8px; border-radius:12px; color:#cbd5e1;">${timestamp}</span>
+                </h2>
+                <p style="color:#94a3b8; font-size:14px; margin-bottom:20px;">Select the files you want to process and download.</p>
+                
+                <div id="selectionList" style="display:flex; flex-direction:column; gap:12px; max-height:400px; overflow-y:auto; margin-bottom:24px;">
+                    
+                    <!-- Final Mix -->
+                    <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
+                        <label style="display:flex; align-items:center; cursor:pointer; font-weight:600;">
+                            <input type="checkbox" id="sel_final_mix" checked style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
+                            Final Mix (Stitched Program)
+                        </label>
+                        <div style="margin-top:8px; margin-left:30px; display:flex; gap:15px; font-size:13px; color:#cbd5e1;">
+                            <label><input type="radio" name="fmt_final_mix" value="mp4" checked> MP4 (Compatibility)</label>
+                            <label><input type="radio" name="fmt_final_mix" value="webm"> WebM (Fast)</label>
+                        </div>
+                    </div>
+
+                    <!-- Director Program -->
+                    <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
+                        <label style="display:flex; align-items:center; cursor:pointer;">
+                            <input type="checkbox" id="sel_program" style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
+                            Director Program (Local)
+                        </label>
+                         <div style="margin-top:8px; margin-left:30px; display:flex; gap:15px; font-size:13px; color:#cbd5e1;">
+                            <label><input type="radio" name="fmt_program" value="mp4"> MP4</label>
+                            <label><input type="radio" name="fmt_program" value="webm" checked> WebM (Instant)</label>
+                        </div>
+                    </div>
+        `;
+
+      // Add Cameras
+      Object.keys(peers).forEach(id => {
+        const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
+
+        html += `
+                <!-- Camera ${name} -->
+                <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
+                    <div style="font-weight:600; color:#3b82f6; margin-bottom:8px;">${name}</div>
+                    
+                    <!-- Quality ISO -->
+                    <div style="margin-bottom:8px;">
+                        <label style="display:flex; align-items:center; cursor:pointer;">
+                            <input type="checkbox" id="sel_iso_${id}" style="accent-color:#3b82f6; margin-right:8px;">
+                            Quality Feed (ISO)
+                        </label>
+                        <div style="margin-left:24px; font-size:12px; color:#64748b; display:flex; gap:10px;">
+                             <label><input type="radio" name="fmt_iso_${id}" value="mp4"> MP4</label>
+                             <label><input type="radio" name="fmt_iso_${id}" value="webm" checked> WebM</label>
+                        </div>
+                    </div>
+
+                    <!-- Instant Mirror -->
+                    <div>
+                        <label style="display:flex; align-items:center; cursor:pointer;">
+                            <input type="checkbox" id="sel_mirror_${id}" style="accent-color:#3b82f6; margin-right:8px;">
+                            Instant Mirror (Local)
+                        </label>
+                         <div style="margin-left:24px; font-size:12px; color:#64748b; display:flex; gap:10px;">
+                             <label><input type="radio" name="fmt_mirror_${id}" value="mp4"> MP4</label>
+                             <label><input type="radio" name="fmt_mirror_${id}" value="webm" checked> WebM</label>
+                        </div>
+                    </div>
+                </div>
+            `;
+      });
+
+      html += `
+                </div>
+                <button onclick="processSelectedDownloads()" class="btn-premium" style="width:100%; justify-content:center; padding:14px; font-size:16px;">
+                    Process Selected Files
+                </button>
+            </div>
+        `;
+
+      // Override the Render Phase/Progress panel deeply
+      const renderPanel = document.getElementById("renderPhase");
+      renderPanel.innerHTML = html;
     }
 
     function addToInstantList(name, status, id = null) {
       const list = document.getElementById("instantList");
-      const div = document.createElement("div");
       div.className = "file-item";
       if (id) div.id = id;
 
@@ -1798,176 +1881,211 @@
       return new Blob([data.buffer], { type: "video/mp4" });
     }
 
-    async function startClientSideRender() {
-      // PHASE 1: STITCH FINAL MIX
-      document.getElementById("renderPhase").style.display = "block";
-      const status = document.getElementById("renderStatusText");
-      const bar = document.getElementById("renderProgressBar");
+    async function processSelectedDownloads() {
+      const btn = document.querySelector("#renderPhase button");
+      if (btn) { btn.disabled = true; btn.innerText = "Processing... Please Wait"; }
 
-      const updateRenderProgress = (pct, text) => {
-        if (text) status.innerText = text;
-        bar.style.width = pct + "%";
+      // Gather Selections
+      const ops = {
+        final: document.getElementById('sel_final_mix')?.checked ?
+          document.querySelector('input[name="fmt_final_mix"]:checked').value : null,
+        program: document.getElementById('sel_program')?.checked ?
+          document.querySelector('input[name="fmt_program"]:checked').value : null,
+        isos: {},
+        mirrors: {}
       };
 
-      try {
-        updateRenderProgress(5, "Loading FFmpeg...");
-        const { ffmpeg, fetchFile } = await ensureFFmpeg();
-
-        // 1. Prepare Inputs for Stitching
-        const sourceFiles = [];
-        const activeCamIds = Object.keys(receivedRecordings);
-
-        // Director Program (Stitch Base/Fallback)
-        if (programChunks.length > 0) {
-          // We re-use programChunks for the quality render base if needed
-          // Or just leave it for now.
+      Object.keys(peers).forEach(id => {
+        if (document.getElementById(`sel_iso_${id}`)?.checked) {
+          ops.isos[id] = document.querySelector(`input[name="fmt_iso_${id}"]:checked`).value;
         }
-
-        // Write Camera Files for Stitching
-        for (let i = 0; i < activeCamIds.length; i++) {
-          const id = activeCamIds[i];
-          const blob = receivedRecordings[id];
-          if (!blob) continue;
-          const name = `cam_${id}.webm`;
-          updateRenderProgress(10, `Preparing ${name}...`);
-          await ffmpeg.writeFile(name, await fetchFile(blob));
-          sourceFiles.push({ id, name });
-        }
-
-        // 2. Transcode to MP4 for stitching
-        const mp4Files = {};
-        for (let i = 0; i < sourceFiles.length; i++) {
-          const f = sourceFiles[i];
-          const outName = f.name.replace(".webm", ".mp4");
-          updateRenderProgress(20 + (i / sourceFiles.length) * 20, `Converting Source ${i + 1}...`);
-          await ffmpeg.exec(["-i", f.name, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", outName]);
-          mp4Files[f.id] = outName;
-        }
-
-        // 3. Process EDL
-        updateRenderProgress(50, "Processing Cuts...");
-        const segments = [];
-        for (let i = 0; i < isoEdl.length; i++) {
-          const cut = isoEdl[i];
-          const nextCut = isoEdl[i + 1];
-          let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : null;
-
-          let inputFile = mp4Files[cut.camId];
-          if (!inputFile) continue; // Skip if missing
-
-          const segName = `seg_${i}.mp4`;
-          const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
-          if (duration) args.push("-t", String(duration));
-          args.push("-c", "copy", segName); // Copy codec since we already transcoded sources
-
-          await ffmpeg.exec(args);
-          segments.push(segName);
-        }
-
-        // 4. Concat
-        updateRenderProgress(80, "Stitching Final Mix...");
-        if (segments.length > 0) {
-          await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\n"));
-          await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
-
-          const finalData = await ffmpeg.readFile("final_mix.mp4");
-          const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
-
-          // DOWNLOAD FINAL MIX
-          const timestamp = formatDate(Date.now());
-          const url = URL.createObjectURL(finalBlob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `courtstream_final_mix_${timestamp}.mp4`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-
-          updateRenderProgress(100, "Final Mix Downloaded!");
-
-          // PHASE 2: PROMPT FOR INDIVIDUAL
-          showIndividualProcessPrompt(timestamp); // Pass timestamp for consistent naming
-        } else {
-          updateRenderProgress(100, "No cuts to stitch.");
-          showIndividualProcessPrompt(formatDate(Date.now()));
-        }
-
-      } catch (e) {
-        console.error("Render Error:", e);
-        alert("Render Failed: " + e.message);
-      }
-    }
-
-    function showIndividualProcessPrompt(timestamp) {
-      document.getElementById("renderPhase").style.display = "none";
-      const completePhase = document.getElementById("completePhase");
-      completePhase.style.display = "block";
-
-      const btnList = document.getElementById("downloadButtons");
-      btnList.innerHTML = `
-         <div style="text-align:center; color:#cbd5e1; margin-bottom:15px;">
-           Final Mix Complete. Process individual camera feeds?
-         </div>
-         <button onclick="processIndividualFeeds('${timestamp}')" class="btn-premium" style="width:100%; justify-content:center;">
-           Process Individual Feeds (High Quality)
-         </button>
-         <button onclick="location.reload()" class="modal-btn" style="width:100%; margin-top:10px;">
-           Skip & Start New Session
-         </button>
-       `;
-    }
-
-    async function processIndividualFeeds(timestamp) {
-      const btnList = document.getElementById("downloadButtons");
-      btnList.innerHTML = "<div style='color:#94a3b8'>Processing individual feeds...</div>";
-
-      const { ffmpeg } = await ensureFFmpeg();
-
-      // 1. High Quality ISOs (Already in FFmpeg FS from stitching phase)
-      // We just need to read the converted MP4s and trigger downloads
-      const activeCamIds = Object.keys(receivedRecordings);
-
-      for (const id of activeCamIds) {
-        // Check if MP4 was made during stitch
-        // If not, we might need to make it now (if it wasn't used in any cut)
-        // For simplicity, let's just re-check receivedRecordings/peers
-        const blob = receivedRecordings[id];
-        if (blob) {
-          const name = `camera_${id}_${timestamp}.webm`; // Download original WebM to save processing time?
-          // User asked for "Convert to MP4" prompt. 
-          // Let's just give them the WebM for speed, or MP4 if they wait.
-          // Given the plan says "Quality Individual", let's offer the WebM blobs directly for speed logic
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = name;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }
-      }
-
-      // 2. Instant Mirrors (Local Camera Recorders)
-      Object.values(cameraRecorders).forEach((rec, idx) => {
-        if (rec.chunks.length) {
-          const blob = new Blob(rec.chunks, { type: "video/webm" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `camera_mirror_${idx}_${timestamp}.webm`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+        if (document.getElementById(`sel_mirror_${id}`)?.checked) {
+          ops.mirrors[id] = document.querySelector(`input[name="fmt_mirror_${id}"]:checked`).value;
         }
       });
 
-      btnList.innerHTML = "<div style='color:#10b981'>All feeds downloaded!</div><button onclick='location.reload()' class='modal-btn' style='width:100%; margin-top:10px;'>Done</button>";
+      // UI Helpers
+      const updateStatus = (pct, msg) => {
+        if (btn) btn.innerText = `${msg} (${pct}%)`;
+      };
+
+      try {
+        updateStatus(0, "Loading Engine");
+        const { ffmpeg, fetchFile } = await ensureFFmpeg();
+
+        // Track Transcoded Files to avoid double work
+        // Key: type_id (e.g. 'iso_cam1') -> Value: filename in MEMFS
+        const memFiles = {};
+
+        // ===========================
+        // 1. PREPARE ISO INPUTS (Common Step)
+        // ===========================
+        // If Final Mix OR any ISO(mp4) is needed, we likely need to write ISOs to FS.
+        const needsIsoProcessing = ops.final || Object.values(ops.isos).includes('mp4');
+        const activeCamIds = Object.keys(receivedRecordings);
+
+        if (needsIsoProcessing) {
+          for (let i = 0; i < activeCamIds.length; i++) {
+            const id = activeCamIds[i];
+            const blob = receivedRecordings[id];
+            if (!blob) continue;
+
+            const name = `iso_${id}.webm`;
+            updateStatus(10, `Reading Camera ${i + 1}`);
+            await ffmpeg.writeFile(name, await fetchFile(blob));
+            memFiles[`iso_${id}_webm`] = name;
+          }
+        }
+
+        // ===========================
+        // 2. GENERATE FINAL MIX
+        // ===========================
+        if (ops.final) {
+          // A. Transcode ISOs to MP4 (Stitching requires concat friendly fmt)
+          for (let i = 0; i < activeCamIds.length; i++) {
+            const id = activeCamIds[i];
+            if (!memFiles[`iso_${id}_webm`]) continue;
+
+            const outName = `iso_${id}.mp4`;
+            updateStatus(20, `Converting Cam ${i + 1} to MP4`);
+            await ffmpeg.exec(["-i", memFiles[`iso_${id}_webm`], "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", outName]);
+            memFiles[`iso_${id}_mp4`] = outName;
+          }
+
+          // B. Process Cuts
+          updateStatus(40, "Processing Cuts");
+          const segments = [];
+          for (let i = 0; i < isoEdl.length; i++) {
+            const cut = isoEdl[i];
+            const nextCut = isoEdl[i + 1];
+            let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : null;
+
+            let inputFile = memFiles[`iso_${cut.camId}_mp4`];
+            if (!inputFile) continue;
+
+            const segName = `seg_${i}.mp4`;
+            const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
+            if (duration) args.push("-t", String(duration));
+            args.push("-c", "copy", segName);
+
+            await ffmpeg.exec(args);
+            segments.push(segName);
+          }
+
+          // C. Stitch
+          if (segments.length > 0) {
+            updateStatus(60, "Stitching Mix");
+            await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\n"));
+            await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
+
+            // D. Download Final
+            const timestamp = formatDate(Date.now());
+            const finalData = await ffmpeg.readFile("final_mix.mp4");
+            const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
+            downloadBlob(finalBlob, `courtstream_final_${timestamp}.mp4`);
+          }
+        }
+
+        // ===========================
+        // 3. PROCESS INDIVIDUAL ISOs
+        // ===========================
+        for (const id of activeCamIds) {
+          const fmt = ops.isos[id];
+          const timestamp = formatDate(Date.now());
+          if (fmt === 'webm') {
+            // Direct Download
+            if (receivedRecordings[id]) downloadBlob(receivedRecordings[id], `camera_${id}_${timestamp}.webm`);
+          } else if (fmt === 'mp4') {
+            // Check if we already have it from stitching phase
+            if (memFiles[`iso_${id}_mp4`]) {
+              const data = await ffmpeg.readFile(memFiles[`iso_${id}_mp4`]);
+              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `camera_${id}_${timestamp}.mp4`);
+            } else {
+              // We need to convert it now
+              if (!memFiles[`iso_${id}_webm`]) {
+                // Write if missing
+                await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
+              }
+              updateStatus(70, `Converting Cam ${id}`);
+              await ffmpeg.exec(["-i", `iso_${id}.webm`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", `iso_${id}.mp4`]);
+              const data = await ffmpeg.readFile(`iso_${id}.mp4`);
+              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `camera_${id}_${timestamp}.mp4`);
+            }
+          }
+        }
+
+        // ===========================
+        // 4. PROCESS MIRRORS (Local)
+        // ===========================
+        const mirrorIds = Object.keys(ops.mirrors);
+        for (const id of mirrorIds) {
+          const fmt = ops.mirrors[id]; // 'mp4' or 'webm'
+          // Recorders are indexed by key (which is usually peerID or index)
+          // Need to map ID to recorder?? 
+          // Actually `cameraRecorders` is object: { peerId: { recorder, ... } }
+          const rec = cameraRecorders[id];
+          if (rec && rec.chunks.length) {
+            const blob = new Blob(rec.chunks, { type: "video/webm" });
+            const timestamp = formatDate(Date.now());
+            const name = `mirror_${id}_${timestamp}`;
+
+            if (fmt === 'webm') {
+              downloadBlob(blob, name + ".webm");
+            } else {
+              updateStatus(80, `Converting Mirror ${id}`);
+              await ffmpeg.writeFile("mirror_in.webm", await fetchFile(blob));
+              await ffmpeg.exec(["-i", "mirror_in.webm", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "out_mirror.mp4"]);
+              const data = await ffmpeg.readFile("out_mirror.mp4");
+              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), name + ".mp4");
+              // Cleanup
+              await ffmpeg.deleteFile("mirror_in.webm");
+              await ffmpeg.deleteFile("out_mirror.mp4");
+            }
+          }
+        }
+
+        // ===========================
+        // 5. PROCESS PROGRAM (Local)
+        // ===========================
+        if (ops.program && programChunks.length) {
+          const blob = new Blob(programChunks, { type: "video/webm" });
+          const timestamp = formatDate(Date.now());
+          const name = `program_${timestamp}`;
+
+          if (ops.program === 'webm') {
+            downloadBlob(blob, name + ".webm");
+          } else {
+            updateStatus(90, "Converting Program");
+            await ffmpeg.writeFile("prog_in.webm", await fetchFile(blob));
+            await ffmpeg.exec(["-i", "prog_in.webm", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "out_prog.mp4"]);
+            const data = await ffmpeg.readFile("out_prog.mp4");
+            downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), name + ".mp4");
+          }
+        }
+
+        updateStatus(100, "Done!");
+        if (btn) btn.innerText = "All Downloads Complete";
+        setTimeout(() => location.reload(), 2000);
+
+      } catch (e) {
+        console.error("Processing Error:", e);
+        alert("Error processing files: " + e.message);
+        if (btn) { btn.disabled = false; btn.innerText = "Retry"; }
+      }
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     function enableInstantDownload(id, blob, filename) {
       const el = document.getElementById(id);
-      if (!el) return;
-
       const badge = el.querySelector(".status-badge");
       if (badge) {
         badge.className = "status-badge success";
