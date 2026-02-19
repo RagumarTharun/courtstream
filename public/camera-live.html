@@ -1529,10 +1529,10 @@
         const end = Math.min(start + CHUNK_SIZE, totalSize);
         const chunk = buffer.slice(start, end);
 
-        // Firehose: Send immediately (Chrome handles buffering internally)
-        // while (dataChannel.bufferedAmount > 64 * 1024) { 
-        //   await new Promise(r => setTimeout(r, 10));
-        // }
+        // Flow Control: Restore 256KB limit (Matches Feb 18 "Good" State)
+        while (dataChannel.bufferedAmount > 256 * 1024) {
+          await new Promise(r => setTimeout(r, 10));
+        }
 
         try {
           dataChannel.send(chunk);
