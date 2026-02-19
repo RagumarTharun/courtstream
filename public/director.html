@@ -828,13 +828,9 @@
           let isDownloadingInstant = false;
           let isRenderPending = false;
 
-          /* ===== JOIN ===== */
-          socket.emit("join", { room: streamId, role: "director" });
+          /* ===== JOIN LOGIC MOVED TO END ===== */
+          const isIsoMode = true;
 
-          const isIsoMode = true; // Fix: Define isIsoMode for ISO recording logic
-
-          /* ===== JOIN ===== */
-          socket.emit("join", { room: streamId, role: "director" });
 
           // Removed aggressive polling to prevent race conditions
           // Socket.io 'peer-joined' event will handle new connections
@@ -986,6 +982,13 @@
               i++;
             }
           }
+
+          /* ===== INIT ===== */
+          // Register listeners FIRST, then join.
+
+          // Request to join room
+          console.log("🚀 Joining room as Director...");
+          socket.emit("join", { room: streamId, role: "director" });
 
           // Refresh Warning
           window.addEventListener("beforeunload", (e) => {
