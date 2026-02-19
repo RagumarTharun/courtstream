@@ -660,6 +660,7 @@
     let camOn = true;
     let facing = "environment";
     let directorId = null;
+    let pc = null; // Add missing global pc declaration
     let isLive = false;
     let videoDevices = [];
     let currentDeviceIndex = -1;
@@ -828,13 +829,23 @@
       }
     }
 
-    async function initWebRTC() {
+    // let pc, directorId, pendingCandidates already declared above
+
+
+    // SEPARATE SETUP FUNCTION FOR RECONNECTION
+    async function setupPeerConnection() {
+      if (pc) {
+        console.log("♻️ Closing existing PeerConnection for reset...");
+        pc.close();
+      }
+
       const config = await getTurnConfig();
       pc = new RTCPeerConnection(config);
-      setupDataChannel();
 
-      checkAccess();
-      startCamera(); // Ensure camera starts after PC is initialized to add tracks
+      // Add Tracks (re-add if stream exists)
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => pc.addTrack(track, mediaStream));
+      }
 
       pc.onicecandidate = e => {
         if (e.candidate) {
@@ -844,18 +855,48 @@
         }
       };
 
+      pc.onconnectionstatechange = () => {
+        console.log("Rx Connection State:", pc.connectionState);
+        if (pc.connectionState === "connected") {
+          showToast("✅ Connected to Director");
+          document.getElementById("liveBadge").style.display = "inline-block";
+          document.getElementById("liveBadge").innerText = "LIVE";
+          document.getElementById("liveBadge").style.background = "#ef4444";
+          const v = document.querySelector("video");
+          if (v) v.style.border = "2px solid #ef4444";
+        } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+          showToast("❌ Director Disconnected", "error");
+          document.getElementById("liveBadge").style.display = "none";
+          const v = document.querySelector("video");
+          if (v) v.style.border = "none";
+        }
+      };
+
+      // DATA CHANNEL HANDLER (Reset on new PC)
+      pc.ondatachannel = (event) => {
+        console.log("📡 Data Channel Received:", event.channel.label);
+        dataChannel = event.channel;
+        dataChannel.onopen = () => {
+          console.log("✅ Data Channel Open");
+          showToast("🔗 Data Transfer Ready");
+        };
+        dataChannel.onmessage = handleMessage;
+      };
+    }
+
+    async function initWebRTC() {
+      await setupPeerConnection();
+      checkAccess();
+      startCamera();
+
       socket.on("control", ({ from, data }) => {
         console.log("Control:", data);
         if (data && data.type === "live") {
           const isLive = data.on;
           document.getElementById("liveBadge").style.display = isLive ? "inline-block" : "none";
-
-          // Show the name of the stream (which is the camera name set by director)
           if (data.name) {
             document.getElementById("streamNameDisplay").innerText = data.name;
           }
-
-          // Optional: Visual feedback on the video border
           const v = document.querySelector("video");
           if (v) v.style.border = isLive ? "2px solid #ef4444" : "none";
         }
@@ -866,7 +907,12 @@
 
         if (data.type === "offer") {
           console.log("📡 Camera: Received offer from director", from);
+          showToast("📡 Connecting...");
           directorId = from;
+
+          // ALWAYS RESET PC on new Offer
+          await setupPeerConnection();
+
           await cameraReady;
           try {
             await pc.setRemoteDescription(new RTCSessionDescription(data));
@@ -881,6 +927,7 @@
             }
           } catch (e) {
             console.error("Signaling error:", e);
+            showToast("❌ Connection Failed", "error");
           }
           return;
         }
@@ -897,24 +944,11 @@
 
     /* ===== DATA CHANNEL ===== */
     let dataChannel = null;
-    function setupDataChannel() {
-      if (!pc) return;
-      // Director creates the channel usually (offerer), but we can creating it here too if negotiated
-      // However, director sends OFFER. So Director should create Data Channel.
-      // We just need to handle ondatachannel.
-
-      pc.ondatachannel = (event) => {
-        console.log("📡 Data Channel Received:", event.channel.label);
-        dataChannel = event.channel;
-        dataChannel.onopen = () => console.log("✅ Data Channel Open");
-        dataChannel.onmessage = handleMessage;
-      };
-    }
 
     function handleMessage(event) {
       const msg = JSON.parse(event.data);
       if (msg.type === "ack") {
-        // handle flow control if needed
+        // handle flow control
       }
     }
     initWebRTC();
