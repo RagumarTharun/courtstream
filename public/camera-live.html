@@ -773,32 +773,49 @@
     }
 
     async function startCamera() {
-      await loadVideoDevices();
-
+      // 1. Force Back Camera Default on First Load
       if (!hasPickedDefault) {
-        pickDefaultBackCamera();
+        console.log("🚀 Initial Load: Forcing Environment (Back) Camera");
+        facing = "environment";
+        currentDeviceIndex = -1; // Reset index to avoid locking to wrong ID
         hasPickedDefault = true;
       }
 
-      const stream = await getStreamWithFallback();
-      video.srcObject = stream;
+      await loadVideoDevices();
 
-      // NO DYNAMIC PROBING - Keeps it stable for old devices
-
-      if (!mediaStream) {
-        stream.getTracks().forEach(t => {
-          const sender = pc.addTrack(t, stream);
-          if (t.kind === "video") videoSender = sender;
-        });
-      } else {
-        await videoSender.replaceTrack(stream.getVideoTracks()[0]);
+      // 2. Stop Existing Stream
+      if (mediaStream) {
         mediaStream.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
       }
 
-      mediaStream = stream;
-      if (resolveCameraReady) {
-        resolveCameraReady();
-        resolveCameraReady = null;
+      // 3. Get New Stream
+      try {
+        const stream = await getStreamWithFallback();
+        mediaStream = stream;
+        video.srcObject = stream;
+
+        console.log("✅ Camera Started. Facing:", facing);
+
+        // 4. Update WebRTC Sender
+        if (!videoSender) {
+          stream.getTracks().forEach(t => {
+            const sender = pc.addTrack(t, stream);
+            if (t.kind === "video") videoSender = sender;
+          });
+        } else {
+          const vidTrack = stream.getVideoTracks()[0];
+          if (vidTrack) await videoSender.replaceTrack(vidTrack);
+        }
+
+        if (resolveCameraReady) {
+          resolveCameraReady();
+          resolveCameraReady = null;
+        }
+
+      } catch (e) {
+        console.error("Failed to start camera:", e);
+        alert("Camera Error: " + e.message);
       }
     }
 
@@ -1172,25 +1189,15 @@
 
     /* ===== CAMERA SOURCE SWITCHING ===== */
     async function toggleCameraSource() {
-      // 1. Try to switch by index if we have multiple devices
-      if (videoDevices.length > 1) {
-        currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
-        const device = videoDevices[currentDeviceIndex];
-        console.log("🔄 Switching to camera index:", currentDeviceIndex, device.label);
+      // Simple Toggle: Environment <-> User
+      // We rely on getStreamWithFallback to handle the constraint
 
-        const label = (device.label || "").toLowerCase();
-        if (label.includes("front") || label.includes("user")) {
-          facing = "user";
-        } else {
-          facing = "environment";
-        }
-      } else {
-        // 2. Fallback: Toggle facing mode if devices not detected but browser supports dual cam
-        console.log("🔄 Single device detected (or restricted). Toggling facing mode.");
-        facing = (facing === "environment") ? "user" : "environment";
-        // Reset index so it doesn't lock to a specific outdated ID
-        currentDeviceIndex = -1;
-      }
+      console.log("🔄 Toggling Camera...");
+      facing = (facing === "environment") ? "user" : "environment";
+      currentDeviceIndex = -1; // Reset device ID lock to allow generic facing mode fallback
+
+      // Update Button Icon (Optional check)
+      console.log("Target Facing:", facing);
 
       await startCamera();
     }
