@@ -584,15 +584,6 @@
           <span class="rec-text">Record</span>
         </button>
 
-        <!-- PLAYBACK -->
-        <button id="playbackBtn" class="ctrl-btn" title="Playback Editor" onclick="goToPlayback()">
-          <svg viewBox="0 0 24 24" width="24" height="24">
-            <path fill="white"
-              d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
-          </svg>
-          <span>Playback</span>
-        </button>
-
         <!-- QR CODE -->
         <button id="qrBtn" class="ctrl-btn" title="Camera QR Code" onclick="openQr()">
           <svg viewBox="0 0 24 24" width="24" height="24">
@@ -1008,7 +999,36 @@
     });
 
     /* ===== CREATE CAMERA PEER ===== */
-    let cameraCount = 0;
+    let cameraCount = 0; // Legacy, kept for safety but unused now
+
+    function getNextCameraName() {
+      let i = 1;
+      while (true) {
+        const name = `Camera ${i}`;
+        // Check if name exists in inputs
+        const inputs = Array.from(document.querySelectorAll(".camera-name"));
+        const exists = inputs.some(input => input.value === name);
+        if (!exists) return name;
+        i++;
+      }
+    }
+
+    // Refresh Warning
+    window.addEventListener("beforeunload", (e) => {
+      // If recording, always warn
+      if (recordingState === "recording") {
+        e.preventDefault();
+        e.returnValue = "Recording in progress! Refreshing will stop the recording.";
+        return e.returnValue;
+      }
+
+      // General warning if cameras are connected (optional, but good for "Warn refresh on director page")
+      if (Object.keys(peers).length > 0) {
+        e.preventDefault();
+        e.returnValue = "Cameras are connected. Refreshing will disconnect them temporarily.";
+        return e.returnValue;
+      }
+    });
     let turnConfig = null;
 
     async function getTurnConfig() {
@@ -1211,8 +1231,8 @@
 
       const nameInput = document.createElement("input");
       nameInput.className = "camera-name";
-      cameraCount += 1;
-      nameInput.value = `Camera ${cameraCount}`;
+      // cameraCount += 1; // Removed
+      nameInput.value = getNextCameraName();
 
       const actions = document.createElement("div");
       actions.className = "camera-actions";
@@ -1434,6 +1454,15 @@
     const stopIcon = document.querySelector(".stop-icon");
     // const isoToggle = document.getElementById("isoToggle"); // REMOVED
     const qrBtn = document.getElementById("qrBtn");
+
+    /* ===== RECORD TOGGLE ===== */
+    function toggleRecord() {
+      if (recordingState === "idle") {
+        startRecording();
+      } else {
+        stopRecordingRequest();
+      }
+    }
 
     recordBtn.onclick = toggleRecord;
 

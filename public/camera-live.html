@@ -742,15 +742,16 @@
       const attempts = [];
 
       // 1. Specific Device ID if found (Strongest)
-      if (currentDeviceIndex >= 0 && videoDevices[currentDeviceIndex] && facing === "environment") {
+      // Check if facing matches preference (if we care about consistency)
+      if (currentDeviceIndex >= 0 && videoDevices[currentDeviceIndex]) {
         attempts.push({ video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } }, audio: true });
       }
 
-      // 2. Exact Environment Facing (Strong)
-      attempts.push({ video: { facingMode: { exact: "environment" } }, audio: true });
+      // 2. Exact Facing Mode (Strong)
+      attempts.push({ video: { facingMode: { exact: facing } }, audio: true });
 
-      // 3. Ideal Environment Facing (Weak)
-      attempts.push({ video: { facingMode: "environment" }, audio: true });
+      // 3. Ideal Facing Mode (Weak)
+      attempts.push({ video: { facingMode: facing }, audio: true });
 
       // 4. Any Camera (Fallback)
       attempts.push({ video: true, audio: true });
