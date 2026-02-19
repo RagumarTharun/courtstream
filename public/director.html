@@ -1188,7 +1188,7 @@
       selectedStream = peers[id].stream;
 
       // Update EDL if recording ISO
-      if (recordingState === "recording" && isIsoMode) {
+      if (recordingState === "recording") {
         isoEdl.push({
           timestamp: Date.now() - recordStartTime,
           camId: id
