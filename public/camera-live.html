@@ -1382,58 +1382,87 @@
     });
 
     async function transferRecording(blob) {
-      const CHUNK_SIZE = 16 * 1024; // 16KB safe chunk size
+      if (!dataChannel || dataChannel.readyState !== "open") {
+        console.error("❌ Transfer aborted: Data channel not open.");
+        alert("Transfer failed: Connection to Director lost.");
+        return;
+      }
+
+      const CHUNK_SIZE = 16 * 1024; // 16KB chunks
       const totalSize = blob.size;
       const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
 
-      // metadata
-      dataChannel.send(JSON.stringify({
-        type: "meta",
-        size: totalSize,
-        mime: blob.type,
-        name: `camera_${socket.id}.webm`
-      }));
+      console.log(`📤 Starting Transfer: ${totalSize} bytes in ${totalChunks} chunks`);
+
+      // 1. Send Metadata
+      try {
+        dataChannel.send(JSON.stringify({
+          type: "meta",
+          size: totalSize,
+          mime: blob.type,
+          name: `camera_${socket.id}.webm`
+        }));
+      } catch (e) {
+        console.error("❌ Failed to send metadata:", e);
+        return;
+      }
 
       const buffer = await blob.arrayBuffer();
       const overlay = document.getElementById("uploadProgressOverlay");
       const fill = document.getElementById("uploadProgressFill");
 
-      overlay.style.display = "flex";
+      if (overlay) overlay.style.display = "flex";
 
       const updateProgress = (p) => {
-        fill.style.width = p + "%";
+        if (fill) fill.style.width = p + "%";
+        // Also update badge as backup
+        liveBadge.textContent = `SEND ${p}%`;
       };
 
       for (let i = 0; i < totalChunks; i++) {
+        // Stop if channel closes mid-transfer
+        if (dataChannel.readyState !== "open") {
+          console.error("❌ Transfer stopped: Channel closed unexpectedly.");
+          break;
+        }
+
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, totalSize);
         const chunk = buffer.slice(start, end);
 
-        // Wait for buffer to clear if backpressure is high
-        // Max buffer size for Chrome is high, but we should be gentle
-        while (dataChannel.bufferedAmount > 256 * 1024) { // 256KB buffer limit for flow control
+        // Flow Control: Don't overwhelm the buffer
+        // 64KB threshold is safer for mobile connectivity
+        while (dataChannel.bufferedAmount > 64 * 1024) {
           await new Promise(r => setTimeout(r, 10));
         }
 
         try {
           dataChannel.send(chunk);
         } catch (e) {
-          console.error("Tx Error:", e);
+          console.error("❌ Tx Error:", e);
           break;
         }
 
-        if (i % 20 === 0) {
-          updateProgress(Math.floor((i / totalChunks) * 100));
+        if (i % 50 === 0 || i === totalChunks - 1) {
+          updateProgress(Math.floor(((i + 1) / totalChunks) * 100));
+          // Yield to event loop to keep UI responsive
+          await new Promise(r => setTimeout(r, 0));
         }
       }
 
       updateProgress(100);
-      dataChannel.send(JSON.stringify({ type: "end" }));
-      console.log("✅ Transfer Complete");
+
+      try {
+        dataChannel.send(JSON.stringify({ type: "end" }));
+        console.log("✅ Transfer Logic Complete");
+      } catch (e) { console.error("Error sending end signal", e); }
+
       setTimeout(() => {
-        overlay.style.display = "none";
-        liveBadge.style.display = "none";
-      }, 1000);
+        if (overlay) overlay.style.display = "none";
+        liveBadge.textContent = "DONE";
+        liveBadge.style.background = "#10b981";
+        setTimeout(() => liveBadge.style.display = "none", 2000);
+      }, 500);
     }
 
     async function uploadIso(blob) {
