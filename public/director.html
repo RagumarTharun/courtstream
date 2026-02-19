@@ -643,54 +643,55 @@
         </button>
       </div>
     </div>
+  </div>
 
-    <!-- STOP RECORDING MODAL -->
-    <div class="modal" id="stopModal" style="z-index:10000; display:none;">
-      <div class="modal-box">
-        <h3>Stop Recording</h3>
-        <p style="color:var(--muted); margin-bottom:20px;">Stop recording and collect camera files?</p>
+  <!-- STOP RECORDING MODAL -->
+  <div class="modal" id="stopModal" style="z-index:10000; display:none;">
+    <div class="modal-box">
+      <h3>Stop Recording</h3>
+      <p style="color:var(--muted); margin-bottom:20px;">Stop recording and collect camera files?</p>
 
-        <div class="recording-actions">
-          <button class="action-btn" onclick="confirmStopAndTransfer()">
-            <div style="font-weight:600; font-size:15px; margin-bottom:4px;">💾 Stop & Collect All</div>
-            <div style="font-size:11px; opacity:0.7;">
-              • Cameras send files to Director<br>
-              • Director Zips Program + ISOs
-            </div>
-          </button>
-        </div>
-
-        <button class="modal-btn" style="background:#334155; margin-top:15px; width:100%;" onclick="closeStopModal()">
-          Cancel
+      <div class="recording-actions">
+        <button class="action-btn" onclick="confirmStopAndTransfer()">
+          <div style="font-weight:600; font-size:15px; margin-bottom:4px;">💾 Stop & Collect All</div>
+          <div style="font-size:11px; opacity:0.7;">
+            • Cameras send files to Director<br>
+            • Director Zips Program + ISOs
+          </div>
         </button>
       </div>
+
+      <button class="modal-btn" style="background:#334155; margin-top:15px; width:100%;" onclick="closeStopModal()">
+        Cancel
+      </button>
     </div>
+  </div>
 
-    <!-- QUALITY SUB-MODAL -->
-    <div class="modal" id="qualitySubModal" style="z-index:10001; display:none;">
-      <div class="modal-box" style="width: 360px;">
-        <h3>Quality Feed Options</h3>
-        <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">
-          Which feeds do you want to process?
-        </p>
+  <!-- QUALITY SUB-MODAL -->
+  <div class="modal" id="qualitySubModal" style="z-index:10001; display:none;">
+    <div class="modal-box" style="width: 360px;">
+      <h3>Quality Feed Options</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">
+        Which feeds do you want to process?
+      </p>
 
-        <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
-          <button class="ctrl-btn" onclick="handleQualitySave('quality_all')"
-            style="width:100%; border-radius:8px; padding:12px;">
-            All Camera Feeds + Program
-          </button>
-          <button class="ctrl-btn" onclick="handleQualitySave('quality_program')"
-            style="width:100%; border-radius:8px; padding:12px;">
-            Program Feed Only (Edited)
-          </button>
-        </div>
+      <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
+        <button class="ctrl-btn" onclick="handleQualitySave('quality_all')"
+          style="width:100%; border-radius:8px; padding:12px;">
+          All Camera Feeds + Program
+        </button>
+        <button class="ctrl-btn" onclick="handleQualitySave('quality_program')"
+          style="width:100%; border-radius:8px; padding:12px;">
+          Program Feed Only (Edited)
+        </button>
+      </div>
 
-        <div class="modal-actions" style="margin-top:20px;">
-          <button class="ctrl-btn" onclick="closeQualitySubModal()"
-            style="background:transparent; border:none; color:var(--muted);">Back</button>
-        </div>
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="ctrl-btn" onclick="closeQualitySubModal()"
+          style="background:transparent; border:none; color:var(--muted);">Back</button>
       </div>
     </div>
+  </div>
   </div>
   </div>
 
