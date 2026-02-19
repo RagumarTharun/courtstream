@@ -1036,13 +1036,28 @@
 
           function handleDataMessage(id, data) {
             const p = peers[id];
-            if (!p) return;
+            if (!p) {
+              console.error(`Received data from unknown peer: ${id}. Peers available:`, Object.keys(peers));
+              return;
+            }
 
-            // console.log(`📨 Msg from ${id}, type: ${typeof data}`, data);
+            console.log(`📨 Msg from ${id}, type: ${typeof data}`, data instanceof ArrayBuffer ? `ArrayBuffer(${data.byteLength})` : data);
 
-            if (typeof data === "string") {
+            // Safe decode helper
+            let msgData = data;
+            if (data instanceof ArrayBuffer && !p.fileMeta) {
               try {
-                const msg = JSON.parse(data);
+                const text = new TextDecoder().decode(data);
+                if (text.startsWith("{") && text.includes("meta")) {
+                  console.log("⚠️ Converted ArrayBuffer to String for Meta");
+                  msgData = text;
+                }
+              } catch (e) { }
+            }
+
+            if (typeof msgData === "string") {
+              try {
+                const msg = JSON.parse(msgData);
                 if (msg.type === "meta") {
                   console.log(`📥 Receiving file from ${id}:`, msg);
                   p.fileMeta = msg;

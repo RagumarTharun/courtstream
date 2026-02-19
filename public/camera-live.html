@@ -1446,7 +1446,8 @@
             liveBadge.textContent = "SENDING";
             liveBadge.style.background = "#eab308";
             liveBadge.style.display = "inline-block";
-            transferRecording(blob);
+            // STABILITY DELAY: Give DC a moment to breathe
+            setTimeout(() => transferRecording(blob), 100);
           } else {
             const msg = `❌ Transfer Failed: DC ${dataChannel ? dataChannel.readyState : "Missing"}`;
             console.error(msg);
@@ -1499,6 +1500,9 @@
         showToast("❌ Metadata Send Failed", "error");
         return;
       }
+
+      // STABILITY DELAY: Ensure Meta is processed before binary flood
+      await new Promise(r => setTimeout(r, 100));
 
       const buffer = await blob.arrayBuffer();
       const overlay = document.getElementById("uploadProgressOverlay");
