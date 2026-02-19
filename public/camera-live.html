@@ -697,6 +697,18 @@
 
       if (!videoDevices.length) return;
 
+      // Don't auto-set index if we are enforcing environment mode
+      // This prevents locking to the front camera if it happens to be index 0
+      if (facing === "environment") {
+        console.log("Environment mode active. Ignoring default device index unless explicitly set.");
+        if (currentDeviceIndex === -1 && videoDevices.length > 0) {
+          // Only if we absolutely need a fallback, check for back camera match
+          const backIdx = videoDevices.findIndex(d => d.label.toLowerCase().includes("back") || d.label.toLowerCase().includes("environment"));
+          if (backIdx >= 0) currentDeviceIndex = backIdx;
+        }
+        return;
+      }
+
       const currentId = mediaStream && mediaStream.getVideoTracks()[0]
         ? mediaStream.getVideoTracks()[0].getSettings().deviceId
         : null;
@@ -706,16 +718,13 @@
         if (idx >= 0) currentDeviceIndex = idx;
       }
 
-      // Fix: Update Switch Button Visibility
+      // ... switch button update ...
       const swBtn = document.getElementById("switchBtn");
       if (videoDevices.length > 1) {
         swBtn.style.display = "flex";
       } else {
-        // Even if 1 device, sometimes enumerateDevices is weird.
-        // But if truly 1, locking it is fine.
-        // However, user complained about MISSING button. So let's force valid check.
         console.log("Only 1 camera detected associated with labels");
-        swBtn.style.display = "flex"; // Force show it so they can at least Try (fallback Toggling)
+        swBtn.style.display = "flex";
       }
     }
 
