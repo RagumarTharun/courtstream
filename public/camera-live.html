@@ -1439,17 +1439,20 @@
 
         // P2P TRANSFER (Director Collection Workflow)
         if (options && options.save === "transfer") {
+          console.log(`🔍 Checking P2P Status. DC: ${dataChannel ? "Found" : "Missing"}, State: ${dataChannel ? dataChannel.readyState : "N/A"}`);
+
+
           if (dataChannel && dataChannel.readyState === "open") {
             showToast("🚀 Starting Transfer...");
             liveBadge.textContent = "SENDING";
-            liveBadge.style.background = "#eab308"; // Yellow
+            liveBadge.style.background = "#eab308";
             liveBadge.style.display = "inline-block";
             transferRecording(blob);
           } else {
-            const msg = "❌ No Connection to Director";
+            const msg = `❌ Transfer Failed: DC ${dataChannel ? dataChannel.readyState : "Missing"}`;
             console.error(msg);
             showToast(msg, "error");
-            alert(msg + "\n\nPlease check network or refresh.");
+            alert(msg + "\n\nTry refreshing Director & Camera, then 'Sync'.");
             liveBadge.style.display = "none";
           }
           return;
@@ -1471,7 +1474,7 @@
     async function transferRecording(blob) {
       if (!dataChannel || dataChannel.readyState !== "open") {
         console.error("❌ Transfer aborted: Data channel not open.");
-        alert("Transfer failed: Connection to Director lost.");
+        showToast("❌ Connection Lost During Transfer", "error");
         return;
       }
 
@@ -1491,6 +1494,7 @@
         }));
       } catch (e) {
         console.error("❌ Failed to send metadata:", e);
+        showToast("❌ Metadata Send Failed", "error");
         return;
       }
 
@@ -1510,6 +1514,7 @@
         // Stop if channel closes mid-transfer
         if (dataChannel.readyState !== "open") {
           console.error("❌ Transfer stopped: Channel closed unexpectedly.");
+          showToast("❌ Transfer Interrupted", "error");
           break;
         }
 
@@ -1542,6 +1547,7 @@
       try {
         dataChannel.send(JSON.stringify({ type: "end" }));
         console.log("✅ Transfer Logic Complete");
+        showToast("✅ Transfer Complete");
       } catch (e) { console.error("Error sending end signal", e); }
 
       setTimeout(() => {
