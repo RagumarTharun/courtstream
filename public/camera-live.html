@@ -839,12 +839,19 @@
         pc.close();
       }
 
+      // RESET STATE
+      dataChannel = null;
+      videoSender = null;
+
       const config = await getTurnConfig();
       pc = new RTCPeerConnection(config);
 
       // Add Tracks (re-add if stream exists)
       if (mediaStream) {
-        mediaStream.getTracks().forEach(track => pc.addTrack(track, mediaStream));
+        mediaStream.getTracks().forEach(track => {
+          const sender = pc.addTrack(track, mediaStream);
+          if (track.kind === "video") videoSender = sender;
+        });
       }
 
       pc.onicecandidate = e => {
