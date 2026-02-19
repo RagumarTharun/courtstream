@@ -1525,11 +1525,10 @@
         const end = Math.min(start + CHUNK_SIZE, totalSize);
         const chunk = buffer.slice(start, end);
 
-        // Flow Control: Don't overwhelm the buffer
-        // 64KB threshold is safer for mobile connectivity
-        while (dataChannel.bufferedAmount > 64 * 1024) {
-          await new Promise(r => setTimeout(r, 10));
-        }
+        // Firehose: Send immediately (Chrome handles buffering internally)
+        // while (dataChannel.bufferedAmount > 64 * 1024) { 
+        //   await new Promise(r => setTimeout(r, 10));
+        // }
 
         try {
           dataChannel.send(chunk);
