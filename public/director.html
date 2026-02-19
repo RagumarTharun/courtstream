@@ -738,360 +738,364 @@
           </button>
         </div>
 
-      </div>
-    </div>
-  </div>
+        <!-- FORCE ACTIONS (Always Visible if needed) -->
+        <div id="forceActions" style="margin-top:20px; border-top:1px solid #334155; padding-top:10px;">
+          <button onclick="packageAndDownloadZip()"
+            style="background:transparent; color:#ef4444; border:1px border #ef4444; font-size:12px; cursor:pointer; width:100%; padding:8px; border-radius:4px;">
+            ⚠️ Stuck? Force Download Available Files
+          </button>
+        </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/lib/ffmpeg/ffmpeg.js"></script>
-  <script src="/lib/ffmpeg/ffmpeg-util.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script>
-    /* ===== STREAM INFO ===== */
-    const params = new URLSearchParams(location.search);
-    const streamId = params.get("stream");
-    let streamName = params.get("name");
-    let streamLabel = "";
+        <script src="/socket.io/socket.io.js"></script>
+        <script src="/lib/ffmpeg/ffmpeg.js"></script>
+        <script src="/lib/ffmpeg/ffmpeg-util.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+        <script>
+          /* ===== STREAM INFO ===== */
+          const params = new URLSearchParams(location.search);
+          const streamId = params.get("stream");
+          let streamName = params.get("name");
+          let streamLabel = "";
 
-    // Mobile Warning Check
-    if (window.innerWidth < 900) {
-      document.getElementById("mobileWarning").style.display = "flex";
-    }
-
-    async function updateStreamBadge() {
-      let name = streamName;
-
-      if (!name && streamId) {
-        try {
-          const res = await fetch("/api/streams");
-          if (res.ok) {
-            const streams = await res.json();
-            const match = streams.find(s => s.id === streamId);
-            if (match) name = match.name;
+          // Mobile Warning Check
+          if (window.innerWidth < 900) {
+            document.getElementById("mobileWarning").style.display = "flex";
           }
-        } catch (e) {
-          console.warn("Failed to fetch stream details:", e);
-        }
-      }
 
-      const label = name || streamId || "CourtStream Director";
-      streamLabel = label;
+          async function updateStreamBadge() {
+            let name = streamName;
 
-      const badge = document.getElementById("streamBadge");
-      if (badge) {
-        badge.innerText = label + " • LIVE";
-        badge.style.display = "block";
-      }
-    }
-
-    // Initial call
-    updateStreamBadge();
-
-    // Refresh every 10s to ensure name catches up if it was just created
-    setInterval(updateStreamBadge, 10000);
-
-    /* ===== SOCKET / STATE ===== */
-    const socket = io();
-    const mainVideo = document.getElementById("mainVideo");
-    const placeholder = document.getElementById("placeholder");
-    const strip = document.getElementById("cameraStrip");
-    const programCanvas = document.getElementById("programCanvas");
-    const programCtx = programCanvas.getContext("2d");
-
-    const peers = {};      // camera socketId -> { pc, stream, slot, name }
-    const viewers = {};    // viewer socketId -> { pc, sender }
-    const rotations = {}; // socketId -> rotation degrees
-    let activeCameraId = null; // Fix: Declare missing state variable
-    let currentLiveId = null;
-    const pendingViewers = new Set();
-
-    let programStream = programCanvas.captureStream(30);
-    mainVideo.srcObject = programStream;
-    mainVideo.onloadedmetadata = () => mainVideo.play().catch(() => { });
-
-    let selectedStream = null;
-    let drawLoopRunning = false;
-
-    /* ===== RECORDING ===== */
-    let recordingState = "idle"; // idle | recording | paused
-    let recordStartTime = 0;
-    let recordTimerInt = null;
-    let programRecorder = null;
-    const programChunks = [];
-    const cameraRecorders = {}; // id -> { recorder, chunks }
-
-    // Safety Lock for FFmpeg to prevent "Both" mode collision
-    let isDownloadingInstant = false;
-    let isRenderPending = false;
-
-    /* ===== JOIN ===== */
-    socket.emit("join", { room: streamId, role: "director" });
-
-    const isIsoMode = true; // Fix: Define isIsoMode for ISO recording logic
-
-    /* ===== JOIN ===== */
-    socket.emit("join", { room: streamId, role: "director" });
-
-    // Removed aggressive polling to prevent race conditions
-    // Socket.io 'peer-joined' event will handle new connections
-
-
-    // EXIT WARNING
-    window.addEventListener("beforeunload", (e) => {
-      if (recordingState === "recording") {
-        e.preventDefault();
-        e.returnValue = "Recording in progress! Leaving will stop the recording.";
-        return e.returnValue;
-      }
-    });
-
-    /* ===== EXISTING PEERS ===== */
-    socket.on("existing-peers", peersList => {
-      console.log("👥 Existing peers:", peersList);
-      if (!Array.isArray(peersList)) return;
-
-      const activeIds = new Set(peersList.map(p => p.id));
-
-      // 1. Add new peers
-      peersList.forEach(({ id, role }) => {
-        if (!id || id === socket.id) return;
-        if (role === "viewer") {
-          if (!viewers[id]) queueOrCreateViewer(id);
-          return;
-        }
-        if (role === "director") return; // Ignore other directors
-        if (!peers[id]) createPeer(id);
-      });
-
-      // 2. Garbage Collect Stale Peers
-      Object.keys(peers).forEach(id => {
-        if (!activeIds.has(id)) {
-          console.warn("🧹 Removing stale peer (GC):", id);
-          removePeer(id);
-        }
-      });
-    });
-
-    /* ===== PEER JOINED ===== */
-    socket.on("peer-joined", ({ id, role }) => {
-      console.log("👤 Peer joined:", id, "role:", role);
-      if (!id || id === socket.id) return;
-      if (role === "viewer") {
-        if (viewers[id]) return;
-        queueOrCreateViewer(id);
-        return;
-      }
-      if (role === "director") return;
-      if (peers[id]) return;
-      createPeer(id);
-    });
-
-    socket.on("viewer-ready", ({ id }) => {
-      console.log("👀 Viewer ready:", id);
-      if (!id) return;
-      if (!viewers[id]) {
-        createViewerPeer(id);
-      } else {
-        console.log("👀 Viewer already exists, swapping track to current live");
-        updateViewerFeeds();
-      }
-    });
-
-    /* ===== PEER LEFT ===== */
-    function removePeer(id) {
-      const p = peers[id];
-      if (!p) return;
-
-      p.pc.close();
-      p.slot.remove();
-      delete peers[id];
-      delete rotations[id];
-
-      if (currentLiveId === id) {
-        currentLiveId = null;
-        selectedStream = null;
-        placeholder.style.display = "block";
-        updateViewerFeeds();
-      }
-    }
-
-    socket.on("peer-left", ({ id }) => {
-      if (viewers[id]) {
-        const v = viewers[id];
-        v.pc.close();
-        delete viewers[id];
-        return;
-      }
-      removePeer(id);
-    });
-
-    socket.on("camera-left", ({ id }) => {
-      if (viewers[id]) {
-        const v = viewers[id];
-        v.pc.close();
-        delete viewers[id];
-        return;
-      }
-      removePeer(id);
-    });
-
-    /* ===== CAMERA ROTATION (MANUAL) ===== */
-    socket.on("camera-rotate", ({ from, rotation }) => {
-      rotations[from] = rotation;
-      const p = peers[from];
-      if (!p) return;
-
-      const v = p.slot.querySelector("video");
-      if (v) v.style.transform = `rotate(${rotation}deg)`;
-    });
-
-    /* ===== SIGNAL HANDLER (CRITICAL FIX) ===== */
-    socket.on("signal", async ({ from, data }) => {
-      // console.log("📡 Signal from:", from, data.type || "candidate");
-      const p = peers[from];
-      if (!p) {
-        // If we get a signal from someone we don't have a peer for, 
-        // it might be a race condition or a viewer. Ignored for now.
-        return;
-      }
-
-      try {
-        if (data.description || data.type === "answer") {
-          console.log("✅ Received ANSWER from", from);
-          await p.pc.setRemoteDescription(new RTCSessionDescription(data));
-        } else if (data.candidate) {
-          // console.log("🧊 Received CANDIDATE from", from);
-          await p.pc.addIceCandidate(new RTCIceCandidate(data));
-        }
-      } catch (e) {
-        console.error("❌ Signal Error with " + from, e);
-      }
-    });
-
-    /* ===== CREATE CAMERA PEER ===== */
-    let cameraCount = 0; // Legacy, kept for safety but unused now
-
-    function getNextCameraName() {
-      let i = 1;
-      while (true) {
-        const name = `Camera ${i}`;
-        // Check if name exists in inputs
-        const inputs = Array.from(document.querySelectorAll(".camera-name"));
-        const exists = inputs.some(input => input.value === name);
-        if (!exists) return name;
-        i++;
-      }
-    }
-
-    // Refresh Warning
-    window.addEventListener("beforeunload", (e) => {
-      // If recording, always warn
-      if (recordingState === "recording") {
-        e.preventDefault();
-        e.returnValue = "Recording in progress! Refreshing will stop the recording.";
-        return e.returnValue;
-      }
-
-      // General warning if cameras are connected (optional, but good for "Warn refresh on director page")
-      if (Object.keys(peers).length > 0) {
-        e.preventDefault();
-        e.returnValue = "Cameras are connected. Refreshing will disconnect them temporarily.";
-        return e.returnValue;
-      }
-    });
-    let turnConfig = null;
-
-    async function getTurnConfig() {
-      if (turnConfig) return turnConfig;
-      try {
-        const res = await fetch("/api/turn-credentials");
-        turnConfig = await res.json();
-        return turnConfig;
-      } catch (e) {
-        console.error("Failed to fetch TURN config:", e);
-        return { iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] };
-      }
-    }
-
-    /* ===== FILE RECEIVER ===== */
-    const receivedRecordings = {}; // Store completed blobs by camera ID
-
-    function handleDataMessage(id, data) {
-      const p = peers[id];
-      if (!p) return;
-
-      // console.log(`📨 Msg from ${id}, type: ${typeof data}`, data);
-
-      if (typeof data === "string") {
-        try {
-          const msg = JSON.parse(data);
-          if (msg.type === "meta") {
-            console.log(`📥 Receiving file from ${id}:`, msg);
-            p.fileMeta = msg;
-            p.fileBuffer = [];
-            p.receivedSize = 0;
-
-            // Show transfer UI
-            const dash = document.getElementById("transferModal");
-            if (dash.style.display !== "flex") dash.style.display = "flex";
-
-            // Ensure Program Listing exists
-            if (!document.getElementById("xfer_program")) {
-              updateTransferUI("program", 100, true);
-              const row = document.getElementById("xfer_program");
-              if (row) row.querySelector(".name").innerText = "Director Program (Local)";
+            if (!name && streamId) {
+              try {
+                const res = await fetch("/api/streams");
+                if (res.ok) {
+                  const streams = await res.json();
+                  const match = streams.find(s => s.id === streamId);
+                  if (match) name = match.name;
+                }
+              } catch (e) {
+                console.warn("Failed to fetch stream details:", e);
+              }
             }
 
-            updateTransferUI(id, 0);
-          } else if (msg.type === "end") {
-            console.log(`✅ File received from ${id}. Size: ${p.receivedSize}`);
-            const blob = new Blob(p.fileBuffer, { type: p.fileMeta ? p.fileMeta.mime : "video/webm" });
-            receivedRecordings[id] = blob;
+            const label = name || streamId || "CourtStream Director";
+            streamLabel = label;
 
-            // Mark this camera as done in UI
-            updateTransferUI(id, 100, true);
-
-            // Check if all needed transfers are done
-            checkTransfersComplete();
+            const badge = document.getElementById("streamBadge");
+            if (badge) {
+              badge.innerText = label + " • LIVE";
+              badge.style.display = "block";
+            }
           }
-        } catch (e) { console.error("Error parsing DC msg:", e); }
-      } else {
-        // Binary Chunk
-        if (!p.fileMeta) console.warn("Received binary before meta from", id);
 
-        // If data is Blob (shouldn't be with binaryType=arraybuffer, but safety check)
-        if (data instanceof Blob) {
-          console.warn("Received Blob instead of ArrayBuffer, converting...");
-          // This is async, might break order. binaryType fix should prevent this.
-          // data.arrayBuffer().then(buf => ... ) 
-          // For now assume ArrayBuffer due to explicit setting
-        }
+          // Initial call
+          updateStreamBadge();
 
-        p.fileBuffer.push(data);
-        p.receivedSize += data.byteLength || data.size || 0;
+          // Refresh every 10s to ensure name catches up if it was just created
+          setInterval(updateStreamBadge, 10000);
 
-        if (p.fileMeta && p.fileMeta.size > 0) {
-          const pct = Math.round((p.receivedSize / p.fileMeta.size) * 100);
-          if (pct % 5 === 0 || pct === 100) updateTransferUI(id, pct);
-        }
-      }
-    }
+          /* ===== SOCKET / STATE ===== */
+          const socket = io();
+          const mainVideo = document.getElementById("mainVideo");
+          const placeholder = document.getElementById("placeholder");
+          const strip = document.getElementById("cameraStrip");
+          const programCanvas = document.getElementById("programCanvas");
+          const programCtx = programCanvas.getContext("2d");
 
-    function updateTransferUI(id, percent, done = false) {
-      let row = document.getElementById(`xfer_${id}`);
-      if (!row) {
-        const list = document.getElementById("transferList");
-        row = document.createElement("div");
-        row.id = `xfer_${id}`;
-        row.className = "file-item";
-        row.style.display = "block";
+          const peers = {};      // camera socketId -> { pc, stream, slot, name }
+          const viewers = {};    // viewer socketId -> { pc, sender }
+          const rotations = {}; // socketId -> rotation degrees
+          let activeCameraId = null; // Fix: Declare missing state variable
+          let currentLiveId = null;
+          const pendingViewers = new Set();
 
-        // Fix Name Label
-        let displayName = `Camera ${id.substring(0, 4)}`;
-        if (id === "program") displayName = "Director Program (Local)";
-        if (peers[id] && peers[id].name) displayName = peers[id].name;
+          let programStream = programCanvas.captureStream(30);
+          mainVideo.srcObject = programStream;
+          mainVideo.onloadedmetadata = () => mainVideo.play().catch(() => { });
 
-        row.innerHTML = `
+          let selectedStream = null;
+          let drawLoopRunning = false;
+
+          /* ===== RECORDING ===== */
+          let recordingState = "idle"; // idle | recording | paused
+          let recordStartTime = 0;
+          let recordTimerInt = null;
+          let programRecorder = null;
+          const programChunks = [];
+          const cameraRecorders = {}; // id -> { recorder, chunks }
+
+          // Safety Lock for FFmpeg to prevent "Both" mode collision
+          let isDownloadingInstant = false;
+          let isRenderPending = false;
+
+          /* ===== JOIN ===== */
+          socket.emit("join", { room: streamId, role: "director" });
+
+          const isIsoMode = true; // Fix: Define isIsoMode for ISO recording logic
+
+          /* ===== JOIN ===== */
+          socket.emit("join", { room: streamId, role: "director" });
+
+          // Removed aggressive polling to prevent race conditions
+          // Socket.io 'peer-joined' event will handle new connections
+
+
+          // EXIT WARNING
+          window.addEventListener("beforeunload", (e) => {
+            if (recordingState === "recording") {
+              e.preventDefault();
+              e.returnValue = "Recording in progress! Leaving will stop the recording.";
+              return e.returnValue;
+            }
+          });
+
+          /* ===== EXISTING PEERS ===== */
+          socket.on("existing-peers", peersList => {
+            console.log("👥 Existing peers:", peersList);
+            if (!Array.isArray(peersList)) return;
+
+            const activeIds = new Set(peersList.map(p => p.id));
+
+            // 1. Add new peers
+            peersList.forEach(({ id, role }) => {
+              if (!id || id === socket.id) return;
+              if (role === "viewer") {
+                if (!viewers[id]) queueOrCreateViewer(id);
+                return;
+              }
+              if (role === "director") return; // Ignore other directors
+              if (!peers[id]) createPeer(id);
+            });
+
+            // 2. Garbage Collect Stale Peers
+            Object.keys(peers).forEach(id => {
+              if (!activeIds.has(id)) {
+                console.warn("🧹 Removing stale peer (GC):", id);
+                removePeer(id);
+              }
+            });
+          });
+
+          /* ===== PEER JOINED ===== */
+          socket.on("peer-joined", ({ id, role }) => {
+            console.log("👤 Peer joined:", id, "role:", role);
+            if (!id || id === socket.id) return;
+            if (role === "viewer") {
+              if (viewers[id]) return;
+              queueOrCreateViewer(id);
+              return;
+            }
+            if (role === "director") return;
+            if (peers[id]) return;
+            createPeer(id);
+          });
+
+          socket.on("viewer-ready", ({ id }) => {
+            console.log("👀 Viewer ready:", id);
+            if (!id) return;
+            if (!viewers[id]) {
+              createViewerPeer(id);
+            } else {
+              console.log("👀 Viewer already exists, swapping track to current live");
+              updateViewerFeeds();
+            }
+          });
+
+          /* ===== PEER LEFT ===== */
+          function removePeer(id) {
+            const p = peers[id];
+            if (!p) return;
+
+            p.pc.close();
+            p.slot.remove();
+            delete peers[id];
+            delete rotations[id];
+
+            if (currentLiveId === id) {
+              currentLiveId = null;
+              selectedStream = null;
+              placeholder.style.display = "block";
+              updateViewerFeeds();
+            }
+          }
+
+          socket.on("peer-left", ({ id }) => {
+            if (viewers[id]) {
+              const v = viewers[id];
+              v.pc.close();
+              delete viewers[id];
+              return;
+            }
+            removePeer(id);
+          });
+
+          socket.on("camera-left", ({ id }) => {
+            if (viewers[id]) {
+              const v = viewers[id];
+              v.pc.close();
+              delete viewers[id];
+              return;
+            }
+            removePeer(id);
+          });
+
+          /* ===== CAMERA ROTATION (MANUAL) ===== */
+          socket.on("camera-rotate", ({ from, rotation }) => {
+            rotations[from] = rotation;
+            const p = peers[from];
+            if (!p) return;
+
+            const v = p.slot.querySelector("video");
+            if (v) v.style.transform = `rotate(${rotation}deg)`;
+          });
+
+          /* ===== SIGNAL HANDLER (CRITICAL FIX) ===== */
+          socket.on("signal", async ({ from, data }) => {
+            // console.log("📡 Signal from:", from, data.type || "candidate");
+            const p = peers[from];
+            if (!p) {
+              // If we get a signal from someone we don't have a peer for, 
+              // it might be a race condition or a viewer. Ignored for now.
+              return;
+            }
+
+            try {
+              if (data.description || data.type === "answer") {
+                console.log("✅ Received ANSWER from", from);
+                await p.pc.setRemoteDescription(new RTCSessionDescription(data));
+              } else if (data.candidate) {
+                // console.log("🧊 Received CANDIDATE from", from);
+                await p.pc.addIceCandidate(new RTCIceCandidate(data));
+              }
+            } catch (e) {
+              console.error("❌ Signal Error with " + from, e);
+            }
+          });
+
+          /* ===== CREATE CAMERA PEER ===== */
+          let cameraCount = 0; // Legacy, kept for safety but unused now
+
+          function getNextCameraName() {
+            let i = 1;
+            while (true) {
+              const name = `Camera ${i}`;
+              // Check if name exists in inputs
+              const inputs = Array.from(document.querySelectorAll(".camera-name"));
+              const exists = inputs.some(input => input.value === name);
+              if (!exists) return name;
+              i++;
+            }
+          }
+
+          // Refresh Warning
+          window.addEventListener("beforeunload", (e) => {
+            // If recording, always warn
+            if (recordingState === "recording") {
+              e.preventDefault();
+              e.returnValue = "Recording in progress! Refreshing will stop the recording.";
+              return e.returnValue;
+            }
+
+            // General warning if cameras are connected (optional, but good for "Warn refresh on director page")
+            if (Object.keys(peers).length > 0) {
+              e.preventDefault();
+              e.returnValue = "Cameras are connected. Refreshing will disconnect them temporarily.";
+              return e.returnValue;
+            }
+          });
+          let turnConfig = null;
+
+          async function getTurnConfig() {
+            if (turnConfig) return turnConfig;
+            try {
+              const res = await fetch("/api/turn-credentials");
+              turnConfig = await res.json();
+              return turnConfig;
+            } catch (e) {
+              console.error("Failed to fetch TURN config:", e);
+              return { iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] };
+            }
+          }
+
+          /* ===== FILE RECEIVER ===== */
+          const receivedRecordings = {}; // Store completed blobs by camera ID
+
+          function handleDataMessage(id, data) {
+            const p = peers[id];
+            if (!p) return;
+
+            // console.log(`📨 Msg from ${id}, type: ${typeof data}`, data);
+
+            if (typeof data === "string") {
+              try {
+                const msg = JSON.parse(data);
+                if (msg.type === "meta") {
+                  console.log(`📥 Receiving file from ${id}:`, msg);
+                  p.fileMeta = msg;
+                  p.fileBuffer = [];
+                  p.receivedSize = 0;
+
+                  // Show transfer UI
+                  const dash = document.getElementById("transferModal");
+                  if (dash.style.display !== "flex") dash.style.display = "flex";
+
+                  // Ensure Program Listing exists
+                  if (!document.getElementById("xfer_program")) {
+                    updateTransferUI("program", 100, true);
+                    const row = document.getElementById("xfer_program");
+                    if (row) row.querySelector(".name").innerText = "Director Program (Local)";
+                  }
+
+                  updateTransferUI(id, 0);
+                } else if (msg.type === "end") {
+                  console.log(`✅ File received from ${id}. Size: ${p.receivedSize}`);
+                  const blob = new Blob(p.fileBuffer, { type: p.fileMeta ? p.fileMeta.mime : "video/webm" });
+                  receivedRecordings[id] = blob;
+
+                  // Mark this camera as done in UI
+                  updateTransferUI(id, 100, true);
+
+                  // Check if all needed transfers are done
+                  checkTransfersComplete();
+                }
+              } catch (e) { console.error("Error parsing DC msg:", e); }
+            } else {
+              // Binary Chunk
+              if (!p.fileMeta) console.warn("Received binary before meta from", id);
+
+              // If data is Blob (shouldn't be with binaryType=arraybuffer, but safety check)
+              if (data instanceof Blob) {
+                console.warn("Received Blob instead of ArrayBuffer, converting...");
+                // This is async, might break order. binaryType fix should prevent this.
+                // data.arrayBuffer().then(buf => ... ) 
+                // For now assume ArrayBuffer due to explicit setting
+              }
+
+              p.fileBuffer.push(data);
+              p.receivedSize += data.byteLength || data.size || 0;
+
+              if (p.fileMeta && p.fileMeta.size > 0) {
+                const pct = Math.round((p.receivedSize / p.fileMeta.size) * 100);
+                if (pct % 5 === 0 || pct === 100) updateTransferUI(id, pct);
+              }
+            }
+          }
+
+          function updateTransferUI(id, percent, done = false) {
+            let row = document.getElementById(`xfer_${id}`);
+            if (!row) {
+              const list = document.getElementById("transferList");
+              row = document.createElement("div");
+              row.id = `xfer_${id}`;
+              row.className = "file-item";
+              row.style.display = "block";
+
+              // Fix Name Label
+              let displayName = `Camera ${id.substring(0, 4)}`;
+              if (id === "program") displayName = "Director Program (Local)";
+              if (peers[id] && peers[id].name) displayName = peers[id].name;
+
+              row.innerHTML = `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                     <span class="name">${displayName}</span>
                     <span class="pct" style="color: #94a3b8;">0%</span>
@@ -1100,594 +1104,594 @@
                     <div class="progress-fill dash-fill"></div>
                 </div>
             `;
-        list.appendChild(row);
-      }
+              list.appendChild(row);
+            }
 
-      row.querySelector(".progress-fill").style.width = percent + "%";
-      row.querySelector(".pct").innerText = percent + "%";
-      if (done) {
-        row.querySelector(".progress-fill").classList.add("done");
-        row.querySelector(".progress-fill").style.background = "#10b981";
-        row.querySelector(".pct").innerText = "Ready";
-        row.querySelector(".pct").style.color = "#10b981";
-      }
-    }
-
-    async function checkTransfersComplete() {
-      // Check against active cameras locally known (from peers)
-      // Note: director program is already local, so we just need peers
-      const activePeers = Object.keys(peers).filter(pid => peers[pid].stream); // only active streams
-
-      const missing = activePeers.filter(pid => !receivedRecordings[pid]);
-      const allReceived = missing.length === 0;
-
-      console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
-
-      if (allReceived) {
-        console.log("🎉 All ISO transfers complete. Starting Packaging...");
-        setTimeout(() => {
-          packageAndDownloadZip();
-        }, 1000);
-      }
-    }
-
-    async function packageAndDownloadZip() {
-      console.log("📦 Packaging ZIP...");
-
-      // Safety check: wait for programBlob if it's still processing
-      if (!programBlob && programRecorder) {
-        console.log("⏳ Waiting for Program Blob...");
-        await new Promise(r => setTimeout(r, 1000));
-      }
-
-      const zip = new JSZip();
-      const folder = zip.folder(`session_${isoSessionId || Date.now()}`);
-
-      // 1. Add EDL
-      const edlBlob = new Blob([JSON.stringify(isoEdl, null, 2)], { type: "application/json" });
-      folder.file("edl_session.json", edlBlob);
-
-      // 2. Add Program Recording (Local)
-      if (programBlob) {
-        folder.file("program.webm", programBlob);
-      } else {
-        console.warn("⚠️ No Program Blob found to zip");
-      }
-
-      // 3. Add Received Camera Files
-      let camCount = 0;
-      for (const [camId, blob] of Object.entries(receivedRecordings)) {
-        folder.file(`iso_cam_${camId}.webm`, blob);
-        camCount++;
-      }
-      console.log(`📦 Zipping ${camCount} camera files + Program + EDL`);
-
-      // 4. Generate & Download
-      const content = await zip.generateAsync({ type: "blob" });
-      saveBlob(content, `session_${isoSessionId}.zip`);
-
-      // 5. Cleanup
-      // Don't hide modal immediately, verify download
-      document.getElementById("downloadActions").style.display = "flex";
-
-      // Clear for next time internally but keep UI open
-      isoEdl = [];
-      receivedRecordings = {};
-      programChunks = [];
-      programBlob = null;
-
-      // alert("Session Saved! You can now load this ZIP in the Render Studio.");
-    }
-
-    function saveBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-
-    async function createPeer(id) {
-      if (!id || peers[id]) return;
-
-      const config = await getTurnConfig();
-      const pc = new RTCPeerConnection(config);
-
-      pc.addTransceiver("video", { direction: "recvonly" });
-      pc.addTransceiver("audio", { direction: "recvonly" });
-
-      // DOUBLE CHECK DOM FOR DUPLICATES
-      const existingSlot = document.getElementById(`slot-${id}`);
-      if (existingSlot) existingSlot.remove();
-
-      const slot = document.createElement("div");
-      slot.id = `slot-${id}`;
-      slot.className = "camera-slot";
-
-      const nameInput = document.createElement("input");
-      nameInput.className = "camera-name";
-      // cameraCount += 1; // Removed
-      nameInput.value = getNextCameraName();
-
-      const actions = document.createElement("div");
-      actions.className = "camera-actions";
-
-      slot.appendChild(actions);
-      slot.appendChild(nameInput);
-
-      strip.appendChild(slot);
-
-      peers[id] = { pc, slot, stream: null, name: nameInput.value };
-
-      nameInput.oninput = () => {
-        peers[id].name = nameInput.value.trim() || `Camera ${cameraCount}`;
-      };
-
-      pc.ontrack = e => {
-        console.log("🎥 Received track from:", id);
-        if (peers[id].stream) return;
-
-        const stream = e.streams[0] || new MediaStream([e.track]);
-        peers[id].stream = stream;
-
-        const v = document.createElement("video");
-        v.autoplay = true;
-        v.muted = true;
-        v.playsInline = true;
-        v.srcObject = stream;
-        v.style.transform = `rotate(${rotations[id] || 0}deg)`;
-
-        v.onloadedmetadata = () => {
-          console.log("🎬 Video metadata loaded for:", id);
-          v.play().catch(err => console.error("Video play error:", err));
-        };
-
-        slot.appendChild(v);
-        slot.onclick = () => setLiveCamera(id);
-
-        if (recordingState !== "idle") {
-          startCameraRecorder(id, stream);
-        }
-      };
-
-      pc.onicecandidate = e => {
-        if (e.candidate) {
-          socket.emit("signal", { to: id, data: e.candidate });
-        }
-      };
-
-      // Create Data Channel for File Transfer
-      const dc = pc.createDataChannel("fileTransfer");
-      dc.binaryType = "arraybuffer"; // Ensure we get ArrayBuffers, not Blobs
-
-      peers[id].dc = dc;
-      peers[id].fileBuffer = [];
-      peers[id].fileMeta = null;
-      peers[id].receivedSize = 0;
-
-      dc.onopen = () => console.log(`✅ Data Channel Open with ${id}`);
-      dc.onmessage = (event) => handleDataMessage(id, event.data);
-
-      pc.createOffer()
-        .then(o => pc.setLocalDescription(o))
-        .then(() => {
-          console.log("📡 Director: Sending offer to camera", id);
-          socket.emit("signal", { to: id, data: pc.localDescription });
-        })
-        .catch(err => console.error("Offer error:", err));
-    }
-
-    function setLiveCamera(id) {
-      if (!id || !peers[id] || !peers[id].stream) {
-        console.warn("⚠️ Cannot set live: No stream for", id);
-        return;
-      }
-      activeCameraId = id; // Unify state
-      currentLiveId = id;
-      selectedStream = peers[id].stream;
-
-      // Update EDL if recording ISO
-      if (recordingState === "recording" && isIsoMode) {
-        isoEdl.push({
-          timestamp: Date.now() - recordStartTime,
-          camId: id
-        });
-      }
-
-      document.querySelectorAll(".camera-slot").forEach(s => s.classList.remove("active", "live"));
-      if (peers[id].slot) peers[id].slot.classList.add("live", "active");
-
-      Object.keys(peers).forEach(peerId => {
-        socket.emit("control", {
-          to: peerId,
-          data: {
-            type: "live",
-            on: peerId === id,
-            name: peers[peerId] ? peers[peerId].name : "Camera"
-          }
-        });
-      });
-
-      if (placeholder) placeholder.style.setProperty("display", "none", "important");
-      updateViewerFeeds();
-      startDrawLoop();
-    }
-
-    /* ===== VIEWERS ===== */
-    async function createViewerPeer(id) {
-      console.log("📡 Director: Creating peer for viewer", id);
-      const track = getViewerTrack();
-      if (!track) {
-        console.warn("⚠️ Director: No track available for viewer!");
-        return;
-      }
-
-      const config = await getTurnConfig();
-      const pc = new RTCPeerConnection(config);
-
-      const stream = new MediaStream([track]);
-      const sender = pc.addTrack(track, stream);
-      viewers[id] = { pc, sender };
-
-      pc.onicecandidate = e => {
-        if (e.candidate) {
-          socket.emit("signal", { to: id, data: e.candidate });
-        }
-      };
-
-      pc.createOffer()
-        .then(o => pc.setLocalDescription(o))
-        .then(() => {
-          console.log("📡 Director: Sending offer to viewer", id);
-          socket.emit("signal", { to: id, data: pc.localDescription });
-        })
-        .catch(err => console.error("Offer error:", err));
-    }
-
-    function queueOrCreateViewer(id) {
-      createViewerPeer(id);
-    }
-
-    function flushPendingViewers() {
-      // No-op now as we always have a program track
-    }
-
-    function updateViewerFeeds() {
-      const track = getViewerTrack();
-      if (!track) return;
-      Object.values(viewers).forEach(v => {
-        if (v.sender) {
-          v.sender.replaceTrack(track).catch(err => console.error("replaceTrack error:", err));
-        }
-      });
-    }
-
-    function getViewerTrack() {
-      // ALWAYS use programStream (canvas) for viewers for maximum stability.
-      // This ensures viewers don't experience disconnects when cameras swap.
-      return programStream.getVideoTracks()[0];
-    }
-
-    /* ===== PROGRAM CANVAS DRAW ===== */
-    function startDrawLoop() {
-      if (drawLoopRunning) return;
-      drawLoopRunning = true;
-
-      const draw = () => {
-        const w = programCanvas.width;
-        const h = programCanvas.height;
-
-        programCtx.fillStyle = "#000";
-        programCtx.fillRect(0, 0, w, h);
-
-        if (currentLiveId && peers[currentLiveId]) {
-          const videoEl = peers[currentLiveId].slot.querySelector("video");
-
-          if (videoEl && videoEl.readyState >= 2) {
-            const vw = videoEl.videoWidth;
-            const vh = videoEl.videoHeight;
-
-            if (vw > 0 && vh > 0) {
-              const scale = Math.min(w / vw, h / vh);
-              const dw = vw * scale;
-              const dh = vh * scale;
-              const rot = rotations[currentLiveId] || 0;
-
-              programCtx.save();
-              programCtx.translate(w / 2, h / 2);
-              programCtx.rotate((rot * Math.PI) / 180);
-              programCtx.drawImage(videoEl, -dw / 2, -dh / 2, dw, dh);
-              programCtx.restore();
+            row.querySelector(".progress-fill").style.width = percent + "%";
+            row.querySelector(".pct").innerText = percent + "%";
+            if (done) {
+              row.querySelector(".progress-fill").classList.add("done");
+              row.querySelector(".progress-fill").style.background = "#10b981";
+              row.querySelector(".pct").innerText = "Ready";
+              row.querySelector(".pct").style.color = "#10b981";
             }
           }
-        }
 
-        // Use requestAnimationFrame for smoothness, 
-        // but also a setTimeout fallback so it keeps ticking in background tabs
-        if (document.hidden) {
-          setTimeout(draw, 100); // Lower rate when hidden to save CPU but stay "alive"
-        } else {
-          requestAnimationFrame(draw);
-        }
-      };
+          async function checkTransfersComplete() {
+            // Check against active cameras locally known (from peers)
+            // Note: director program is already local, so we just need peers
+            const activePeers = Object.keys(peers).filter(pid => peers[pid].stream); // only active streams
 
-      requestAnimationFrame(draw);
-    }
-    startDrawLoop();
+            const missing = activePeers.filter(pid => !receivedRecordings[pid]);
+            const allReceived = missing.length === 0;
 
-    /* ===== RECORDING UI ===== */
-    // ISO STATE
-    let isoSessionId = null;
-    let isoEdl = []; // [{timestamp, camId}]
-    /* uploadedCameras removed - moved to downloads.html */
+            console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
 
-    const recordBar = document.getElementById("recordBar");
-    const recordTimer = document.getElementById("recordTimer");
-    const recordStatus = document.getElementById("recordStatus");
-    const recordBtn = document.getElementById("recordBtn");
-    const recIcon = document.querySelector(".rec-icon");
-    const stopIcon = document.querySelector(".stop-icon");
-    // const isoToggle = document.getElementById("isoToggle"); // REMOVED
-    const qrBtn = document.getElementById("qrBtn");
-
-    /* ===== RECORD TOGGLE ===== */
-    function toggleRecord() {
-      if (recordingState === "idle") {
-        startRecording();
-      } else {
-        stopRecordingRequest();
-      }
-    }
-
-    recordBtn.onclick = toggleRecord;
-
-    // Fix: Attach QR button listener
-    if (qrBtn) qrBtn.onclick = openQr;
-
-    // ISO Toggle logic removed
-
-    // Duplicate stopRecordingRequest removed - Logic moved to confirmStopAndTransfer
-
-    async function packageAndDownloadZip() {
-      console.log("📦 Packaging ZIP...");
-
-      // Safety check: wait for programBlob if it's still processing
-      if (!programBlob && programRecorder) {
-        console.log("⏳ Waiting for Program Blob...");
-        await new Promise(r => setTimeout(r, 1000));
-      }
-
-      const zip = new JSZip();
-      const folder = zip.folder(`session_${isoSessionId || Date.now()}`);
-
-      // 1. Add EDL
-      const edlBlob = new Blob([JSON.stringify(isoEdl, null, 2)], { type: "application/json" });
-      folder.file("edl_session.json", edlBlob);
-
-      // 2. Add Program Recording (Local)
-      if (programBlob) {
-        folder.file("program.webm", programBlob);
-      } else {
-        console.warn("⚠️ No Program Blob found to zip");
-      }
-
-      // 3. Add Received Camera Files
-      let camCount = 0;
-      for (const [camId, blob] of Object.entries(receivedRecordings)) {
-        folder.file(`iso_cam_${camId}.webm`, blob);
-        camCount++;
-      }
-      console.log(`📦 Zipping ${camCount} camera files + Program + EDL`);
-
-      // 4. Generate & Download
-      const content = await zip.generateAsync({ type: "blob" });
-      saveBlob(content, `session_${isoSessionId}.zip`);
-
-      // 5. Cleanup
-      document.getElementById("transferModal").style.display = "none";
-      // Clear for next time
-      isoEdl = [];
-      receivedRecordings = {};
-      programChunks = [];
-      programBlob = null;
-
-      alert("Session Saved! You can now load this ZIP in the Render Studio.");
-    }
-
-    function saveBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-
-    // switchCamera removed - using setLiveCamera directly
-
-    function startRecording() {
-      console.log("Attempting to start recording (Dual Mode)...");
-
-      const hasCameras = Object.keys(peers).length > 0;
-      const vidElem = document.getElementById("mainVideo");
-      // const hasStream = vidElem && !!vidElem.srcObject; // Checking stream not strictly required for ISO start
-
-      recordingState = "recording";
-      recordBtn.classList.add("active");
-      recIcon.style.display = "none";
-      stopIcon.style.display = "block";
-      recordBar.style.display = "flex";
-      recordStatus.textContent = "REC";
-      recordStartTime = Date.now();
-
-      // 1. START ISO (Server-Side)
-      isoSessionId = `session_${Date.now()}`;
-      isoEdl = [];
-
-      // Log initial camera or First available if none selected
-      if (activeCameraId) {
-        isoEdl.push({ timestamp: 0, camId: activeCameraId });
-      } else if (hasCameras) {
-        // Auto-select first camera for EDL reference
-        const firstCam = Object.keys(peers)[0];
-        setLiveCamera(firstCam); // Fix: use unified state setter
-        isoEdl.push({ timestamp: 0, camId: firstCam });
-      }
-
-      socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
-
-      // 2. START LOCAL (Browser-Side)
-      const stream = vidElem.srcObject;
-
-      // Fix: Reset programRecorder completely
-      if (programRecorder) {
-        try { programRecorder.stop(); } catch (e) { }
-        programRecorder = null;
-      }
-
-      programChunks.length = 0; // Clear global array
-      programRecorder = createRecorder(stream, programChunks);
-      programRecorder.chunks = programChunks;
-      programRecorder.start();
-
-      // Fix: Clear and restart camera recorders
-      Object.keys(cameraRecorders).forEach(id => {
-        try { cameraRecorders[id].recorder.stop(); } catch (e) { }
-        delete cameraRecorders[id];
-      });
-
-      Object.keys(peers).forEach(id => {
-        if (peers[id].stream) startCameraRecorder(id, peers[id].stream);
-      });
-
-      tickTimer();
-    }
-
-    // PAUSE/RESUME REMOVED - STRICT START/STOP
-    function pauseRecording() { }
-    function resumeRecording() { }
-
-    function stopRecordingRequest() {
-      if (recordingState === "idle") return;
-      document.getElementById("stopModal").style.display = "flex";
-    }
-
-    function closeStopModal() {
-      document.getElementById("stopModal").style.display = "none";
-    }
-
-    async function confirmStopAndTransfer() {
-      closeStopModal();
-
-      console.log("🛑 Stopping and Transferring...");
-      recordingState = "idle";
-
-      // Update UI
-      recordBtn.classList.remove("active");
-      recIcon.style.display = "block";
-      stopIcon.style.display = "none";
-      recordBar.style.display = "none";
-      recordStatus.textContent = "IDLE";
-      clearInterval(recordTimerInt);
-
-      // Reset Download UI
-      document.getElementById("transferList").innerHTML = "";
-      document.getElementById("downloadActions").style.display = "none";
-      let transferModal = document.getElementById("transferModal");
-      transferModal.className = "modal"; // Reset to modal class
-      transferModal.style.display = "flex";
-
-      // 1. Stop Local Program Recorder & Create Blob
-      if (programRecorder && programRecorder.state === "recording") {
-        programRecorder.stop();
-        // Give it a moment to flush final chunks
-        await new Promise(r => setTimeout(r, 100));
-      }
-
-      // Explicitly Create Program Blob
-      if (programChunks.length > 0) {
-        programBlob = new Blob(programChunks, { type: "video/webm" });
-        console.log("✅ Program Blob Created:", programBlob.size);
-        updateTransferUI("program", 100, true);
-      } else {
-        console.warn("⚠️ No program chunks found!");
-        updateTransferUI("program", 0, false); // Show as failed/empty
-      }
-
-      // 2. Signal Cameras to Stop & Transfer
-      console.log("📡 Emitting stop-iso with save:transfer");
-      socket.emit("stop-iso", { room: streamId, save: "transfer" });
-
-      // 3. Show Transfer Modal & Add Camera Rows
-      const activePeers = Object.keys(peers).filter(pid => peers[pid].stream);
-      activePeers.forEach(pid => updateTransferUI(pid, 0));
-
-      // 4. Force check
-      setTimeout(checkTransfersComplete, 500);
-    }
-
-    function downloadBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-
-    // OLD SAVING LOGIC REMOVED
-
-    async function stopAndFinalize(mode) {
-      try {
-        const stopPromises = [];
-        if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
-        Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
-
-        await Promise.all(stopPromises);
-
-        // 3. PROCESS BASED ON MODE
-        if (mode === "instant") {
-          isDownloadingInstant = true;
-          await downloadAllRecordings(false);
-          isDownloadingInstant = false;
-          markInstantComplete();
-        } else if (mode === "both") {
-          isDownloadingInstant = true;
-          await downloadAllRecordings(true); // Retain program chunks for later render
-          isDownloadingInstant = false;
-          markInstantComplete();
-          // Check if render was requested while we were downloading
-          if (isRenderPending) {
-            console.log("🔄 Instant download finished. Starting pending render...");
-            startClientSideRender();
-            isRenderPending = false;
+            if (allReceived) {
+              console.log("🎉 All ISO transfers complete. Starting Packaging...");
+              setTimeout(() => {
+                packageAndDownloadZip();
+              }, 1000);
+            }
           }
-        } else if (mode === "quality_program") {
-          // Local Render only
-          startClientSideRender();
-        } else if (mode === "quality_all") {
-          // Just wait for transfers, logic handled by events
-          console.log("⏳ Waiting for P2P transfers for Quality All...");
-        }
 
-        // If quality/both, P2P transfer starts automatically via socket/webrtc events
-      } catch (e) {
-        console.error("CRITICAL ERROR in stopAndFinalize:", e);
-        alert("Error finalizing session: " + e.message);
-      }
-    }
+          async function packageAndDownloadZip() {
+            console.log("📦 Packaging ZIP...");
 
-    function addToInstantList(name, status, id = null) {
-      const list = document.getElementById("instantList");
-      const div = document.createElement("div");
-      div.className = "file-item";
-      if (id) div.id = id;
+            // Safety check: wait for programBlob if it's still processing
+            if (!programBlob && programRecorder) {
+              console.log("⏳ Waiting for Program Blob...");
+              await new Promise(r => setTimeout(r, 1000));
+            }
 
-      div.innerHTML = `
+            const zip = new JSZip();
+            const folder = zip.folder(`session_${isoSessionId || Date.now()}`);
+
+            // 1. Add EDL
+            const edlBlob = new Blob([JSON.stringify(isoEdl, null, 2)], { type: "application/json" });
+            folder.file("edl_session.json", edlBlob);
+
+            // 2. Add Program Recording (Local)
+            if (programBlob) {
+              folder.file("program.webm", programBlob);
+            } else {
+              console.warn("⚠️ No Program Blob found to zip");
+            }
+
+            // 3. Add Received Camera Files
+            let camCount = 0;
+            for (const [camId, blob] of Object.entries(receivedRecordings)) {
+              folder.file(`iso_cam_${camId}.webm`, blob);
+              camCount++;
+            }
+            console.log(`📦 Zipping ${camCount} camera files + Program + EDL`);
+
+            // 4. Generate & Download
+            const content = await zip.generateAsync({ type: "blob" });
+            saveBlob(content, `session_${isoSessionId}.zip`);
+
+            // 5. Cleanup
+            // Don't hide modal immediately, verify download
+            document.getElementById("downloadActions").style.display = "flex";
+
+            // Clear for next time internally but keep UI open
+            isoEdl = [];
+            receivedRecordings = {};
+            programChunks = [];
+            programBlob = null;
+
+            // alert("Session Saved! You can now load this ZIP in the Render Studio.");
+          }
+
+          function saveBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+
+          async function createPeer(id) {
+            if (!id || peers[id]) return;
+
+            const config = await getTurnConfig();
+            const pc = new RTCPeerConnection(config);
+
+            pc.addTransceiver("video", { direction: "recvonly" });
+            pc.addTransceiver("audio", { direction: "recvonly" });
+
+            // DOUBLE CHECK DOM FOR DUPLICATES
+            const existingSlot = document.getElementById(`slot-${id}`);
+            if (existingSlot) existingSlot.remove();
+
+            const slot = document.createElement("div");
+            slot.id = `slot-${id}`;
+            slot.className = "camera-slot";
+
+            const nameInput = document.createElement("input");
+            nameInput.className = "camera-name";
+            // cameraCount += 1; // Removed
+            nameInput.value = getNextCameraName();
+
+            const actions = document.createElement("div");
+            actions.className = "camera-actions";
+
+            slot.appendChild(actions);
+            slot.appendChild(nameInput);
+
+            strip.appendChild(slot);
+
+            peers[id] = { pc, slot, stream: null, name: nameInput.value };
+
+            nameInput.oninput = () => {
+              peers[id].name = nameInput.value.trim() || `Camera ${cameraCount}`;
+            };
+
+            pc.ontrack = e => {
+              console.log("🎥 Received track from:", id);
+              if (peers[id].stream) return;
+
+              const stream = e.streams[0] || new MediaStream([e.track]);
+              peers[id].stream = stream;
+
+              const v = document.createElement("video");
+              v.autoplay = true;
+              v.muted = true;
+              v.playsInline = true;
+              v.srcObject = stream;
+              v.style.transform = `rotate(${rotations[id] || 0}deg)`;
+
+              v.onloadedmetadata = () => {
+                console.log("🎬 Video metadata loaded for:", id);
+                v.play().catch(err => console.error("Video play error:", err));
+              };
+
+              slot.appendChild(v);
+              slot.onclick = () => setLiveCamera(id);
+
+              if (recordingState !== "idle") {
+                startCameraRecorder(id, stream);
+              }
+            };
+
+            pc.onicecandidate = e => {
+              if (e.candidate) {
+                socket.emit("signal", { to: id, data: e.candidate });
+              }
+            };
+
+            // Create Data Channel for File Transfer
+            const dc = pc.createDataChannel("fileTransfer");
+            dc.binaryType = "arraybuffer"; // Ensure we get ArrayBuffers, not Blobs
+
+            peers[id].dc = dc;
+            peers[id].fileBuffer = [];
+            peers[id].fileMeta = null;
+            peers[id].receivedSize = 0;
+
+            dc.onopen = () => console.log(`✅ Data Channel Open with ${id}`);
+            dc.onmessage = (event) => handleDataMessage(id, event.data);
+
+            pc.createOffer()
+              .then(o => pc.setLocalDescription(o))
+              .then(() => {
+                console.log("📡 Director: Sending offer to camera", id);
+                socket.emit("signal", { to: id, data: pc.localDescription });
+              })
+              .catch(err => console.error("Offer error:", err));
+          }
+
+          function setLiveCamera(id) {
+            if (!id || !peers[id] || !peers[id].stream) {
+              console.warn("⚠️ Cannot set live: No stream for", id);
+              return;
+            }
+            activeCameraId = id; // Unify state
+            currentLiveId = id;
+            selectedStream = peers[id].stream;
+
+            // Update EDL if recording ISO
+            if (recordingState === "recording" && isIsoMode) {
+              isoEdl.push({
+                timestamp: Date.now() - recordStartTime,
+                camId: id
+              });
+            }
+
+            document.querySelectorAll(".camera-slot").forEach(s => s.classList.remove("active", "live"));
+            if (peers[id].slot) peers[id].slot.classList.add("live", "active");
+
+            Object.keys(peers).forEach(peerId => {
+              socket.emit("control", {
+                to: peerId,
+                data: {
+                  type: "live",
+                  on: peerId === id,
+                  name: peers[peerId] ? peers[peerId].name : "Camera"
+                }
+              });
+            });
+
+            if (placeholder) placeholder.style.setProperty("display", "none", "important");
+            updateViewerFeeds();
+            startDrawLoop();
+          }
+
+          /* ===== VIEWERS ===== */
+          async function createViewerPeer(id) {
+            console.log("📡 Director: Creating peer for viewer", id);
+            const track = getViewerTrack();
+            if (!track) {
+              console.warn("⚠️ Director: No track available for viewer!");
+              return;
+            }
+
+            const config = await getTurnConfig();
+            const pc = new RTCPeerConnection(config);
+
+            const stream = new MediaStream([track]);
+            const sender = pc.addTrack(track, stream);
+            viewers[id] = { pc, sender };
+
+            pc.onicecandidate = e => {
+              if (e.candidate) {
+                socket.emit("signal", { to: id, data: e.candidate });
+              }
+            };
+
+            pc.createOffer()
+              .then(o => pc.setLocalDescription(o))
+              .then(() => {
+                console.log("📡 Director: Sending offer to viewer", id);
+                socket.emit("signal", { to: id, data: pc.localDescription });
+              })
+              .catch(err => console.error("Offer error:", err));
+          }
+
+          function queueOrCreateViewer(id) {
+            createViewerPeer(id);
+          }
+
+          function flushPendingViewers() {
+            // No-op now as we always have a program track
+          }
+
+          function updateViewerFeeds() {
+            const track = getViewerTrack();
+            if (!track) return;
+            Object.values(viewers).forEach(v => {
+              if (v.sender) {
+                v.sender.replaceTrack(track).catch(err => console.error("replaceTrack error:", err));
+              }
+            });
+          }
+
+          function getViewerTrack() {
+            // ALWAYS use programStream (canvas) for viewers for maximum stability.
+            // This ensures viewers don't experience disconnects when cameras swap.
+            return programStream.getVideoTracks()[0];
+          }
+
+          /* ===== PROGRAM CANVAS DRAW ===== */
+          function startDrawLoop() {
+            if (drawLoopRunning) return;
+            drawLoopRunning = true;
+
+            const draw = () => {
+              const w = programCanvas.width;
+              const h = programCanvas.height;
+
+              programCtx.fillStyle = "#000";
+              programCtx.fillRect(0, 0, w, h);
+
+              if (currentLiveId && peers[currentLiveId]) {
+                const videoEl = peers[currentLiveId].slot.querySelector("video");
+
+                if (videoEl && videoEl.readyState >= 2) {
+                  const vw = videoEl.videoWidth;
+                  const vh = videoEl.videoHeight;
+
+                  if (vw > 0 && vh > 0) {
+                    const scale = Math.min(w / vw, h / vh);
+                    const dw = vw * scale;
+                    const dh = vh * scale;
+                    const rot = rotations[currentLiveId] || 0;
+
+                    programCtx.save();
+                    programCtx.translate(w / 2, h / 2);
+                    programCtx.rotate((rot * Math.PI) / 180);
+                    programCtx.drawImage(videoEl, -dw / 2, -dh / 2, dw, dh);
+                    programCtx.restore();
+                  }
+                }
+              }
+
+              // Use requestAnimationFrame for smoothness, 
+              // but also a setTimeout fallback so it keeps ticking in background tabs
+              if (document.hidden) {
+                setTimeout(draw, 100); // Lower rate when hidden to save CPU but stay "alive"
+              } else {
+                requestAnimationFrame(draw);
+              }
+            };
+
+            requestAnimationFrame(draw);
+          }
+          startDrawLoop();
+
+          /* ===== RECORDING UI ===== */
+          // ISO STATE
+          let isoSessionId = null;
+          let isoEdl = []; // [{timestamp, camId}]
+          /* uploadedCameras removed - moved to downloads.html */
+
+          const recordBar = document.getElementById("recordBar");
+          const recordTimer = document.getElementById("recordTimer");
+          const recordStatus = document.getElementById("recordStatus");
+          const recordBtn = document.getElementById("recordBtn");
+          const recIcon = document.querySelector(".rec-icon");
+          const stopIcon = document.querySelector(".stop-icon");
+          // const isoToggle = document.getElementById("isoToggle"); // REMOVED
+          const qrBtn = document.getElementById("qrBtn");
+
+          /* ===== RECORD TOGGLE ===== */
+          function toggleRecord() {
+            if (recordingState === "idle") {
+              startRecording();
+            } else {
+              stopRecordingRequest();
+            }
+          }
+
+          recordBtn.onclick = toggleRecord;
+
+          // Fix: Attach QR button listener
+          if (qrBtn) qrBtn.onclick = openQr;
+
+          // ISO Toggle logic removed
+
+          // Duplicate stopRecordingRequest removed - Logic moved to confirmStopAndTransfer
+
+          async function packageAndDownloadZip() {
+            console.log("📦 Packaging ZIP...");
+
+            // Safety check: wait for programBlob if it's still processing
+            if (!programBlob && programRecorder) {
+              console.log("⏳ Waiting for Program Blob...");
+              await new Promise(r => setTimeout(r, 1000));
+            }
+
+            const zip = new JSZip();
+            const folder = zip.folder(`session_${isoSessionId || Date.now()}`);
+
+            // 1. Add EDL
+            const edlBlob = new Blob([JSON.stringify(isoEdl, null, 2)], { type: "application/json" });
+            folder.file("edl_session.json", edlBlob);
+
+            // 2. Add Program Recording (Local)
+            if (programBlob) {
+              folder.file("program.webm", programBlob);
+            } else {
+              console.warn("⚠️ No Program Blob found to zip");
+            }
+
+            // 3. Add Received Camera Files
+            let camCount = 0;
+            for (const [camId, blob] of Object.entries(receivedRecordings)) {
+              folder.file(`iso_cam_${camId}.webm`, blob);
+              camCount++;
+            }
+            console.log(`📦 Zipping ${camCount} camera files + Program + EDL`);
+
+            // 4. Generate & Download
+            const content = await zip.generateAsync({ type: "blob" });
+            saveBlob(content, `session_${isoSessionId}.zip`);
+
+            // 5. Cleanup
+            document.getElementById("transferModal").style.display = "none";
+            // Clear for next time
+            isoEdl = [];
+            receivedRecordings = {};
+            programChunks = [];
+            programBlob = null;
+
+            alert("Session Saved! You can now load this ZIP in the Render Studio.");
+          }
+
+          function saveBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+
+          // switchCamera removed - using setLiveCamera directly
+
+          function startRecording() {
+            console.log("Attempting to start recording (Dual Mode)...");
+
+            const hasCameras = Object.keys(peers).length > 0;
+            const vidElem = document.getElementById("mainVideo");
+            // const hasStream = vidElem && !!vidElem.srcObject; // Checking stream not strictly required for ISO start
+
+            recordingState = "recording";
+            recordBtn.classList.add("active");
+            recIcon.style.display = "none";
+            stopIcon.style.display = "block";
+            recordBar.style.display = "flex";
+            recordStatus.textContent = "REC";
+            recordStartTime = Date.now();
+
+            // 1. START ISO (Server-Side)
+            isoSessionId = `session_${Date.now()}`;
+            isoEdl = [];
+
+            // Log initial camera or First available if none selected
+            if (activeCameraId) {
+              isoEdl.push({ timestamp: 0, camId: activeCameraId });
+            } else if (hasCameras) {
+              // Auto-select first camera for EDL reference
+              const firstCam = Object.keys(peers)[0];
+              setLiveCamera(firstCam); // Fix: use unified state setter
+              isoEdl.push({ timestamp: 0, camId: firstCam });
+            }
+
+            socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
+
+            // 2. START LOCAL (Browser-Side)
+            const stream = vidElem.srcObject;
+
+            // Fix: Reset programRecorder completely
+            if (programRecorder) {
+              try { programRecorder.stop(); } catch (e) { }
+              programRecorder = null;
+            }
+
+            programChunks.length = 0; // Clear global array
+            programRecorder = createRecorder(stream, programChunks);
+            programRecorder.chunks = programChunks;
+            programRecorder.start();
+
+            // Fix: Clear and restart camera recorders
+            Object.keys(cameraRecorders).forEach(id => {
+              try { cameraRecorders[id].recorder.stop(); } catch (e) { }
+              delete cameraRecorders[id];
+            });
+
+            Object.keys(peers).forEach(id => {
+              if (peers[id].stream) startCameraRecorder(id, peers[id].stream);
+            });
+
+            tickTimer();
+          }
+
+          // PAUSE/RESUME REMOVED - STRICT START/STOP
+          function pauseRecording() { }
+          function resumeRecording() { }
+
+          function stopRecordingRequest() {
+            if (recordingState === "idle") return;
+            document.getElementById("stopModal").style.display = "flex";
+          }
+
+          function closeStopModal() {
+            document.getElementById("stopModal").style.display = "none";
+          }
+
+          async function confirmStopAndTransfer() {
+            closeStopModal();
+
+            console.log("🛑 Stopping and Transferring...");
+            recordingState = "idle";
+
+            // Update UI
+            recordBtn.classList.remove("active");
+            recIcon.style.display = "block";
+            stopIcon.style.display = "none";
+            recordBar.style.display = "none";
+            recordStatus.textContent = "IDLE";
+            clearInterval(recordTimerInt);
+
+            // Reset Download UI
+            document.getElementById("transferList").innerHTML = "";
+            document.getElementById("downloadActions").style.display = "none";
+            let transferModal = document.getElementById("transferModal");
+            transferModal.className = "modal"; // Reset to modal class
+            transferModal.style.display = "flex";
+
+            // 1. Stop Local Program Recorder & Create Blob
+            if (programRecorder && programRecorder.state === "recording") {
+              programRecorder.stop();
+              // Give it a moment to flush final chunks
+              await new Promise(r => setTimeout(r, 100));
+            }
+
+            // Explicitly Create Program Blob
+            if (programChunks.length > 0) {
+              programBlob = new Blob(programChunks, { type: "video/webm" });
+              console.log("✅ Program Blob Created:", programBlob.size);
+              updateTransferUI("program", 100, true);
+            } else {
+              console.warn("⚠️ No program chunks found!");
+              updateTransferUI("program", 0, false); // Show as failed/empty
+            }
+
+            // 2. Signal Cameras to Stop & Transfer
+            console.log("📡 Emitting stop-iso with save:transfer");
+            socket.emit("stop-iso", { room: streamId, save: "transfer" });
+
+            // 3. Show Transfer Modal & Add Camera Rows
+            const activePeers = Object.keys(peers).filter(pid => peers[pid].stream);
+            activePeers.forEach(pid => updateTransferUI(pid, 0));
+
+            // 4. Force check
+            setTimeout(checkTransfersComplete, 500);
+          }
+
+          function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+
+          // OLD SAVING LOGIC REMOVED
+
+          async function stopAndFinalize(mode) {
+            try {
+              const stopPromises = [];
+              if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
+              Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
+
+              await Promise.all(stopPromises);
+
+              // 3. PROCESS BASED ON MODE
+              if (mode === "instant") {
+                isDownloadingInstant = true;
+                await downloadAllRecordings(false);
+                isDownloadingInstant = false;
+                markInstantComplete();
+              } else if (mode === "both") {
+                isDownloadingInstant = true;
+                await downloadAllRecordings(true); // Retain program chunks for later render
+                isDownloadingInstant = false;
+                markInstantComplete();
+                // Check if render was requested while we were downloading
+                if (isRenderPending) {
+                  console.log("🔄 Instant download finished. Starting pending render...");
+                  startClientSideRender();
+                  isRenderPending = false;
+                }
+              } else if (mode === "quality_program") {
+                // Local Render only
+                startClientSideRender();
+              } else if (mode === "quality_all") {
+                // Just wait for transfers, logic handled by events
+                console.log("⏳ Waiting for P2P transfers for Quality All...");
+              }
+
+              // If quality/both, P2P transfer starts automatically via socket/webrtc events
+            } catch (e) {
+              console.error("CRITICAL ERROR in stopAndFinalize:", e);
+              alert("Error finalizing session: " + e.message);
+            }
+          }
+
+          function addToInstantList(name, status, id = null) {
+            const list = document.getElementById("instantList");
+            const div = document.createElement("div");
+            div.className = "file-item";
+            if (id) div.id = id;
+
+            div.innerHTML = `
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                 <span class="name">${name}</span>
                 <div style="display:flex; align-items:center;">
@@ -1699,357 +1703,357 @@
                 <div class="dash-fill" style="width: 0%"></div>
               </div>
               `;
-      list.appendChild(div);
-      return div;
-    }
-
-    function updateInstantStatus(id, text, type = "processing", progress = -1) {
-      const el = document.getElementById(id);
-      if (!el) return;
-
-      const badge = el.querySelector(".status-badge");
-      if (badge) {
-        badge.innerText = text;
-        badge.className = `status-badge ${type}`;
-      }
-
-      const progBar = el.querySelector(".dash-progress");
-      const progFill = el.querySelector(".dash-fill");
-
-      if (progress >= 0 && progBar && progFill) {
-        progBar.style.display = "block";
-        progFill.style.width = `${progress}%`;
-      } else if (progress < 0 && progBar) {
-        progBar.style.display = "none";
-      }
-    }
-
-    function markInstantComplete() {
-      const badges = document.querySelectorAll("#instantList .status-badge");
-      badges.forEach(b => {
-        b.className = "status-badge success";
-        b.innerText = "SAVED";
-      });
-    }
-
-    /* ===== RENDER PROGRESS ===== */
-    socket.on("render-progress", ({ progress, status }) => {
-      // Update modal if active
-      const modalStatus = document.getElementById("modalRenderStatus");
-      const modalFill = document.getElementById("modalRenderFill");
-      const modalPercent = document.getElementById("modalRenderPercent");
-
-      if (modalStatus) modalStatus.innerText = status;
-      if (modalFill) modalFill.style.width = Math.max(0, progress) + "%";
-      if (modalPercent) modalPercent.innerText = Math.max(0, progress) + "%";
-
-      // Error case in progress
-      if (progress < 0 && modalStatus) {
-        modalStatus.style.color = "#ef4444";
-        if (modalFill) modalFill.style.background = "#ef4444";
-      }
-
-      // Legacy panel update (optional cleanup later)
-      const bar = document.getElementById("renderProgressPanel");
-      const fill = document.getElementById("renderProgressFill");
-      const text = document.getElementById("renderStatusText");
-
-      if (progress < 0) {
-        if (text) text.innerText = "Error: " + status;
-        if (fill) fill.style.background = "#ef4444";
-        setTimeout(() => { if (bar) bar.style.display = "none"; }, 5000);
-        return;
-      }
-
-      if (bar) bar.style.display = "flex";
-      if (fill) fill.style.width = progress + "%";
-      if (fill) fill.style.background = "#3b82f6";
-      if (text) text.innerText = status + " (" + progress + "%)";
-
-      if (progress >= 100) {
-        setTimeout(() => { if (bar) bar.style.display = "none"; }, 3000);
-      }
-    });
-
-    function tickTimer() {
-      clearInterval(recordTimerInt);
-      recordTimerInt = setInterval(() => {
-        const elapsed = Math.max(0, Date.now() - recordStartTime);
-        recordTimer.textContent = formatTime(elapsed / 1000);
-      }, 500);
-    }
-
-    function createRecorder(stream, chunks) {
-      const type = getSupportedMime();
-      const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
-      rec.ondataavailable = e => {
-        if (e.data && e.data.size > 0) {
-          chunks.push(e.data);
-          // console.log(`Captured chunk: ${e.data.size} bytes`);
-        }
-      };
-      return rec;
-    }
-
-    function stopRecorder(rec) {
-      return new Promise(resolve => {
-        if (!rec || rec.state === "inactive") return resolve();
-        rec.onstop = () => resolve();
-        rec.stop();
-      });
-    }
-
-    function getSupportedMime() {
-      const types = [
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8,opus",
-        "video/webm"
-      ];
-      return types.find(t => MediaRecorder.isTypeSupported(t));
-    }
-
-    function startCameraRecorder(id, stream) {
-      if (cameraRecorders[id]) return;
-      const chunks = [];
-      const rec = createRecorder(stream, chunks);
-      cameraRecorders[id] = { recorder: rec, chunks };
-      rec.start();
-    }
-
-    function sanitizeName(str) {
-      return (str || "").toString().trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_\-]/g, "");
-    }
-
-    function formatDate(ts) {
-      const d = new Date(ts);
-      const pad = n => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-    }
-
-    function formatTime(sec) {
-      const s = Math.floor(sec);
-      const h = String(Math.floor(s / 3600)).padStart(2, "0");
-      const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
-      const r = String(s % 60).padStart(2, "0");
-      return `${h}:${m}:${r}`;
-    }
-
-    function parseTime(t) {
-      const [h, m, s] = t.split(":").map(Number);
-      return h * 3600 + m * 60 + s;
-    }
-
-    /* ===== MP4 CONVERSION ===== */
-    let ffmpegInstance = null;
-    let ffmpegRef = null; // Store the ffmpeg object
-    let fetchFileRef = null;
-
-    async function ensureFFmpeg() {
-      if (ffmpegInstance) return { ffmpeg: ffmpegRef, fetchFile: fetchFileRef };
-
-      console.log("Loading FFmpeg.wasm v0.12...");
-      const { FFmpeg } = window.FFmpegWASM;
-      const { fetchFile } = window.FFmpegUtil;
-
-      const ffmpeg = new FFmpeg();
-
-      ffmpeg.on("log", ({ message }) => {
-        // console.log("FFmpeg Log:", message);
-      });
-
-      // Load with local files
-      await ffmpeg.load({
-        coreURL: '/lib/ffmpeg/ffmpeg-core.js',
-        wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
-        workerLoadURL: '/lib/ffmpeg/814.ffmpeg.js' // Explicitly load the worker chunk from valid origin
-      });
-
-      ffmpegRef = ffmpeg;
-      fetchFileRef = fetchFile;
-      ffmpegInstance = true;
-      return { ffmpeg, fetchFile };
-    }
-
-    async function convertToMp4(blob, baseName) {
-      // This legacy function might not be used in the new flow but updating just in case
-      const { ffmpeg, fetchFile } = await ensureFFmpeg();
-      const input = `${baseName}.webm`;
-      const output = `${baseName}.mp4`;
-
-      await ffmpeg.writeFile(input, await fetchFile(blob));
-      await ffmpeg.exec(["-i", input, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", output]);
-      const data = await ffmpeg.readFile(output);
-
-      // Cleanup not strictly necessary here if we do it in batch, but good practice
-      await ffmpeg.deleteFile(input);
-      await ffmpeg.deleteFile(output);
-
-      return new Blob([data.buffer], { type: "video/mp4" });
-    }
-
-    /* ===== CLIENT SIDE RENDERING ===== */
-    async function startClientSideRender() {
-      // UI Switch
-      document.getElementById("renderStatusBadge").className = "status-badge processing";
-      document.getElementById("renderStatusBadge").innerText = "RENDER";
-
-      // document.getElementById("transferPhase").style.display = "none"; // REMOVED: Element no longer exists
-      // Let's keep transfer visible in col 2, but show render in col 3
-      const renderPhase = document.getElementById("renderPhase");
-      if (renderPhase) renderPhase.style.display = "block";
-
-      const status = document.getElementById("renderStatusText");
-      const bar = document.getElementById("renderProgressBar");
-
-      let renderStartTime = Date.now();
-      const updateRenderProgress = (pct, text) => {
-        let statusText = text;
-        if (pct > 0 && pct < 100) {
-          const elapsed = (Date.now() - renderStartTime) / 1000;
-          const estimatedTotal = elapsed / (pct / 100);
-          const remaining = Math.max(0, estimatedTotal - elapsed);
-          // const remStr = remaining > 60 ? `${Math.ceil(remaining / 60)}m left` : `${Math.ceil(remaining)}s left`;
-          const remStr = remaining > 60
-            ? `${Math.floor(remaining / 60)}m ${Math.ceil(remaining % 60)}s left`
-            : `${Math.ceil(remaining)}s left`;
-
-          statusText += ` <div class='time-remaining'>~${remStr}</div>`;
-        }
-        if (text) status.innerHTML = statusText;
-        bar.style.width = pct + "%";
-      };
-
-      try {
-        updateRenderProgress(5, "Loading FFmpeg...");
-        // Ensure program recorder is fully stopped and chunks available
-        if (programRecorder && programRecorder.state !== "inactive") {
-          await stopRecorder(programRecorder);
-        }
-
-        console.log("Starting Render. Program Chunks:", programChunks.length);
-
-        // Ensure global FFmpeg load
-        const { ffmpeg, fetchFile } = await ensureFFmpeg();
-
-        // 1. Prepare Inputs
-        const sourceFiles = [];
-        const activeCamIds = Object.keys(receivedRecordings);
-
-        // Add Director Program (Live Mix)
-        if (programChunks.length > 0) {
-          const progBlob = new Blob(programChunks, { type: "video/webm" });
-          console.log("Program Blob Size:", progBlob.size);
-          const name = "director_program.webm";
-          await ffmpeg.writeFile(name, await fetchFile(progBlob));
-          sourceFiles.push({ id: "director_program", name, isWebm: true });
-
-          // Show program source in list if not already
-          if (!document.getElementById("xfer_program")) {
-            updateTransferUI("program", 100, true);
-            const row = document.getElementById("xfer_program");
-            if (row) row.querySelector(".name").innerText = "Director Program (Local)";
-          }
-        } else {
-          console.warn("No program chunks found! The live mix will be missing.");
-        }
-
-        // Add Camera Recordings
-        for (let i = 0; i < activeCamIds.length; i++) {
-          const id = activeCamIds[i];
-          const blob = receivedRecordings[id];
-          if (!blob) continue;
-
-          const name = `cam_${id}.webm`;
-          updateRenderProgress(10 + Math.floor((i / activeCamIds.length) * 10), `Writing ${name}...`);
-          await ffmpeg.writeFile(name, await fetchFile(blob));
-          sourceFiles.push({ id, name, isWebm: true });
-
-          // MEMORY OPTIMIZATION: Clear the heavy blob from JS memory now that it's in FFmpeg FS
-          receivedRecordings[id] = null;
-        }
-
-        // 2. Transcode All to MP4 (common format for easy concat)
-        // Even though we concat, converting to MP4 first ensures consistent framerates/codecs
-        const mp4Files = {};
-
-        for (let i = 0; i < sourceFiles.length; i++) {
-          const f = sourceFiles[i];
-          const outName = f.name.replace(".webm", ".mp4");
-          updateRenderProgress(20 + Math.floor((i / sourceFiles.length) * 30), `Converting ${f.name} to MP4...`);
-
-          await ffmpeg.exec([
-            "-i", f.name,
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-            "-c:a", "aac",
-            outName
-          ]);
-
-          mp4Files[f.id] = outName;
-          // Cleanup webm
-          try { await ffmpeg.deleteFile(f.name); } catch (e) { }
-        }
-
-        // 3. Process EDL for Final Mix
-        updateRenderProgress(60, "Processing Cuts...");
-        const segments = [];
-
-        for (let i = 0; i < isoEdl.length; i++) {
-          const cut = isoEdl[i];
-          const nextCut = isoEdl[i + 1];
-          let duration = null;
-          if (nextCut) {
-            duration = (nextCut.timestamp - cut.timestamp) / 1000;
-          }
-          const startTime = cut.timestamp / 1000;
-
-          // If camId not in mp4Files (maybe camera dropped), fallback to program or black?
-          // For now, skip or use program if available
-          let inputFile = mp4Files[cut.camId];
-          if (!inputFile) {
-            console.warn(`Missing file for cut ${i} (Cam ${cut.camId}), using program fallback`);
-            inputFile = mp4Files["director_program"];
-          }
-          if (!inputFile) continue; // Skip if absolutely nothing
-
-          const segmentName = `seg_${i}.mp4`;
-          // Construct command args
-          const cmdArgs = [
-            "-ss", String(startTime),
-            "-i", inputFile
-          ];
-
-          if (duration) {
-            cmdArgs.push("-t", String(duration));
+            list.appendChild(div);
+            return div;
           }
 
-          cmdArgs.push(
-            "-c:v", "libx264", "-preset", "ultrafast",
-            "-c:a", "aac",
-            segmentName
-          );
+          function updateInstantStatus(id, text, type = "processing", progress = -1) {
+            const el = document.getElementById(id);
+            if (!el) return;
 
-          await ffmpeg.exec(cmdArgs);
+            const badge = el.querySelector(".status-badge");
+            if (badge) {
+              badge.innerText = text;
+              badge.className = `status-badge ${type}`;
+            }
 
-          segments.push(segmentName);
-        }
+            const progBar = el.querySelector(".dash-progress");
+            const progFill = el.querySelector(".dash-fill");
 
-        // 4. Concat
-        updateRenderProgress(80, "Stitching Final Mix...");
-        const listContent = segments.map(s => `file '${s}'`).join("\n");
-        await ffmpeg.writeFile("list.txt", listContent);
-        await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
+            if (progress >= 0 && progBar && progFill) {
+              progBar.style.display = "block";
+              progFill.style.width = `${progress}%`;
+            } else if (progress < 0 && progBar) {
+              progBar.style.display = "none";
+            }
+          }
 
-        const finalData = await ffmpeg.readFile("final_mix.mp4");
-        const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
-        const timestamp = formatDate(Date.now());
-        // Helper to add dl button (Reusing enableInstantDownload style basically, but we need to create the row first)
-        const addRenderedFileRow = (blob, name, label) => {
-          const btnList = document.getElementById("downloadButtons");
-          const row = document.createElement("div");
-          row.className = "file-item";
-          row.style.marginBottom = "8px";
+          function markInstantComplete() {
+            const badges = document.querySelectorAll("#instantList .status-badge");
+            badges.forEach(b => {
+              b.className = "status-badge success";
+              b.innerText = "SAVED";
+            });
+          }
 
-          row.innerHTML = `
+          /* ===== RENDER PROGRESS ===== */
+          socket.on("render-progress", ({ progress, status }) => {
+            // Update modal if active
+            const modalStatus = document.getElementById("modalRenderStatus");
+            const modalFill = document.getElementById("modalRenderFill");
+            const modalPercent = document.getElementById("modalRenderPercent");
+
+            if (modalStatus) modalStatus.innerText = status;
+            if (modalFill) modalFill.style.width = Math.max(0, progress) + "%";
+            if (modalPercent) modalPercent.innerText = Math.max(0, progress) + "%";
+
+            // Error case in progress
+            if (progress < 0 && modalStatus) {
+              modalStatus.style.color = "#ef4444";
+              if (modalFill) modalFill.style.background = "#ef4444";
+            }
+
+            // Legacy panel update (optional cleanup later)
+            const bar = document.getElementById("renderProgressPanel");
+            const fill = document.getElementById("renderProgressFill");
+            const text = document.getElementById("renderStatusText");
+
+            if (progress < 0) {
+              if (text) text.innerText = "Error: " + status;
+              if (fill) fill.style.background = "#ef4444";
+              setTimeout(() => { if (bar) bar.style.display = "none"; }, 5000);
+              return;
+            }
+
+            if (bar) bar.style.display = "flex";
+            if (fill) fill.style.width = progress + "%";
+            if (fill) fill.style.background = "#3b82f6";
+            if (text) text.innerText = status + " (" + progress + "%)";
+
+            if (progress >= 100) {
+              setTimeout(() => { if (bar) bar.style.display = "none"; }, 3000);
+            }
+          });
+
+          function tickTimer() {
+            clearInterval(recordTimerInt);
+            recordTimerInt = setInterval(() => {
+              const elapsed = Math.max(0, Date.now() - recordStartTime);
+              recordTimer.textContent = formatTime(elapsed / 1000);
+            }, 500);
+          }
+
+          function createRecorder(stream, chunks) {
+            const type = getSupportedMime();
+            const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+            rec.ondataavailable = e => {
+              if (e.data && e.data.size > 0) {
+                chunks.push(e.data);
+                // console.log(`Captured chunk: ${e.data.size} bytes`);
+              }
+            };
+            return rec;
+          }
+
+          function stopRecorder(rec) {
+            return new Promise(resolve => {
+              if (!rec || rec.state === "inactive") return resolve();
+              rec.onstop = () => resolve();
+              rec.stop();
+            });
+          }
+
+          function getSupportedMime() {
+            const types = [
+              "video/webm;codecs=vp9,opus",
+              "video/webm;codecs=vp8,opus",
+              "video/webm"
+            ];
+            return types.find(t => MediaRecorder.isTypeSupported(t));
+          }
+
+          function startCameraRecorder(id, stream) {
+            if (cameraRecorders[id]) return;
+            const chunks = [];
+            const rec = createRecorder(stream, chunks);
+            cameraRecorders[id] = { recorder: rec, chunks };
+            rec.start();
+          }
+
+          function sanitizeName(str) {
+            return (str || "").toString().trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_\-]/g, "");
+          }
+
+          function formatDate(ts) {
+            const d = new Date(ts);
+            const pad = n => String(n).padStart(2, "0");
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+          }
+
+          function formatTime(sec) {
+            const s = Math.floor(sec);
+            const h = String(Math.floor(s / 3600)).padStart(2, "0");
+            const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+            const r = String(s % 60).padStart(2, "0");
+            return `${h}:${m}:${r}`;
+          }
+
+          function parseTime(t) {
+            const [h, m, s] = t.split(":").map(Number);
+            return h * 3600 + m * 60 + s;
+          }
+
+          /* ===== MP4 CONVERSION ===== */
+          let ffmpegInstance = null;
+          let ffmpegRef = null; // Store the ffmpeg object
+          let fetchFileRef = null;
+
+          async function ensureFFmpeg() {
+            if (ffmpegInstance) return { ffmpeg: ffmpegRef, fetchFile: fetchFileRef };
+
+            console.log("Loading FFmpeg.wasm v0.12...");
+            const { FFmpeg } = window.FFmpegWASM;
+            const { fetchFile } = window.FFmpegUtil;
+
+            const ffmpeg = new FFmpeg();
+
+            ffmpeg.on("log", ({ message }) => {
+              // console.log("FFmpeg Log:", message);
+            });
+
+            // Load with local files
+            await ffmpeg.load({
+              coreURL: '/lib/ffmpeg/ffmpeg-core.js',
+              wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
+              workerLoadURL: '/lib/ffmpeg/814.ffmpeg.js' // Explicitly load the worker chunk from valid origin
+            });
+
+            ffmpegRef = ffmpeg;
+            fetchFileRef = fetchFile;
+            ffmpegInstance = true;
+            return { ffmpeg, fetchFile };
+          }
+
+          async function convertToMp4(blob, baseName) {
+            // This legacy function might not be used in the new flow but updating just in case
+            const { ffmpeg, fetchFile } = await ensureFFmpeg();
+            const input = `${baseName}.webm`;
+            const output = `${baseName}.mp4`;
+
+            await ffmpeg.writeFile(input, await fetchFile(blob));
+            await ffmpeg.exec(["-i", input, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", output]);
+            const data = await ffmpeg.readFile(output);
+
+            // Cleanup not strictly necessary here if we do it in batch, but good practice
+            await ffmpeg.deleteFile(input);
+            await ffmpeg.deleteFile(output);
+
+            return new Blob([data.buffer], { type: "video/mp4" });
+          }
+
+          /* ===== CLIENT SIDE RENDERING ===== */
+          async function startClientSideRender() {
+            // UI Switch
+            document.getElementById("renderStatusBadge").className = "status-badge processing";
+            document.getElementById("renderStatusBadge").innerText = "RENDER";
+
+            // document.getElementById("transferPhase").style.display = "none"; // REMOVED: Element no longer exists
+            // Let's keep transfer visible in col 2, but show render in col 3
+            const renderPhase = document.getElementById("renderPhase");
+            if (renderPhase) renderPhase.style.display = "block";
+
+            const status = document.getElementById("renderStatusText");
+            const bar = document.getElementById("renderProgressBar");
+
+            let renderStartTime = Date.now();
+            const updateRenderProgress = (pct, text) => {
+              let statusText = text;
+              if (pct > 0 && pct < 100) {
+                const elapsed = (Date.now() - renderStartTime) / 1000;
+                const estimatedTotal = elapsed / (pct / 100);
+                const remaining = Math.max(0, estimatedTotal - elapsed);
+                // const remStr = remaining > 60 ? `${Math.ceil(remaining / 60)}m left` : `${Math.ceil(remaining)}s left`;
+                const remStr = remaining > 60
+                  ? `${Math.floor(remaining / 60)}m ${Math.ceil(remaining % 60)}s left`
+                  : `${Math.ceil(remaining)}s left`;
+
+                statusText += ` <div class='time-remaining'>~${remStr}</div>`;
+              }
+              if (text) status.innerHTML = statusText;
+              bar.style.width = pct + "%";
+            };
+
+            try {
+              updateRenderProgress(5, "Loading FFmpeg...");
+              // Ensure program recorder is fully stopped and chunks available
+              if (programRecorder && programRecorder.state !== "inactive") {
+                await stopRecorder(programRecorder);
+              }
+
+              console.log("Starting Render. Program Chunks:", programChunks.length);
+
+              // Ensure global FFmpeg load
+              const { ffmpeg, fetchFile } = await ensureFFmpeg();
+
+              // 1. Prepare Inputs
+              const sourceFiles = [];
+              const activeCamIds = Object.keys(receivedRecordings);
+
+              // Add Director Program (Live Mix)
+              if (programChunks.length > 0) {
+                const progBlob = new Blob(programChunks, { type: "video/webm" });
+                console.log("Program Blob Size:", progBlob.size);
+                const name = "director_program.webm";
+                await ffmpeg.writeFile(name, await fetchFile(progBlob));
+                sourceFiles.push({ id: "director_program", name, isWebm: true });
+
+                // Show program source in list if not already
+                if (!document.getElementById("xfer_program")) {
+                  updateTransferUI("program", 100, true);
+                  const row = document.getElementById("xfer_program");
+                  if (row) row.querySelector(".name").innerText = "Director Program (Local)";
+                }
+              } else {
+                console.warn("No program chunks found! The live mix will be missing.");
+              }
+
+              // Add Camera Recordings
+              for (let i = 0; i < activeCamIds.length; i++) {
+                const id = activeCamIds[i];
+                const blob = receivedRecordings[id];
+                if (!blob) continue;
+
+                const name = `cam_${id}.webm`;
+                updateRenderProgress(10 + Math.floor((i / activeCamIds.length) * 10), `Writing ${name}...`);
+                await ffmpeg.writeFile(name, await fetchFile(blob));
+                sourceFiles.push({ id, name, isWebm: true });
+
+                // MEMORY OPTIMIZATION: Clear the heavy blob from JS memory now that it's in FFmpeg FS
+                receivedRecordings[id] = null;
+              }
+
+              // 2. Transcode All to MP4 (common format for easy concat)
+              // Even though we concat, converting to MP4 first ensures consistent framerates/codecs
+              const mp4Files = {};
+
+              for (let i = 0; i < sourceFiles.length; i++) {
+                const f = sourceFiles[i];
+                const outName = f.name.replace(".webm", ".mp4");
+                updateRenderProgress(20 + Math.floor((i / sourceFiles.length) * 30), `Converting ${f.name} to MP4...`);
+
+                await ffmpeg.exec([
+                  "-i", f.name,
+                  "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+                  "-c:a", "aac",
+                  outName
+                ]);
+
+                mp4Files[f.id] = outName;
+                // Cleanup webm
+                try { await ffmpeg.deleteFile(f.name); } catch (e) { }
+              }
+
+              // 3. Process EDL for Final Mix
+              updateRenderProgress(60, "Processing Cuts...");
+              const segments = [];
+
+              for (let i = 0; i < isoEdl.length; i++) {
+                const cut = isoEdl[i];
+                const nextCut = isoEdl[i + 1];
+                let duration = null;
+                if (nextCut) {
+                  duration = (nextCut.timestamp - cut.timestamp) / 1000;
+                }
+                const startTime = cut.timestamp / 1000;
+
+                // If camId not in mp4Files (maybe camera dropped), fallback to program or black?
+                // For now, skip or use program if available
+                let inputFile = mp4Files[cut.camId];
+                if (!inputFile) {
+                  console.warn(`Missing file for cut ${i} (Cam ${cut.camId}), using program fallback`);
+                  inputFile = mp4Files["director_program"];
+                }
+                if (!inputFile) continue; // Skip if absolutely nothing
+
+                const segmentName = `seg_${i}.mp4`;
+                // Construct command args
+                const cmdArgs = [
+                  "-ss", String(startTime),
+                  "-i", inputFile
+                ];
+
+                if (duration) {
+                  cmdArgs.push("-t", String(duration));
+                }
+
+                cmdArgs.push(
+                  "-c:v", "libx264", "-preset", "ultrafast",
+                  "-c:a", "aac",
+                  segmentName
+                );
+
+                await ffmpeg.exec(cmdArgs);
+
+                segments.push(segmentName);
+              }
+
+              // 4. Concat
+              updateRenderProgress(80, "Stitching Final Mix...");
+              const listContent = segments.map(s => `file '${s}'`).join("\n");
+              await ffmpeg.writeFile("list.txt", listContent);
+              await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
+
+              const finalData = await ffmpeg.readFile("final_mix.mp4");
+              const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
+              const timestamp = formatDate(Date.now());
+              // Helper to add dl button (Reusing enableInstantDownload style basically, but we need to create the row first)
+              const addRenderedFileRow = (blob, name, label) => {
+                const btnList = document.getElementById("downloadButtons");
+                const row = document.createElement("div");
+                row.className = "file-item";
+                row.style.marginBottom = "8px";
+
+                row.innerHTML = `
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <span class="name">${label}</span>
                 <div style="display:flex; align-items:center;">
@@ -2058,298 +2062,299 @@
               </div>
               `;
 
-          // Create download button manually to attach event
-          const btn = document.createElement("a");
-          btn.className = "instant-dl-btn";
-          btn.innerText = "Download";
-          btn.style.marginLeft = "10px";
-          btn.style.background = "#3b82f6";
-          btn.style.color = "white";
-          btn.style.padding = "4px 10px";
-          btn.style.borderRadius = "4px";
-          btn.style.textDecoration = "none";
-          btn.style.fontSize = "12px";
-          btn.style.cursor = "pointer";
-          btn.style.fontWeight = "600";
+                // Create download button manually to attach event
+                const btn = document.createElement("a");
+                btn.className = "instant-dl-btn";
+                btn.innerText = "Download";
+                btn.style.marginLeft = "10px";
+                btn.style.background = "#3b82f6";
+                btn.style.color = "white";
+                btn.style.padding = "4px 10px";
+                btn.style.borderRadius = "4px";
+                btn.style.textDecoration = "none";
+                btn.style.fontSize = "12px";
+                btn.style.cursor = "pointer";
+                btn.style.fontWeight = "600";
 
-          const url = URL.createObjectURL(blob);
-          btn.href = url;
-          btn.download = name;
+                const url = URL.createObjectURL(blob);
+                btn.href = url;
+                btn.download = name;
 
-          // Append to inner container
-          row.querySelector("div").appendChild(btn);
-          btnList.appendChild(row);
-        };
+                // Append to inner container
+                row.querySelector("div").appendChild(btn);
+                btnList.appendChild(row);
+              };
 
-        addRenderedFileRow(finalBlob, `quality_final_${timestamp}.mp4`, "Final Mix (Rendered)");
+              addRenderedFileRow(finalBlob, `quality_final_${timestamp}.mp4`, "Final Mix (Rendered)");
 
-        // Add Source Buttons
-        for (const [id, mp4Name] of Object.entries(mp4Files)) {
-          const data = await ffmpeg.readFile(mp4Name);
-          const blob = new Blob([data.buffer], { type: "video/mp4" });
+              // Add Source Buttons
+              for (const [id, mp4Name] of Object.entries(mp4Files)) {
+                const data = await ffmpeg.readFile(mp4Name);
+                const blob = new Blob([data.buffer], { type: "video/mp4" });
 
-          let safeName = "program";
-          let label = "Program Source";
+                let safeName = "program";
+                let label = "Program Source";
 
-          if (id !== "director_program") {
-            const p = peers[id];
-            const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
-            safeName = sanitizeName(rawName);
-            label = `Source: ${rawName}`;
-          }
+                if (id !== "director_program") {
+                  const p = peers[id];
+                  const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
+                  safeName = sanitizeName(rawName);
+                  label = `Source: ${rawName}`;
+                }
 
-          const name = `quality_${safeName}_${timestamp}.mp4`;
-          addRenderedFileRow(blob, name, label);
-        }
+                const name = `quality_${safeName}_${timestamp}.mp4`;
+                addRenderedFileRow(blob, name, label);
+              }
 
-        // Cleanup FS
-        try {
-          await ffmpeg.deleteFile("final_mix.mp4");
-          await ffmpeg.deleteFile("list.txt");
-          for (const s of segments) await ffmpeg.deleteFile(s);
-          for (const f of Object.values(mp4Files)) await ffmpeg.deleteFile(f);
-        } catch (e) { }
+              // Cleanup FS
+              try {
+                await ffmpeg.deleteFile("final_mix.mp4");
+                await ffmpeg.deleteFile("list.txt");
+                for (const s of segments) await ffmpeg.deleteFile(s);
+                for (const f of Object.values(mp4Files)) await ffmpeg.deleteFile(f);
+              } catch (e) { }
 
-        // Final Cleanup of Memory
-        programChunks.length = 0;
+              // Final Cleanup of Memory
+              programChunks.length = 0;
 
-        // Custom "Return to Director" Button
-        const completePhase = document.getElementById("completePhase");
+              // Custom "Return to Director" Button
+              const completePhase = document.getElementById("completePhase");
 
-        // Remove old buttons if present (cleared by innerHTML="" earlier)
-        // Add "Return to Director" button
-        const returnBtn = document.createElement("button");
-        returnBtn.className = "modal-btn";
-        returnBtn.style.marginTop = "20px";
-        returnBtn.style.width = "100%";
-        returnBtn.innerText = "Return to Director";
-        returnBtn.onclick = () => location.reload();
-        completePhase.appendChild(returnBtn);
+              // Remove old buttons if present (cleared by innerHTML="" earlier)
+              // Add "Return to Director" button
+              const returnBtn = document.createElement("button");
+              returnBtn.className = "modal-btn";
+              returnBtn.style.marginTop = "20px";
+              returnBtn.style.width = "100%";
+              returnBtn.innerText = "Return to Director";
+              returnBtn.onclick = () => location.reload();
+              completePhase.appendChild(returnBtn);
 
-      } catch (e) {
-        console.error("Client Render Error:", e);
-        alert("Rendering failed: " + e.message);
-        const badge = document.getElementById("renderStatusBadge");
-        if (badge) {
-          badge.className = "status-badge"; // Remove others
-          badge.style.background = "#ef4444";
-          badge.innerText = "ERROR";
-        }
-        // document.getElementById("transferModal").style.display = "none"; // Keep dashboard open to see error
+            } catch (e) {
+              console.error("Client Render Error:", e);
+              alert("Rendering failed: " + e.message);
+              const badge = document.getElementById("renderStatusBadge");
+              if (badge) {
+                badge.className = "status-badge"; // Remove others
+                badge.style.background = "#ef4444";
+                badge.innerText = "ERROR";
+              }
+              // document.getElementById("transferModal").style.display = "none"; // Keep dashboard open to see error
 
-        // Retry Button
-        const btnList = document.getElementById("downloadButtons");
-        if (btnList) {
-          btnList.innerHTML = `
+              // Retry Button
+              const btnList = document.getElementById("downloadButtons");
+              if (btnList) {
+                btnList.innerHTML = `
                 <button onclick="startClientSideRender()" class="modal-btn" style="background:#ef4444; width:100%; margin-top:10px;">
                     Retry Render
                 </button>
             `;
-          document.getElementById("completePhase").style.display = "block";
-        }
-      }
-    }
-
-    function enableInstantDownload(id, blob, filename) {
-      const el = document.getElementById(id);
-      if (!el) return;
-
-      const badge = el.querySelector(".status-badge");
-      if (badge) {
-        badge.className = "status-badge success";
-        badge.innerText = "READY";
-      }
-
-      // Remove existing button if any
-      const existingBtn = el.querySelector(".instant-dl-btn");
-      if (existingBtn) existingBtn.remove();
-
-      const btn = document.createElement("a");
-      btn.className = "instant-dl-btn";
-      btn.innerText = "Download";
-      btn.style.marginLeft = "10px";
-      btn.style.background = "#3b82f6";
-      btn.style.color = "white";
-      btn.style.padding = "4px 10px";
-      btn.style.borderRadius = "4px";
-      btn.style.textDecoration = "none";
-      btn.style.fontSize = "12px";
-      btn.style.cursor = "pointer";
-      btn.style.fontWeight = "600";
-
-      const url = URL.createObjectURL(blob);
-      btn.href = url;
-      btn.download = filename;
-
-      // Append to the inner wrapper (where status badge is)
-      const wrapper = el.querySelector("div > div");
-      if (wrapper) wrapper.appendChild(btn);
-    }
-
-    async function downloadAllRecordings(retainProgram = false) {
-      const timestamp = formatDate(Date.now());
-      // const streamSafe = sanitizeName(streamLabel || "courtstream"); // User wants generic names
-
-      // Program (live)
-      if (programChunks.length) {
-        updateInstantStatus("instant_program", "CONVERTING...", "processing", 10);
-        const webmBlob = new Blob(programChunks, { type: "video/webm" });
-        try {
-          // const mp4Blob = await convertToMp4(webmBlob, "live"); // Optional: skip conversion for speed in instant? 
-          // User asked for instant feeds. Often webm is fine, but mp4 preferred. 
-          // "instant_final"
-          updateInstantStatus("instant_program", "CONVERTING...", "processing", 50);
-          const mp4Blob = await convertToMp4(webmBlob, "instant_final");
-          // downloadBlob(mp4Blob, `instant_final_${timestamp}.mp4`);
-          enableInstantDownload("instant_program", mp4Blob, `instant_final_${timestamp}.mp4`);
-          // updateInstantStatus("instant_program", "SAVED", "success", 100);
-          updateInstantStatus("instant_program", "READY", "success", 100);
-        } catch (e) {
-          console.warn("FFmpeg failed, downloading webm", e);
-          // downloadBlob(webmBlob, `instant_final_${timestamp}.webm`);
-          enableInstantDownload("instant_program", webmBlob, `instant_final_${timestamp}.webm`);
-          updateInstantStatus("instant_program", "READY (WebM)", "success", 100);
-        }
-      }
-
-      // Each camera (Local Mirror)
-      for (const [id, obj] of Object.entries(cameraRecorders)) {
-        const domId = `instant_${id}`;
-        try {
-          const p = peers[id];
-          const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
-
-          const camName = sanitizeName(rawName);
-          const chunks = obj.chunks || [];
-          if (!chunks.length) {
-            updateInstantStatus(domId, "EMPTY", "error");
-            continue;
+                document.getElementById("completePhase").style.display = "block";
+              }
+            }
           }
 
-          updateInstantStatus(domId, "CONVERTING...", "processing", 10);
-          const webmBlob = new Blob(chunks, { type: "video/webm" });
-          // "instant_cameraname"
-          try {
-            updateInstantStatus(domId, "CONVERTING...", "processing", 50);
-            const mp4Blob = await convertToMp4(webmBlob, `instant_${camName}`);
-            // downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
-            enableInstantDownload(domId, mp4Blob, `instant_${camName}_${timestamp}.mp4`);
-            updateInstantStatus(domId, "READY", "success", 100);
-          } catch (e) {
-            console.warn("FFmpeg failed (cam), downloading webm", e);
-            // downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
-            enableInstantDownload(domId, webmBlob, `instant_${camName}_${timestamp}.webm`);
-            updateInstantStatus(domId, "READY (WebM)", "success", 100);
-          }
-        } catch (e) {
-          console.error(`Error processing instant download for ${id}`, e);
-          updateInstantStatus(domId, "ERROR", "error");
-        }
-      }
+          function enableInstantDownload(id, blob, filename) {
+            const el = document.getElementById(id);
+            if (!el) return;
 
-      if (!retainProgram) {
-        programChunks.length = 0;
-      }
-      // Camera recorders are local mirrors, not needed for Quality Render (which uses P2P transfer)
-      Object.keys(cameraRecorders).forEach(id => delete cameraRecorders[id]);
-    }
+            const badge = el.querySelector(".status-badge");
+            if (badge) {
+              badge.className = "status-badge success";
+              badge.innerText = "READY";
+            }
 
-    function downloadBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }
+            // Remove existing button if any
+            const existingBtn = el.querySelector(".instant-dl-btn");
+            if (existingBtn) existingBtn.remove();
 
-    /* ===== QR ===== */
-    function openQr() {
-      const modal = document.getElementById("qrModal");
-      const box = document.getElementById("qrCode");
-      const linkBox = document.getElementById("qrLink");
-      box.innerHTML = "";
+            const btn = document.createElement("a");
+            btn.className = "instant-dl-btn";
+            btn.innerText = "Download";
+            btn.style.marginLeft = "10px";
+            btn.style.background = "#3b82f6";
+            btn.style.color = "white";
+            btn.style.padding = "4px 10px";
+            btn.style.borderRadius = "4px";
+            btn.style.textDecoration = "none";
+            btn.style.fontSize = "12px";
+            btn.style.cursor = "pointer";
+            btn.style.fontWeight = "600";
 
-      const url = `https://courtstream.live/camera-live.html?stream=${encodeURIComponent(streamId)}&name=${encodeURIComponent(streamLabel || "")}`;
-      new QRCode(box, {
-        text: url,
-        width: 200,
-        height: 200,
-        colorDark: "#ffffff",
-        colorLight: "#161922"
-      });
-      linkBox.textContent = url;
-      modal.style.display = "flex";
-    }
+            const url = URL.createObjectURL(blob);
+            btn.href = url;
+            btn.download = filename;
 
-    function closeQr() {
-      document.getElementById("qrModal").style.display = "none";
-    }
-
-    async function goToPlayback() {
-      if (recordingState !== "idle") {
-        if (await confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
-          try {
-            await stopRecording();
-            // Allow time for downloads to initiate
-            setTimeout(() => location.href = "playback.html", 1500);
-          } catch (e) {
-            console.error(e);
-            alert("Error stopping recording: " + e);
-          }
-        }
-      } else {
-        location.href = "playback.html";
-      }
-    }
-
-    /* ===== SIGNAL ===== */
-    socket.on("signal", async ({ from, data }) => {
-      const p = peers[from];
-      const v = viewers[from];
-      if (!p && !v) {
-        console.log("📡 Director: Signal from unknown peer", from);
-        return;
-      }
-
-      try {
-        if (data.type) {
-          console.log(`📡 Director: Received ${data.type} from`, from);
-          if (p) await p.pc.setRemoteDescription(new RTCSessionDescription(data));
-          if (v) await v.pc.setRemoteDescription(new RTCSessionDescription(data));
-        } else {
-          // Robust candidate handling
-          let cand = null;
-          if (data.candidate !== undefined && typeof data.candidate === 'string') {
-            cand = data;
-          } else if (data.candidate && data.candidate.candidate !== undefined) {
-            cand = data.candidate;
-          } else if (data.sdpMid !== undefined) {
-            cand = data;
+            // Append to the inner wrapper (where status badge is)
+            const wrapper = el.querySelector("div > div");
+            if (wrapper) wrapper.appendChild(btn);
           }
 
-          if (cand) {
-            console.log("✅ Director: Adding ICE candidate from", from);
-            if (p) await p.pc.addIceCandidate(new RTCIceCandidate(cand));
-            if (v) await v.pc.addIceCandidate(new RTCIceCandidate(cand));
+          async function downloadAllRecordings(retainProgram = false) {
+            const timestamp = formatDate(Date.now());
+            // const streamSafe = sanitizeName(streamLabel || "courtstream"); // User wants generic names
+
+            // Program (live)
+            if (programChunks.length) {
+              updateInstantStatus("instant_program", "CONVERTING...", "processing", 10);
+              const webmBlob = new Blob(programChunks, { type: "video/webm" });
+              try {
+                // const mp4Blob = await convertToMp4(webmBlob, "live"); // Optional: skip conversion for speed in instant? 
+                // User asked for instant feeds. Often webm is fine, but mp4 preferred. 
+                // "instant_final"
+                updateInstantStatus("instant_program", "CONVERTING...", "processing", 50);
+                const mp4Blob = await convertToMp4(webmBlob, "instant_final");
+                // downloadBlob(mp4Blob, `instant_final_${timestamp}.mp4`);
+                enableInstantDownload("instant_program", mp4Blob, `instant_final_${timestamp}.mp4`);
+                // updateInstantStatus("instant_program", "SAVED", "success", 100);
+                updateInstantStatus("instant_program", "READY", "success", 100);
+              } catch (e) {
+                console.warn("FFmpeg failed, downloading webm", e);
+                // downloadBlob(webmBlob, `instant_final_${timestamp}.webm`);
+                enableInstantDownload("instant_program", webmBlob, `instant_final_${timestamp}.webm`);
+                updateInstantStatus("instant_program", "READY (WebM)", "success", 100);
+              }
+            }
+
+            // Each camera (Local Mirror)
+            for (const [id, obj] of Object.entries(cameraRecorders)) {
+              const domId = `instant_${id}`;
+              try {
+                const p = peers[id];
+                const rawName = p ? p.name : `camera_${id.substring(0, 4)}`;
+
+                const camName = sanitizeName(rawName);
+                const chunks = obj.chunks || [];
+                if (!chunks.length) {
+                  updateInstantStatus(domId, "EMPTY", "error");
+                  continue;
+                }
+
+                updateInstantStatus(domId, "CONVERTING...", "processing", 10);
+                const webmBlob = new Blob(chunks, { type: "video/webm" });
+                // "instant_cameraname"
+                try {
+                  updateInstantStatus(domId, "CONVERTING...", "processing", 50);
+                  const mp4Blob = await convertToMp4(webmBlob, `instant_${camName}`);
+                  // downloadBlob(mp4Blob, `instant_${camName}_${timestamp}.mp4`);
+                  enableInstantDownload(domId, mp4Blob, `instant_${camName}_${timestamp}.mp4`);
+                  updateInstantStatus(domId, "READY", "success", 100);
+                } catch (e) {
+                  console.warn("FFmpeg failed (cam), downloading webm", e);
+                  // downloadBlob(webmBlob, `instant_${camName}_${timestamp}.webm`);
+                  enableInstantDownload(domId, webmBlob, `instant_${camName}_${timestamp}.webm`);
+                  updateInstantStatus(domId, "READY (WebM)", "success", 100);
+                }
+              } catch (e) {
+                console.error(`Error processing instant download for ${id}`, e);
+                updateInstantStatus(domId, "ERROR", "error");
+              }
+            }
+
+            if (!retainProgram) {
+              programChunks.length = 0;
+            }
+            // Camera recorders are local mirrors, not needed for Quality Render (which uses P2P transfer)
+            Object.keys(cameraRecorders).forEach(id => delete cameraRecorders[id]);
           }
-        }
-      } catch (e) {
-        console.warn("Signal error:", e);
-      }
-    });
-  </script>
-  <script src="feedback.js"></script>
-  <div id="renderProgressPanel"
-    style="display:none; position:fixed; bottom:100px; left:50%; transform:translateX(-50%); width:320px; background:rgba(0,0,0,0.8); padding:16px; border-radius:12px; border:1px solid var(--border); z-index:200; flex-direction:column; gap:8px;">
-    <div style="font-size:12px; font-weight:600; color:#94a3b8;" id="renderStatusText">Rendering Video...</div>
-    <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden;">
-      <div id="renderProgressFill" style="width:0%; height:100%; background:#3b82f6; transition: width 0.3s ease;">
-      </div>
-    </div>
-  </div>
+
+          function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          }
+
+          /* ===== QR ===== */
+          function openQr() {
+            const modal = document.getElementById("qrModal");
+            const box = document.getElementById("qrCode");
+            const linkBox = document.getElementById("qrLink");
+            box.innerHTML = "";
+
+            const url = `https://courtstream.live/camera-live.html?stream=${encodeURIComponent(streamId)}&name=${encodeURIComponent(streamLabel || "")}`;
+            new QRCode(box, {
+              text: url,
+              width: 200,
+              height: 200,
+              colorDark: "#ffffff",
+              colorLight: "#161922"
+            });
+            linkBox.textContent = url;
+            modal.style.display = "flex";
+          }
+
+          function closeQr() {
+            document.getElementById("qrModal").style.display = "none";
+          }
+
+          async function goToPlayback() {
+            if (recordingState !== "idle") {
+              if (await confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
+                try {
+                  await stopRecording();
+                  // Allow time for downloads to initiate
+                  setTimeout(() => location.href = "playback.html", 1500);
+                } catch (e) {
+                  console.error(e);
+                  alert("Error stopping recording: " + e);
+                }
+              }
+            } else {
+              location.href = "playback.html";
+            }
+          }
+
+          /* ===== SIGNAL ===== */
+          socket.on("signal", async ({ from, data }) => {
+            const p = peers[from];
+            const v = viewers[from];
+            if (!p && !v) {
+              console.log("📡 Director: Signal from unknown peer", from);
+              return;
+            }
+
+            try {
+              if (data.type) {
+                console.log(`📡 Director: Received ${data.type} from`, from);
+                if (p) await p.pc.setRemoteDescription(new RTCSessionDescription(data));
+                if (v) await v.pc.setRemoteDescription(new RTCSessionDescription(data));
+              } else {
+                // Robust candidate handling
+                let cand = null;
+                if (data.candidate !== undefined && typeof data.candidate === 'string') {
+                  cand = data;
+                } else if (data.candidate && data.candidate.candidate !== undefined) {
+                  cand = data.candidate;
+                } else if (data.sdpMid !== undefined) {
+                  cand = data;
+                }
+
+                if (cand) {
+                  console.log("✅ Director: Adding ICE candidate from", from);
+                  if (p) await p.pc.addIceCandidate(new RTCIceCandidate(cand));
+                  if (v) await v.pc.addIceCandidate(new RTCIceCandidate(cand));
+                }
+              }
+            } catch (e) {
+              console.warn("Signal error:", e);
+            }
+          });
+        </script>
+        <script src="feedback.js"></script>
+        <div id="renderProgressPanel"
+          style="display:none; position:fixed; bottom:100px; left:50%; transform:translateX(-50%); width:320px; background:rgba(0,0,0,0.8); padding:16px; border-radius:12px; border:1px solid var(--border); z-index:200; flex-direction:column; gap:8px;">
+          <div style="font-size:12px; font-weight:600; color:#94a3b8;" id="renderStatusText">Rendering Video...</div>
+          <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden;">
+            <div id="renderProgressFill"
+              style="width:0%; height:100%; background:#3b82f6; transition: width 0.3s ease;">
+            </div>
+          </div>
+        </div>
 </body>
 
 </html>

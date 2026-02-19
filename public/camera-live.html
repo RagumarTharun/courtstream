@@ -1308,7 +1308,10 @@
     socket.on("start-iso", async ({ sessionId }) => {
       console.log("🎥 Starting ISO Recording for Session:", sessionId);
       currentIsoSessionId = sessionId;
-      if (!mediaStream) return;
+      if (!mediaStream) {
+        showToast("❌ No Camera Stream!", "error");
+        return;
+      }
 
       isoChunks = [];
       try {
@@ -1323,25 +1326,59 @@
         isoRecorder.ondataavailable = e => {
           if (e.data && e.data.size > 0) isoChunks.push(e.data);
         };
+        isoRecorder.onerror = (e) => showToast("❌ Recorder Error: " + e.error.message, "error");
+
         isoRecorder.start(1000); // 1s chunks
 
         // Visual indicator
         liveBadge.textContent = "REC";
         liveBadge.style.background = "#b91c1c";
         liveBadge.style.display = "inline-block";
+        showToast("🔴 Recording Started");
 
       } catch (e) {
         console.error("Failed to start ISO recorder:", e);
+        showToast("❌ Start Failed: " + e.message, "error");
+        alert("Recording Start Failed: " + e.message);
       }
     });
 
+    // Helper: Visual Toast
+    function showToast(msg, type = "info") {
+      const t = document.createElement("div");
+      t.innerText = msg;
+      t.style.position = "fixed";
+      t.style.bottom = "80px";
+      t.style.left = "50%";
+      t.style.transform = "translateX(-50%)";
+      t.style.background = type === "error" ? "#ef4444" : "#1e293b";
+      t.style.color = "white";
+      t.style.padding = "10px 20px";
+      t.style.borderRadius = "8px";
+      t.style.zIndex = "10000";
+      t.style.fontSize = "14px";
+      t.style.boxShadow = "0 4px 6px rgba(0,0,0,0.3)";
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+      console.log(`[TOAST] ${msg}`);
+    }
+
     socket.on("stop-iso", (options) => {
+      showToast("🛑 Stop Signal Received");
       console.log("🛑 Stopping ISO Recording. Options:", options);
-      if (!isoRecorder || isoRecorder.state === "inactive") return;
+
+      if (!isoRecorder) {
+        showToast("⚠️ No Recorder Found!", "error");
+        return;
+      }
+      if (isoRecorder.state === "inactive") {
+        showToast("⚠️ Recorder Already Inactive", "error");
+        return;
+      }
 
       isoRecorder.onstop = () => {
         if (options && options.save === false) {
-          console.log("🗑️ ISO Save skipped by director. Discarding blob.");
+          showToast("🗑️ Recording Discarded");
           isoChunks = [];
           liveBadge.textContent = "DONE";
           setTimeout(() => liveBadge.style.display = "none", 1000);
@@ -1351,34 +1388,43 @@
         const blob = new Blob(isoChunks, { type: "video/webm" });
         isoChunks = []; // Free memory
 
+        if (blob.size === 0) {
+          showToast("⚠️ Recording Empty (0 bytes)", "error");
+          return;
+        }
+
         liveBadge.textContent = "SAVED";
         liveBadge.style.background = "#10b981";
 
         // P2P TRANSFER (Director Collection Workflow)
         if (options && options.save === "transfer") {
           if (dataChannel && dataChannel.readyState === "open") {
-            console.log("🚀 Starting P2P Transfer to Director...");
+            showToast("🚀 Starting Transfer...");
             liveBadge.textContent = "SENDING";
             liveBadge.style.background = "#eab308"; // Yellow
             liveBadge.style.display = "inline-block";
             transferRecording(blob);
           } else {
-            console.error("❌ Data Channel not open. Cannot transfer.");
-            alert("Connection to Director lost. Cannot transfer recording.");
+            const msg = "❌ No Connection to Director";
+            console.error(msg);
+            showToast(msg, "error");
+            alert(msg + "\n\nPlease check network or refresh.");
             liveBadge.style.display = "none";
           }
           return;
         }
 
-        // FALLBACK: Old behavior (Local Download or Alert)
-        // If we get here, it means save!="transfer", but save!=false.
-        // So this is a local save or "default" stop.
-        // We'll just hide the badge after a bit.
+        // FALLBACK
+        showToast("💾 Saved Locally (Fallback)");
         setTimeout(() => liveBadge.style.display = "none", 3000);
       };
 
-      isoRecorder.stop();
-      liveBadge.innerHTML = "SAVING";
+      try {
+        isoRecorder.stop();
+        liveBadge.innerHTML = "SAVING";
+      } catch (e) {
+        showToast("❌ Error Stopping: " + e.message, "error");
+      }
     });
 
     async function transferRecording(blob) {
