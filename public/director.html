@@ -1106,17 +1106,67 @@
       console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
 
       if (allReceived) {
-        console.log("🎉 All ISO transfers complete. Checking render lock...");
+        console.log("🎉 All ISO transfers complete. Starting Packaging...");
         setTimeout(() => {
-          if (isDownloadingInstant) {
-            console.log("⏳ Instant download in progress. Queuing render...");
-            isRenderPending = true;
-          } else {
-            console.log("🚀 Starting Client-Side Render...");
-            startClientSideRender();
-          }
+          packageAndDownloadZip();
         }, 1000);
       }
+    }
+
+    async function packageAndDownloadZip() {
+      console.log("📦 Packaging ZIP...");
+
+      // Safety check: wait for programBlob if it's still processing
+      if (!programBlob && programRecorder) {
+        console.log("⏳ Waiting for Program Blob...");
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
+      const zip = new JSZip();
+      const folder = zip.folder(`session_${isoSessionId || Date.now()}`);
+
+      // 1. Add EDL
+      const edlBlob = new Blob([JSON.stringify(isoEdl, null, 2)], { type: "application/json" });
+      folder.file("edl_session.json", edlBlob);
+
+      // 2. Add Program Recording (Local)
+      if (programBlob) {
+        folder.file("program.webm", programBlob);
+      } else {
+        console.warn("⚠️ No Program Blob found to zip");
+      }
+
+      // 3. Add Received Camera Files
+      let camCount = 0;
+      for (const [camId, blob] of Object.entries(receivedRecordings)) {
+        folder.file(`iso_cam_${camId}.webm`, blob);
+        camCount++;
+      }
+      console.log(`📦 Zipping ${camCount} camera files + Program + EDL`);
+
+      // 4. Generate & Download
+      const content = await zip.generateAsync({ type: "blob" });
+      saveBlob(content, `session_${isoSessionId}.zip`);
+
+      // 5. Cleanup
+      document.getElementById("transferModal").style.display = "none";
+      // Clear for next time
+      isoEdl = [];
+      receivedRecordings = {};
+      programChunks = [];
+      programBlob = null;
+
+      alert("Session Saved! You can now load this ZIP in the Render Studio.");
+    }
+
+    function saveBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     async function createPeer(id) {
@@ -1345,7 +1395,7 @@
     /* ===== RECORDING UI ===== */
     // ISO STATE
     let isoSessionId = null;
-    let isoEdl = []; // [{ timestamp, camId }]
+    let isoEdl = []; // [{timestamp, camId}]
     /* uploadedCameras removed - moved to downloads.html */
 
     const recordBar = document.getElementById("recordBar");
@@ -1364,42 +1414,97 @@
 
     // ISO Toggle logic removed
 
-    function toggleRecord() {
-      try {
-        console.log("Record button clicked. State:", recordingState);
-        if (recordingState === "idle") startRecording();
-        else stopRecordingRequest(); // Changed to Request
-      } catch (e) {
-        console.error("Critical error in toggleRecord:", e);
-        window.alert("An unexpected error occurred: " + e.message);
+    async function stopRecordingRequest() {
+      if (recordingState !== "recording") return;
+
+      if (confirm("Stop Recording & Download All Camera ISOs?")) {
+        console.log("🛑 Stopping and Collecting...");
+        recordingState = "idle";
+
+        // Update UI
+        recordBtn.classList.remove("active");
+        recIcon.style.display = "block";
+        stopIcon.style.display = "none";
+        recordBar.style.display = "none";
+        recordStatus.textContent = "IDLE";
+        clearInterval(recordInterval);
+
+        // 1. Stop Local Program Recorder
+        if (programRecorder && programRecorder.state === "recording") {
+          programRecorder.stop();
+          // programRecorder.onstop pushes to programChunks. 
+          // We need to wait for it before zipping.
+          // We'll rely on checkTransfersComplete + isDownloadingInstant logic or just a short timeout/check loop in package
+        }
+
+        // 2. Signal Cameras to Stop & Transfer
+        console.log("📡 Emitting stop-iso with save:transfer");
+        socket.emit("stop-iso", { room: streamId, save: "transfer" });
+
+        // 3. Show Transfer Modal
+        document.getElementById("transferModal").style.display = "flex";
+        updateTransferUI("program", 0);
+
+        // 4. Force check in case we have no cameras
+        checkTransfersComplete();
       }
     }
 
-    /* ===== ISO UPLOAD HANDLER REMOVED - MOVED TO downloads.html ===== */
+    async function packageAndDownloadZip() {
+      console.log("📦 Packaging ZIP...");
 
-    socket.on("render-progress", ({ progress, status }) => {
-      // Keep legacy progress panel for non-ISO tasks if needed, 
-      // but ISO progress is now in downloads.html
-      const bar = document.getElementById("renderProgressPanel");
-      const fill = document.getElementById("renderProgressFill");
-      const text = document.getElementById("renderStatusText");
-      if (!bar) return;
-
-      if (progress < 0) {
-        if (text) text.innerText = "Error: " + status;
-        if (fill) fill.style.background = "#ef4444";
-        setTimeout(() => { bar.style.display = "none"; }, 5000);
-        return;
+      // Safety check: wait for programBlob if it's still processing
+      if (!programBlob && programRecorder) {
+        console.log("⏳ Waiting for Program Blob...");
+        await new Promise(r => setTimeout(r, 1000));
       }
 
-      bar.style.display = "flex";
-      if (fill) fill.style.width = progress + "%";
-      if (text) text.innerText = status + " (" + progress + "%)";
+      const zip = new JSZip();
+      const folder = zip.folder(`session_${isoSessionId || Date.now()}`);
 
-      if (progress >= 100) {
-        setTimeout(() => { bar.style.display = "none"; }, 3000);
+      // 1. Add EDL
+      const edlBlob = new Blob([JSON.stringify(isoEdl, null, 2)], { type: "application/json" });
+      folder.file("edl_session.json", edlBlob);
+
+      // 2. Add Program Recording (Local)
+      if (programBlob) {
+        folder.file("program.webm", programBlob);
+      } else {
+        console.warn("⚠️ No Program Blob found to zip");
       }
-    });
+
+      // 3. Add Received Camera Files
+      let camCount = 0;
+      for (const [camId, blob] of Object.entries(receivedRecordings)) {
+        folder.file(`iso_cam_${camId}.webm`, blob);
+        camCount++;
+      }
+      console.log(`📦 Zipping ${camCount} camera files + Program + EDL`);
+
+      // 4. Generate & Download
+      const content = await zip.generateAsync({ type: "blob" });
+      saveBlob(content, `session_${isoSessionId}.zip`);
+
+      // 5. Cleanup
+      document.getElementById("transferModal").style.display = "none";
+      // Clear for next time
+      isoEdl = [];
+      receivedRecordings = {};
+      programChunks = [];
+      programBlob = null;
+
+      alert("Session Saved! You can now load this ZIP in the Render Studio.");
+    }
+
+    function saveBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
 
     // switchCamera removed - using setLiveCamera directly
 
@@ -1559,17 +1664,17 @@
       if (id) div.id = id;
 
       div.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <span class="name">${name}</span> 
-            <div style="display:flex; align-items:center;">
-                <span class="status-badge processing">${status}</span>
-            </div>
-        </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span class="name">${name}</span>
+                <div style="display:flex; align-items:center;">
+                  <span class="status-badge processing">${status}</span>
+                </div>
+              </div>
         <!-- Optional Progress -->
-        <div class="dash-progress" style="display:none;"> <!-- Hidden by default, shown if needed -->
-             <div class="dash-fill" style="width: 0%"></div>
-        </div>
-      `;
+              <div class="dash-progress" style="display:none;"> <!-- Hidden by default, shown if needed -->
+                <div class="dash-fill" style="width: 0%"></div>
+              </div>
+              `;
       list.appendChild(div);
       return div;
     }
@@ -1779,7 +1884,7 @@
           const elapsed = (Date.now() - renderStartTime) / 1000;
           const estimatedTotal = elapsed / (pct / 100);
           const remaining = Math.max(0, estimatedTotal - elapsed);
-          // const remStr = remaining > 60 ? `${Math.ceil(remaining/60)}m left` : `${Math.ceil(remaining)}s left`;
+          // const remStr = remaining > 60 ? `${Math.ceil(remaining / 60)}m left` : `${Math.ceil(remaining)}s left`;
           const remStr = remaining > 60
             ? `${Math.floor(remaining / 60)}m ${Math.ceil(remaining % 60)}s left`
             : `${Math.ceil(remaining)}s left`;
@@ -1921,13 +2026,13 @@
           row.style.marginBottom = "8px";
 
           row.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="name">${label}</span>
-                    <div style="display:flex; align-items:center;">
-                        <span class="status-badge success">READY</span>
-                    </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="name">${label}</span>
+                <div style="display:flex; align-items:center;">
+                  <span class="status-badge success">READY</span>
                 </div>
-            `;
+              </div>
+              `;
 
           // Create download button manually to attach event
           const btn = document.createElement("a");

@@ -219,6 +219,7 @@
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const dropZone = document.getElementById('dropZone');
@@ -248,44 +249,106 @@
 
         fileInput.onchange = (e) => handleFiles(e.target.files);
 
-        function handleFiles(fileListObj) {
+        async function handleFiles(fileListObj) {
             if (!fileListObj) return;
-            Array.from(fileListObj).forEach(file => {
-                if (files.some(f => f.name === file.name)) return;
 
-                files.push(file);
-
-                if (file.name.endsWith('.json')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        try {
-                            state.edl = JSON.parse(e.target.result);
-                            console.log("✅ Loaded EDL:", state.edl);
-                            checkReady();
-                        } catch (err) {
-                            alert("Invalid JSON file");
-                        }
-                    };
-                    reader.readAsText(file);
-                } else if (file.type.startsWith('video/')) {
-                    state.videos[file.name] = file;
+            for (const file of Array.from(fileListObj)) {
+                if (file.name.endsWith('.zip')) {
+                    await handleZipFile(file);
+                } else {
+                    await processSingleFile(file);
                 }
-
-                renderFileItem(file);
-            });
+            }
             checkReady();
         }
 
-        function renderFileItem(file) {
+        async function handleZipFile(zipFile) {
+            try {
+                const zip = await JSZip.loadAsync(zipFile);
+                console.log("📦 Zip Loaded:", zip.files);
+
+                // Iterate over files in zip
+                const promises = [];
+                zip.forEach((relativePath, zipEntry) => {
+                    promises.push(async () => {
+                        if (zipEntry.dir) return;
+
+                        // Check type based on extension
+                        if (zipEntry.name.endsWith('.json')) {
+                            const text = await zipEntry.async("text");
+                            try {
+                                state.edl = JSON.parse(text);
+                                console.log("✅ Loaded EDL from Zip:", state.edl);
+                                renderFileItem({ name: zipEntry.name, size: text.length }, "edl");
+                            } catch (e) { console.error("Invalid JSON in zip", e); }
+                        } else if (zipEntry.name.endsWith('.webm') || zipEntry.name.endsWith('.mp4')) {
+                            const blob = await zipEntry.async("blob");
+                            const videoFile = new File([blob], zipEntry.name, { type: "video/webm" });
+                            state.videos[zipEntry.name] = videoFile;
+                            renderFileItem(videoFile, "video");
+                        }
+                    });
+                });
+
+                // Run all extractions in parallel-ish (forEach doesn't await, so we need to map if we waited)
+                // But honestly, we can just process them as they come. 
+                // Let's iterate keys properly to wait.
+                for (const filename of Object.keys(zip.files)) {
+                    const zipEntry = zip.files[filename];
+                    if (zipEntry.dir) continue;
+
+                    if (filename.endsWith('.json')) {
+                        const text = await zipEntry.async("text");
+                        try {
+                            state.edl = JSON.parse(text);
+                            console.log("✅ Loaded EDL from Zip:", state.edl);
+                            renderFileItem({ name: filename, size: text.length }, "edl");
+                        } catch (e) { }
+                    } else if (filename.match(/\.(webm|mp4)$/i)) {
+                        const blob = await zipEntry.async("blob");
+                        const videoFile = new File([blob], filename, { type: "video/webm" }); // mimetype guess
+                        state.videos[filename] = videoFile;
+                        renderFileItem(videoFile, "video");
+                    }
+                }
+
+            } catch (err) {
+                console.error("Error reading ZIP:", err);
+                alert("Failed to unzip file. See console.");
+            }
+        }
+
+        async function processSingleFile(file) {
+            if (files.some(f => f.name === file.name)) return;
+            files.push(file);
+
+            if (file.name.endsWith('.json')) {
+                const text = await file.text();
+                try {
+                    state.edl = JSON.parse(text);
+                    console.log("✅ Loaded EDL:", state.edl);
+                    renderFileItem(file, "edl");
+                } catch (err) { alert("Invalid JSON"); }
+            } else if (file.type.startsWith('video/')) {
+                state.videos[file.name] = file;
+                renderFileItem(file, "video");
+            }
+        }
+
+        function renderFileItem(file, explicitType) {
             const div = document.createElement('div');
             div.className = 'file-item';
             div.id = 'file_' + file.name.replace(/[^a-z0-9]/gi, '_');
 
-            let type = file.name.endsWith('.json') ? '📋 EDL' : '🎥 Video';
+            let typeLabel = explicitType === 'edl' ? '📋 EDL' : '🎥 Video';
+            // Fallback inference if explicitType not provided (legacy calls)
+            if (!explicitType) {
+                typeLabel = file.name.endsWith('.json') ? '📋 EDL' : '🎥 Video';
+            }
 
             div.innerHTML = `
         <div class="file-info">
-          <span class="file-name">${type}: ${file.name}</span>
+          <span class="file-name">${typeLabel}: ${file.name}</span>
           <span class="file-meta">${(file.size / 1024 / 1024).toFixed(2)} MB</span>
         </div>
         <div class="status">Ready</div>
@@ -330,18 +393,29 @@
             for (const [filename, file] of Object.entries(state.videos)) {
                 // Try to find camId in filename
                 let matchedCamId = null;
-                for (const camId of requiredCams) {
-                    if (filename.includes(camId)) {
-                        matchedCamId = camId;
-                        break;
+
+                // 1. Exact match attempts (common patterns)
+                // "iso_cam_user.webm" -> "user"
+                const match = filename.match(/iso_cam_(.+?)\./);
+                if (match && requiredCams.has(match[1])) {
+                    matchedCamId = match[1];
+                }
+
+                // 2. Fallback: Check if filename contains the camId string
+                if (!matchedCamId) {
+                    for (const camId of requiredCams) {
+                        if (filename.includes(camId)) {
+                            matchedCamId = camId;
+                            break;
+                        }
                     }
                 }
 
-                // Fallback: If not found, maybe just upload it with its filename as ID? 
-                // No, server needs mapped ID.
                 if (!matchedCamId) {
                     console.warn(`Could not match file ${filename} to any camId in EDL:`, requiredCams);
-                    // Optional: Prompt user? For now, skip or upload as "unknown"?
+                    // We will upload it anyway, but render might fail if ID is missing.
+                    // Actually, let's try to map it using "unknown" or ask server to be smart?
+                    // For now, skip to avoid breaking server.
                     continue;
                 }
 
