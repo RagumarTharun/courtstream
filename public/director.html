@@ -697,75 +697,47 @@
 
   <!-- POST-PRODUCTION DASHBOARD (FAKE REDIRECT) -->
   <!-- POST-PRODUCTION DASHBOARD (FAKE REDIRECT) -->
-  <div id="transferModal" style="display:none; z-index: 20000;">
-    <div class="dashboard-header">
-      <h1>🎬 Post-Production Studio</h1>
-      <div style="color: #94a3b8; font-size: 14px; margin-top: 8px;">Processing your session... Do not close this
-        tab.
-      </div>
-    </div>
-
-    <div class="dashboard-grid">
-      <!-- COL 1: INSTANT EXPORTS -->
-      <div class="dashboard-col">
-        <h2>
-          <span>⚡ Instant Exports</span>
-          <span class="status-badge success">READY</span>
-        </h2>
-        <div id="instantList">
-          <!-- Instant file items will go here -->
-          <div class="file-item">
-            <span>Program Feed (Local)</span>
-            <span class="status-badge success">SAVED</span>
-          </div>
-        </div>
-        <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid #334155;">
-          <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">Files saved to your Downloads folder.
-          </div>
+  <!-- DOWNLOAD & TRANSFER MODAL -->
+  <div id="transferModal" class="modal" style="display:none; z-index: 20000;">
+    <div class="modal-box" style="width: 500px; max-width: 95%;">
+      <div class="dashboard-header" style="margin-bottom: 20px;">
+        <h2>📦 Session Download</h2>
+        <div style="color: #94a3b8; font-size: 14px; margin-top: 4px;">
+          Collecting files from all cameras...
         </div>
       </div>
 
-      <!-- COL 2: SOURCE TRANSFERS -->
-      <div class="dashboard-col">
-        <h2>
-          <span>📡 Source Transfers</span>
-          <span id="transferStatusBadge" class="status-badge processing">ACTIVE</span>
-        </h2>
-        <div id="transferList" style="display: flex; flex-direction: column; gap: 8px;">
-          <!-- Dynamic Transfer Rows -->
-        </div>
-        <!-- Safety: Manual Bypass -->
-        <button onclick="startClientSideRender()"
-          style="margin-top: 20px; background: transparent; border: 1px dashed #475569; color: #64748b; font-size: 10px; cursor: pointer; padding: 4px; width: 100%;">Force
-          Render (Debug)</button>
-      </div>
+      <div class="dashboard-grid" style="display: flex; flex-direction: column; gap: 15px;">
 
-      <!-- COL 3: FINAL RENDER -->
-      <div class="dashboard-col">
-        <h2>
-          <span>🎞️ Final Render</span>
-          <span id="renderStatusBadge" class="status-badge pending">WAITING</span>
-        </h2>
-
-        <div id="renderPhase" style="display: none;">
-          <div style="margin-bottom: 8px; color: #e2e8f0; font-size: 14px;" id="renderStatusText">Waiting for
-            sources...
-          </div>
-          <div class="dash-progress">
-            <div id="renderProgressBar" class="dash-fill"></div>
+        <!-- TRANSFER LIST -->
+        <div class="dashboard-col" style="background: var(--bg-surface); padding: 15px; border-radius: 8px;">
+          <h3
+            style="margin-bottom: 10px; font-size: 14px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px;">
+            File Status
+          </h3>
+          <div id="transferList" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Dynamic Rows -->
           </div>
         </div>
 
-        <div id="completePhase" style="display: none; margin-top: 16px;">
+        <!-- ACTIONS -->
+        <div id="downloadActions" style="display: none; flex-direction: column; gap: 10px; margin-top: 10px;">
           <div class="file-item"
-            style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
-            <span style="color: #10b981; font-weight: 600;">✅ Rendering Complete</span>
+            style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); text-align: center; justify-content: center;">
+            <span style="color: #10b981; font-weight: 600;">✅ Session Zipped & Downloaded</span>
           </div>
-          <div id="downloadButtons"></div>
-          <button class="dash-btn" onclick="location.reload()" style="background: #334155; margin-top: 24px;">Start
-            New
-            Session</button>
+
+          <a href="render.html" class="action-btn"
+            style="text-decoration: none; text-align: center; justify-content: center; background: #2563eb; color: white;">
+            Open Render Studio
+          </a>
+
+          <button class="modal-btn" onclick="document.getElementById('transferModal').style.display='none'"
+            style="margin-top: 5px;">
+            Close & Continue Recording
+          </button>
         </div>
+
       </div>
     </div>
   </div>
@@ -1112,11 +1084,16 @@
         row = document.createElement("div");
         row.id = `xfer_${id}`;
         row.className = "file-item";
-        row.style.display = "block"; // Override flex for block structure if needed, or keep flex
-        // Actually file-item is flex, let's keep it but structure inner content
+        row.style.display = "block";
+
+        // Fix Name Label
+        let displayName = `Camera ${id.substring(0, 4)}`;
+        if (id === "program") displayName = "Director Program (Local)";
+        if (peers[id] && peers[id].name) displayName = peers[id].name;
+
         row.innerHTML = `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span class="name">Camera ${id.substring(0, 4)}</span>
+                    <span class="name">${displayName}</span>
                     <span class="pct" style="color: #94a3b8;">0%</span>
                 </div>
                 <div class="dash-progress">
@@ -1190,14 +1167,16 @@
       saveBlob(content, `session_${isoSessionId}.zip`);
 
       // 5. Cleanup
-      document.getElementById("transferModal").style.display = "none";
-      // Clear for next time
+      // Don't hide modal immediately, verify download
+      document.getElementById("downloadActions").style.display = "flex";
+
+      // Clear for next time internally but keep UI open
       isoEdl = [];
       receivedRecordings = {};
       programChunks = [];
       programBlob = null;
 
-      alert("Session Saved! You can now load this ZIP in the Render Studio.");
+      // alert("Session Saved! You can now load this ZIP in the Render Studio.");
     }
 
     function saveBlob(blob, filename) {
@@ -1614,19 +1593,37 @@
       recordStatus.textContent = "IDLE";
       clearInterval(recordTimerInt);
 
-      // 1. Stop Local Program Recorder
+      // Reset Download UI
+      document.getElementById("transferList").innerHTML = "";
+      document.getElementById("downloadActions").style.display = "none";
+      let transferModal = document.getElementById("transferModal");
+      transferModal.className = "modal"; // Reset to modal class
+      transferModal.style.display = "flex";
+
+      // 1. Stop Local Program Recorder & Create Blob
       if (programRecorder && programRecorder.state === "recording") {
         programRecorder.stop();
-        // programRecorder.onstop pushes to programChunks. 
+        // Give it a moment to flush final chunks
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      // Explicitly Create Program Blob
+      if (programChunks.length > 0) {
+        programBlob = new Blob(programChunks, { type: "video/webm" });
+        console.log("✅ Program Blob Created:", programBlob.size);
+        updateTransferUI("program", 100, true);
+      } else {
+        console.warn("⚠️ No program chunks found!");
+        updateTransferUI("program", 0, false); // Show as failed/empty
       }
 
       // 2. Signal Cameras to Stop & Transfer
       console.log("📡 Emitting stop-iso with save:transfer");
       socket.emit("stop-iso", { room: streamId, save: "transfer" });
 
-      // 3. Show Transfer Modal
-      document.getElementById("transferModal").style.display = "flex";
-      updateTransferUI("program", 0);
+      // 3. Show Transfer Modal & Add Camera Rows
+      const activePeers = Object.keys(peers).filter(pid => peers[pid].stream);
+      activePeers.forEach(pid => updateTransferUI(pid, 0));
 
       // 4. Force check
       setTimeout(checkTransfersComplete, 500);
