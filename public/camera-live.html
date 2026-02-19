@@ -423,7 +423,9 @@
 
       socket.on("control", ({ from, data }) => {
         console.log("Control:", data);
-        if (data && data.type === "live") {
+        if (!data) return;
+
+        if (data.type === "live") {
           const isLive = data.on;
           document.getElementById("liveBadge").style.display = isLive ? "inline-block" : "none";
 
@@ -436,9 +438,14 @@
           const v = document.querySelector("video");
           if (v) v.style.border = isLive ? "2px solid #ef4444" : "none";
         }
+        else if (data.type === "stop-iso") {
+          console.log("🛑 Received stop-iso via Control channel");
+          handleStopIso(data);
+        }
       });
 
       socket.on("signal", async ({ from, data }) => {
+        // ... (signal handling remains same, not touching this block in replacement)
         if (!data) return;
 
         if (data.type === "offer") {
@@ -611,8 +618,15 @@
     });
 
     socket.on("stop-iso", (options) => {
+      handleStopIso(options);
+    });
+
+    function handleStopIso(options) {
       console.log("🛑 Stopping ISO Recording. Options:", options);
-      if (!isoRecorder || isoRecorder.state === "inactive") return;
+      if (!isoRecorder || isoRecorder.state === "inactive") {
+        console.warn("⚠️ ISO Recorder already inactive or missing");
+        return;
+      }
 
       isoRecorder.onstop = () => {
         if (options && options.save === false) {
@@ -637,7 +651,7 @@
       };
       isoRecorder.stop();
       liveBadge.innerHTML = "SENDING";
-    });
+    }
 
     async function transferRecording(blob) {
       const CHUNK_SIZE = 16 * 1024; // 16KB safe chunk size
