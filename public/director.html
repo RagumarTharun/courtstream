@@ -188,40 +188,18 @@
       background: rgba(15, 17, 21, .85);
       border: 1px solid var(--border);
       color: #fff;
+      width: 40px;
       height: 40px;
-      border-radius: 20px;
-      /* Pill shape ready */
+      border-radius: 50%;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      padding: 0 12px;
-      /* Pad for icon */
-      min-width: 40px;
-      overflow: hidden;
-      white-space: nowrap;
-    }
-
-    .ctrl-btn span {
-      display: none;
-      margin-left: 8px;
-      font-size: 13px;
-      font-weight: 500;
-      opacity: 0;
-      transform: translateX(-5px);
       transition: all 0.2s;
     }
 
     .ctrl-btn:hover {
       background: var(--border);
-      padding-right: 16px;
-    }
-
-    .ctrl-btn:hover span {
-      display: inline-block;
-      opacity: 1;
-      transform: translateX(0);
     }
 
     .ctrl-btn.active {
@@ -577,29 +555,26 @@
 
         <!-- RECORD -->
         <button id="recordBtn" class="ctrl-btn" title="Record" onclick="toggleRecord()">
-          <svg viewBox="0 0 24 24" width="24" height="24">
-            <circle cx="12" cy="12" r="6" fill="white" class="rec-icon" />
-            <rect x="8" y="8" width="8" height="8" fill="white" class="stop-icon" style="display:none" />
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8" fill="white" class="rec-icon" />
+            <rect x="6" y="6" width="12" height="12" fill="white" class="stop-icon" style="display:none" />
           </svg>
-          <span class="rec-text">Record</span>
         </button>
 
         <!-- PLAYBACK -->
         <button id="playbackBtn" class="ctrl-btn" title="Playback Editor" onclick="goToPlayback()">
-          <svg viewBox="0 0 24 24" width="24" height="24">
+          <svg viewBox="0 0 24 24">
             <path fill="white"
               d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
           </svg>
-          <span>Playback</span>
         </button>
 
         <!-- QR CODE -->
         <button id="qrBtn" class="ctrl-btn" title="Camera QR Code" onclick="openQr()">
-          <svg viewBox="0 0 24 24" width="24" height="24">
+          <svg viewBox="0 0 24 24">
             <path fill="white"
               d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm0-2h2v2h-2v-2zm-6 4h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2z" />
           </svg>
-          <span>Share QR</span>
         </button>
       </div>
 
@@ -829,26 +804,17 @@
             const match = streams.find(s => s.id === streamId);
             if (match) name = match.name;
           }
-        } catch (e) {
-          console.warn("Failed to fetch stream details:", e);
+        } catch {
+          // fallback below
         }
       }
 
-      const label = name || streamId || "CourtStream Director";
+      const label = name || streamId || "Unknown Stream";
       streamLabel = label;
-
-      const badge = document.getElementById("streamBadge");
-      if (badge) {
-        badge.innerText = label + " • LIVE";
-        badge.style.display = "block";
-      }
+      document.getElementById("streamBadge").innerText =
+        label + " • LIVE";
     }
-
-    // Initial call
     updateStreamBadge();
-
-    // Refresh every 10s to ensure name catches up if it was just created
-    setInterval(updateStreamBadge, 10000);
 
     /* ===== SOCKET / STATE ===== */
     const socket = io();
@@ -1986,57 +1952,58 @@
           await ffmpeg.exec(cmdArgs);
 
           segments.push(segmentName);
+          updateRenderProgress(60 + Math.floor((i / isoEdl.length) * 20), `Processed Cut ${i + 1}/${isoEdl.length}`);
         }
 
-        // 4. Concat
-        updateRenderProgress(80, "Stitching Final Mix...");
-        const listContent = segments.map(s => `file '${s}'`).join("\n");
-        await ffmpeg.writeFile("list.txt", listContent);
+        // 4. Concat Segments
+        updateRenderProgress(85, "Stitching Final Mix...");
+        const concatList = segments.map(s => `file '${s}'`).join("\n");
+        await ffmpeg.writeFile("list.txt", concatList);
+
         await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
+
+        // 5. Success
+        updateRenderProgress(100, "Done!");
 
         const finalData = await ffmpeg.readFile("final_mix.mp4");
         const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
+
+        // Prepare Downloads UI
+        document.getElementById("renderPhase").style.display = "none";
+        document.getElementById("completePhase").style.display = "block";
+        const btnList = document.getElementById("downloadButtons");
+        btnList.innerHTML = "";
+
         const timestamp = formatDate(Date.now());
-        // Helper to add dl button (Reusing enableInstantDownload style basically, but we need to create the row first)
-        const addRenderedFileRow = (blob, name, label) => {
-          const btnList = document.getElementById("downloadButtons");
-          const row = document.createElement("div");
-          row.className = "file-item";
-          row.style.marginBottom = "8px";
 
-          row.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="name">${label}</span>
-                    <div style="display:flex; align-items:center;">
-                        <span class="status-badge success">READY</span>
-                    </div>
-                </div>
-            `;
-
-          // Create download button manually to attach event
-          const btn = document.createElement("a");
-          btn.className = "instant-dl-btn";
-          btn.innerText = "Download";
-          btn.style.marginLeft = "10px";
-          btn.style.background = "#3b82f6";
-          btn.style.color = "white";
-          btn.style.padding = "4px 10px";
-          btn.style.borderRadius = "4px";
-          btn.style.textDecoration = "none";
-          btn.style.fontSize = "12px";
-          btn.style.cursor = "pointer";
-          btn.style.fontWeight = "600";
-
+        // Helper to add dl button
+        // Helper to add dl button
+        const addBtn = (blob, name, label, isPrimary = false) => {
           const url = URL.createObjectURL(blob);
+          const btn = document.createElement("a");
+
+          if (isPrimary) {
+            btn.className = "btn-premium";
+            btn.innerHTML = `<span style="font-size:1.1em">⬇</span> ${label}`;
+          } else {
+            btn.className = "btn-outline"; // Re-use existing outline class
+            btn.style.display = "block";
+            btn.style.padding = "10px";
+            btn.style.textAlign = "center";
+            btn.style.border = "1px solid #334155";
+            btn.style.borderRadius = "8px";
+            btn.style.color = "#94a3b8";
+            btn.style.textDecoration = "none";
+            btn.style.marginBottom = "8px";
+            btn.innerText = label;
+          }
+
           btn.href = url;
           btn.download = name;
-
-          // Append to inner container
-          row.querySelector("div").appendChild(btn);
-          btnList.appendChild(row);
+          btnList.appendChild(btn);
         };
 
-        addRenderedFileRow(finalBlob, `quality_final_${timestamp}.mp4`, "Final Mix (Rendered)");
+        addBtn(finalBlob, `quality_final_${timestamp}.mp4`, "Download Final Mix", true);
 
         // Add Source Buttons
         for (const [id, mp4Name] of Object.entries(mp4Files)) {
@@ -2054,7 +2021,7 @@
           }
 
           const name = `quality_${safeName}_${timestamp}.mp4`;
-          addRenderedFileRow(blob, name, label);
+          addBtn(blob, name, label, false);
         }
 
         // Cleanup FS
@@ -2067,19 +2034,6 @@
 
         // Final Cleanup of Memory
         programChunks.length = 0;
-
-        // Custom "Return to Director" Button
-        const completePhase = document.getElementById("completePhase");
-
-        // Remove old buttons if present (cleared by innerHTML="" earlier)
-        // Add "Return to Director" button
-        const returnBtn = document.createElement("button");
-        returnBtn.className = "modal-btn";
-        returnBtn.style.marginTop = "20px";
-        returnBtn.style.width = "100%";
-        returnBtn.innerText = "Return to Director";
-        returnBtn.onclick = () => location.reload();
-        completePhase.appendChild(returnBtn);
 
       } catch (e) {
         console.error("Client Render Error:", e);

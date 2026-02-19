@@ -16,9 +16,12 @@
       --red: #b91c1c;
     }
 
-    /* Feedback Button Override - Controlled by modular feedback.js */
+    /* Feedback Button Override - Top Right */
     .feedback-fab {
-      display: none !important;
+      top: 24px !important;
+      right: 24px !important;
+      bottom: auto !important;
+      left: auto !important;
     }
 
     .live-indicator {
@@ -59,76 +62,62 @@
       inset: 0;
       display: flex;
       flex-direction: column;
-      height: 100dvh;
-      overflow: hidden;
-      background: #000;
     }
 
-    /* HEADER / BADGE CHIP */
+    /* HEADER */
     .header {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 40;
-      pointer-events: none;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      justify-content: center;
+      position: relative;
     }
 
     .header-title {
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(8px);
-      padding: 6px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 600;
       display: flex;
       align-items: center;
-      gap: 8px;
     }
 
     /* PREVIEW */
     .preview {
       flex: 1;
-      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      width: 100%;
-      height: 100%;
     }
 
     video {
-      width: 100%;
-      height: 100%;
+      width: 90vw;
+      max-width: 420px;
+      max-height: 100%;
       background: #000;
+      border-radius: 18px;
       object-fit: contain;
-      /* Default */
-      transition: transform 0.3s ease;
+      /* NO CROPPING */
+      transition: transform .25s ease;
     }
 
     /* CONTROLS */
     .controls {
-      position: relative;
-      z-index: 50;
       display: flex;
       justify-content: center;
-      gap: 20px;
-      padding: 20px;
-      background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+      gap: 24px;
+      padding: 18px 0 24px;
     }
 
     .ctrl {
-      width: 52px;
-      height: 52px;
+      width: 56px;
+      height: 56px;
       border-radius: 50%;
-      border: 1.5px solid rgba(255, 255, 255, 0.2);
-      background: rgba(22, 25, 34, 0.8);
+      border: 2px solid var(--border);
+      background: var(--card);
       display: flex;
       align-items: center;
       justify-content: center;
-      backdrop-filter: blur(4px);
-      -webkit-tap-highlight-color: transparent;
     }
 
     .ctrl.off {
@@ -185,234 +174,34 @@
       cursor: pointer;
     }
 
-    /* On-Screen Controls */
-    .on-screen-ctrl {
-      position: absolute;
-      z-index: 20;
-      background: rgba(0, 0, 0, 0.3);
-      backdrop-filter: blur(4px);
-      border-radius: 20px;
-      padding: 8px;
+    /* UPLOAD PROGRESS */
+    #uploadProgressOverlay {
       display: none;
-      /* Hidden by default, shown during gesture or status */
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      transition: opacity 0.3s;
-      pointer-events: none;
-      /* Don't block video touches */
-    }
-
-    /* Exposure / Focus Box */
-    .exposure-box {
       position: absolute;
-      width: 60px;
-      height: 60px;
-      border: 2px solid #fbbf24;
-      /* Amber/Yellow for focus */
-      border-radius: 4px;
-      display: none;
-      z-index: 25;
-      pointer-events: none;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-    }
-
-    .exposure-box::after {
-      content: "☀️";
-      position: absolute;
-      right: -25px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 16px;
-    }
-
-    /* Range Input Customization */
-    input[type=range] {
-      -webkit-appearance: none;
-      appearance: none;
-      background: transparent;
-    }
-
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      height: 20px;
-      width: 20px;
-      border-radius: 50%;
-      background: #3b82f6;
-      cursor: pointer;
-      margin-top: -8px;
-      box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
-    }
-
-    input[type=range]::-webkit-slider-runnable-track {
-      width: 100%;
-      height: 4px;
-      cursor: pointer;
-      background: rgba(255, 255, 255, 0.3);
-      border-radius: 2px;
-    }
-
-    /* Vertical Range Transformation */
-    .vertical-range {
-      width: 150px;
-      height: 40px;
-      transform: rotate(-90deg);
-      transform-origin: center;
-      margin: 60px -55px;
-      /* Adjust spacing for rotation */
-    }
-
-    /* RIGHT SIDE: ZOOM */
-    .os-zoom {
-      right: 20px;
-      top: 50%;
-      transform: translateY(-50%);
-      height: 200px;
-      width: 40px;
-    }
-
-    /* LEFT SIDE: EXPOSURE */
-    .os-exposure {
+      bottom: 100px;
       left: 20px;
-      top: 50%;
-      transform: translateY(-50%);
-      height: 200px;
-      width: 40px;
-    }
-
-    /* Settings Overlay - RWD Overhaul */
-    #settingsOverlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(10, 12, 16, 0.95);
-      backdrop-filter: blur(12px);
-      z-index: 500;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .settings-card {
-      background: #1a1d26;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 28px;
-      padding: 24px;
-      width: 100%;
-      max-width: 400px;
-      max-height: 90vh;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    }
-
-    .settings-title {
-      font-size: 22px;
-      font-weight: 700;
-      text-align: center;
-      margin-bottom: 8px;
-      color: #fff;
-    }
-
-    .settings-group {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .settings-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .settings-label {
-      font-weight: 600;
-      color: #94a3b8;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .settings-control-block {
-      display: flex;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      z-index: 50;
       flex-direction: column;
       gap: 8px;
-      width: 100%;
     }
 
-    /* RWD Landscape Adjustments for Settings */
-    @media (orientation: landscape) {
-      .settings-card {
-        max-width: 600px;
-        flex-direction: row;
-        flex-wrap: wrap;
-        align-content: flex-start;
-      }
-
-      .settings-title {
-        width: 100%;
-      }
-
-      .settings-group {
-        flex: 1;
-        min-width: 250px;
-      }
-
-      .settings-footer {
-        width: 100%;
-      }
+    .progress-bar {
+      height: 6px;
+      background: #1e293b;
+      border-radius: 3px;
+      overflow: hidden;
     }
 
-    /* LANDSCAPE FIXES (Main Page) */
-    @media (orientation: landscape) {
-      .page {
-        flex-direction: row;
-        /* Header left, Preview/Controls right */
-      }
-
-      .header {
-        position: relative;
-        top: 0;
-        left: 0;
-        width: 140px;
-        height: 100dvh;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        padding: 0 10px;
-        background: rgba(0, 0, 0, 0.4);
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
-        z-index: 70;
-        pointer-events: auto;
-      }
-
-      .preview {
-        flex: 1;
-        width: auto;
-      }
-
-      video {
-        border-radius: 0;
-        object-fit: contain;
-      }
-
-      .controls {
-        width: 100px;
-        height: 100dvh;
-        flex-direction: column;
-        justify-content: center;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 0;
-        gap: 24px;
-        z-index: 60;
-      }
+    .progress-fill {
+      height: 100%;
+      background: #3b82f6;
+      width: 0%;
+      transition: width 0.1s linear;
     }
   </style>
 </head>
@@ -428,38 +217,11 @@
       </div>
     </div>
 
-    <div class="preview" style="position:relative;">
+    <div class="preview">
       <video id="video" autoplay muted playsinline></video>
-      <div id="gridOverlay" class="grid-overlay"></div>
-
-      <!-- ON SCREEN ZOOM (Right) -->
-      <div id="osZoom" class="on-screen-ctrl os-zoom" style="display:none;">
-        <span style="font-size:10px; margin-bottom:10px;">🔍</span>
-        <input type="range" id="zoomSlider" class="vertical-range" min="1" max="5" step="0.1" value="1">
-        <span id="zoomVal" style="font-size:10px; margin-top:10px;">1.0x</span>
-      </div>
-
-      <!-- ON SCREEN EXPOSURE (Left) -->
-      <div id="osExposure" class="on-screen-ctrl os-exposure">
-        <span style="font-size:10px; margin-bottom:10px;">☀️</span>
-        <input type="range" id="brightnessSlider" class="vertical-range" min="-2" max="2" step="0.5" value="0">
-        <span id="brightnessVal" style="font-size:10px; margin-top:10px;">0</span>
-      </div>
-
-      <!-- EXPOSURE/FOCUS BOX -->
-      <div id="exposureBox" class="exposure-box"></div>
     </div>
 
-
     <div class="controls">
-      <!-- SETTINGS TRIGGER -->
-      <button class="ctrl" onclick="toggleSettings()" style="background:#334155; border-color:#475569;">
-        <svg viewBox="0 0 24 24">
-          <path
-            d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 00-.59.22L3.86 8.87a.49.49 0 00.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 00-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-        </svg>
-      </button>
-
       <!-- MIC -->
       <button id="micBtn" class="ctrl" onclick="toggleMic()">
         <svg viewBox="0 0 24 24">
@@ -484,138 +246,15 @@
       </button>
     </div>
 
-    <!-- SETTINGS OVERLAY (Consolidated) -->
-    <div id="settingsOverlay">
-      <div class="settings-card">
-        <div class="settings-title">Camera Settings</div>
-
-        <div class="settings-group">
-          <!-- Feedback -->
-          <div class="settings-control-block">
-            <button onclick="window.openFeedbackModal()"
-              style="width: 100%; padding: 14px; background: #3b82f6; border: none; border-radius: 16px; color: white; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px;">
-              <svg style="width:20px; height:20px; fill:currentColor" viewBox="0 0 24 24">
-                <path
-                  d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z" />
-              </svg>
-              Send Feedback
-            </button>
-          </div>
-
-          <!-- Grid Toggle -->
-          <div class="settings-row">
-            <span class="settings-label">
-              <svg style="width:16px; height:16px; fill:currentColor" viewBox="0 0 24 24">
-                <path
-                  d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z" />
-              </svg>
-              Grid Lines
-            </span>
-            <label class="switch">
-              <input type="checkbox" id="gridToggle" onchange="toggleGrid()">
-              <span class="slider round"></span>
-            </label>
-          </div>
-        </div>
-
-        <div class="settings-group">
-          <!-- Zoom Slider -->
-          <div class="settings-control-block">
-            <div class="settings-label">
-              <svg style="width:16px; height:16px; fill:currentColor" viewBox="0 0 24 24">
-                <path
-                  d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-              </svg>
-              Zoom Level <span id="menuZoomVal" style="color: #3b82f6; margin-left: auto;">1.0x</span>
-            </div>
-            <input type="range" id="menuZoom" min="1" max="5" step="0.1" value="1" style="width:100%;">
-          </div>
-
-          <!-- Exposure Slider -->
-          <div class="settings-control-block">
-            <div class="settings-label">
-              <svg style="width:16px; height:16px; fill:currentColor" viewBox="0 0 24 24">
-                <path
-                  d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z" />
-              </svg>
-              Exposure Compensation <span id="menuExpVal" style="color: #3b82f6; margin-left: auto;">0</span>
-            </div>
-            <input type="range" id="menuExposure" min="-2" max="2" step="0.5" value="0" style="width:100%;">
-          </div>
-        </div>
-
-        <div class="settings-footer">
-          <button onclick="toggleSettings()"
-            style="width:100%; padding:14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; color: white; font-weight: 600;">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-
-
     <!-- Upload Progress -->
-    <div id="uploadProgressOverlay" style="display:none;">
+    <div id="uploadProgressOverlay">
       <div style="font-size: 11px; font-weight: 600; color: #94a3b8;">Uploading High Quality Clip...</div>
       <div class="progress-bar">
         <div id="uploadProgressFill" class="progress-fill"></div>
       </div>
     </div>
 
-
-
   </div>
-
-
-  <!-- Style for Slider Toggle -->
-  <style>
-    .switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
-    .switch input:checked+.slider {
-      background-color: #3b82f6;
-    }
-
-    .switch input:checked+.slider .slider-knob {
-      transform: translateX(16px);
-    }
-
-    /* Grid Overlay */
-    .grid-overlay {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      display: none;
-      z-index: 10;
-    }
-
-    .grid-overlay::before {
-      content: "";
-      position: absolute;
-      top: 33.33%;
-      left: 0;
-      right: 0;
-      height: 1px;
-      background: rgba(255, 255, 255, 0.3);
-      box-shadow: 0 33.33vh 0 0 rgba(255, 255, 255, 0.3);
-      /* Second horizontal line */
-    }
-
-    .grid-overlay::after {
-      content: "";
-      position: absolute;
-      left: 33.33%;
-      top: 0;
-      bottom: 0;
-      width: 1px;
-      background: rgba(255, 255, 255, 0.3);
-      box-shadow: 33.33vw 0 0 0 rgba(255, 255, 255, 0.3);
-      /* Second vertical line */
-    }
-  </style>
 
   <!-- Passcode Overlay -->
   <div id="passcodeOverlay">
@@ -629,7 +268,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script>window.HIDE_FEEDBACK_FAB = true;</script>
   <script src="feedback.js"></script>
   <script src="modal.js"></script>
   <script>
@@ -650,7 +288,7 @@
     let videoSender;
     let micOn = true;
     let camOn = true;
-    let facing = "user";
+    let facing = "environment";
     let directorId = null;
     let isLive = false;
     let videoDevices = [];
@@ -678,15 +316,8 @@
     const socket = io();
     /* ===== CAMERA ===== */
     async function loadVideoDevices() {
-      try {
-        // Must ask for permission first to get labels
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        videoDevices = devices.filter(d => d.kind === "videoinput");
-      } catch (e) {
-        console.warn("Permission/Enumerate Error:", e);
-      }
-
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      videoDevices = devices.filter(d => d.kind === "videoinput");
       if (!videoDevices.length) return;
 
       const currentId = mediaStream && mediaStream.getVideoTracks()[0]
@@ -708,35 +339,41 @@
       });
 
       if (backIndex >= 0) {
-        console.log("Found back camera, switching default.");
         currentDeviceIndex = backIndex;
         facing = "environment";
-      } else {
-        console.log("No back camera found, staying with default (user/webcam).");
-        facing = "user";
       }
     }
 
     async function getStreamWithFallback() {
-      const attempts = [
-        { video: { facingMode: facing }, audio: true },
-        { video: true, audio: true },
-        { video: true }
-      ];
+      const constraintsByPriority = [];
+
+      if (videoDevices.length) {
+        constraintsByPriority.push({
+          video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } },
+          audio: true
+        });
+      }
+
+      constraintsByPriority.push({
+        video: { facingMode: { exact: facing } },
+        audio: true
+      });
+
+      constraintsByPriority.push({
+        video: { facingMode: { ideal: facing } },
+        audio: true
+      });
 
       let lastError;
-      for (const constraints of attempts) {
+      for (const constraints of constraintsByPriority) {
         try {
-          console.log("Restoration Probe:", JSON.stringify(constraints));
           return await navigator.mediaDevices.getUserMedia(constraints);
         } catch (err) {
           lastError = err;
         }
       }
-      if (lastError) {
-        alert("Could not start camera: " + lastError.message + "\n\nPlease ensure you have granted camera permissions.");
-        throw lastError;
-      }
+
+      throw lastError;
     }
 
     async function startCamera() {
@@ -748,9 +385,8 @@
       }
 
       const stream = await getStreamWithFallback();
-      video.srcObject = stream;
 
-      // NO DYNAMIC PROBING - Keeps it stable for old devices
+      video.srcObject = stream;
 
       if (!mediaStream) {
         stream.getTracks().forEach(t => {
@@ -861,250 +497,7 @@
     initWebRTC();
 
 
-    /* ===== GESTURES ===== */
-    let initialPinchDist = 0;
-    let baseZoom = 1;
-    let lastTapTime = 0;
-    let exposureTimer = null;
-    let isDraggingExposure = false;
-    let dragStartY = 0;
-    let dragStartExposure = 0;
-
-    const preview = document.querySelector(".preview");
-    const exposureBox = document.getElementById("exposureBox");
-
-    preview.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 2) {
-        // PINCH START
-        initialPinchDist = Math.hypot(
-          e.touches[0].pageX - e.touches[1].pageX,
-          e.touches[0].pageY - e.touches[1].pageY
-        );
-        baseZoom = parseFloat(zoomSlider.value) || 1;
-
-        // Anchor for "zoom at point"
-        const centerX = (e.touches[0].pageX + e.touches[1].pageX) / 2;
-        const centerY = (e.touches[0].pageY + e.touches[1].pageY) / 2;
-        const rect = video.getBoundingClientRect();
-        const px = ((centerX - rect.left) / rect.width) * 100;
-        const py = ((centerY - rect.top) / rect.height) * 100;
-        video.style.transformOrigin = `${px}% ${py}%`;
-      } else if (e.touches.length === 1) {
-        // TAP OR DRAG START
-        const now = Date.now();
-        const x = e.touches[0].pageX;
-        const y = e.touches[0].pageY;
-
-        // If box is visible, we might be dragging exposure
-        if (exposureBox.style.display === "block") {
-          isDraggingExposure = true;
-          dragStartY = y;
-          dragStartExposure = parseFloat(brightnessSlider.value) || 0;
-        }
-
-        // Tap Detection
-        if (now - lastTapTime < 300) {
-          // Double tap? Maybe reset? 
-        }
-        lastTapTime = now;
-      }
-    }, { passive: true });
-
-    preview.addEventListener("touchmove", (e) => {
-      if (e.touches.length === 2 && initialPinchDist > 0) {
-        // PINCH MOVE
-        const dist = Math.hypot(
-          e.touches[0].pageX - e.touches[1].pageX,
-          e.touches[0].pageY - e.touches[1].pageY
-        );
-        const ratio = dist / initialPinchDist;
-        let newZoom = baseZoom * ratio;
-
-        // Clamp to min/max from capabilities if available
-        if (trackCapabilities && trackCapabilities.zoom) {
-          newZoom = Math.max(trackCapabilities.zoom.min, Math.min(newZoom, trackCapabilities.zoom.max));
-        } else {
-          newZoom = Math.max(1, Math.min(newZoom, 5));
-        }
-
-        zoomSlider.value = newZoom;
-        document.getElementById("zoomVal").innerText = newZoom.toFixed(1) + "x";
-        applyConstraint("zoom", newZoom);
-
-        // Show zoom indicator briefly
-        osZoom.style.display = "flex";
-        osZoom.style.opacity = "1";
-        clearTimeout(window.zoomHideTimer);
-        window.zoomHideTimer = setTimeout(() => { osZoom.style.opacity = "0"; }, 1000);
-      } else if (e.touches.length === 1 && isDraggingExposure) {
-        // EXPOSURE DRAG
-        const y = e.touches[0].pageY;
-        const delta = (dragStartY - y) / 50; // Sensitivity
-        let newExp = dragStartExposure + delta;
-
-        if (trackCapabilities && trackCapabilities.exposureCompensation) {
-          newExp = Math.max(trackCapabilities.exposureCompensation.min,
-            Math.min(newExp, trackCapabilities.exposureCompensation.max));
-        } else {
-          newExp = Math.max(-2, Math.min(newExp, 2));
-        }
-
-        brightnessSlider.value = newExp;
-        document.getElementById("brightnessVal").innerText = newExp.toFixed(1);
-        applyConstraint("exposureCompensation", newExp);
-
-        // Show indicator briefly
-        osExposure.style.display = "flex";
-        osExposure.style.opacity = "1";
-        clearTimeout(window.brightnessHideTimer);
-        window.brightnessHideTimer = setTimeout(() => { osExposure.style.opacity = "0"; }, 1000);
-
-        // Ensure box stays visible during drag
-        showExposureBox(null, null, true);
-      }
-    }, { passive: true });
-
-    preview.addEventListener("touchend", (e) => {
-      if (e.touches.length === 0) {
-        // If it was a short single touch without drag, consider it a tap for focus/exposure
-        const duration = Date.now() - lastTapTime;
-        if (duration < 250 && !isDraggingExposure) {
-          // Handle Tap
-          const touch = e.changedTouches[0];
-          showExposureBox(touch.pageX, touch.pageY);
-        }
-        isDraggingExposure = false;
-      }
-    });
-
-    function showExposureBox(x, y, persistent = false) {
-      if (x !== null && y !== null) {
-        const rect = preview.getBoundingClientRect();
-        exposureBox.style.left = (x - rect.left - 30) + "px";
-        exposureBox.style.top = (y - rect.top - 30) + "px";
-      }
-
-      exposureBox.style.display = "block";
-      exposureBox.style.opacity = "1";
-
-      clearTimeout(exposureTimer);
-      if (!persistent) {
-        exposureTimer = setTimeout(() => {
-          exposureBox.style.opacity = "0";
-          setTimeout(() => { exposureBox.style.display = "none"; }, 300);
-        }, 3000);
-      }
-    }
-
     /* ===== ACTIONS ===== */
-    const settingsOverlay = document.getElementById("settingsOverlay");
-    const zoomSlider = document.getElementById("zoomSlider");
-    const brightnessSlider = document.getElementById("brightnessSlider");
-    const menuZoom = document.getElementById("menuZoom");
-    const menuExposure = document.getElementById("menuExposure");
-    const gridToggle = document.getElementById("gridToggle");
-
-    const osZoom = document.getElementById("osZoom");
-    const osExposure = document.getElementById("osExposure");
-
-    function toggleSettings() {
-      const isVisible = settingsOverlay.style.display === "flex";
-      settingsOverlay.style.display = isVisible ? "none" : "flex";
-
-      // Hide on-screen indicators when settings is open
-      if (!isVisible) {
-        osZoom.style.display = "none";
-        osExposure.style.display = "none";
-      }
-    }
-
-    // Sync menu zoom with gesture zoom
-    menuZoom.oninput = (e) => {
-      const val = parseFloat(e.target.value);
-      zoomSlider.value = val;
-      document.getElementById("menuZoomVal").innerText = val.toFixed(1) + "x";
-      document.getElementById("zoomVal").innerText = val.toFixed(1) + "x";
-      applyConstraint("zoom", val);
-    };
-
-    // Sync menu exposure with gesture exposure
-    menuExposure.oninput = (e) => {
-      const val = parseFloat(e.target.value);
-      brightnessSlider.value = val;
-      document.getElementById("menuExpVal").innerText = val.toFixed(1);
-      document.getElementById("brightnessVal").innerText = val.toFixed(1);
-      applyConstraint("exposureCompensation", val);
-    };
-
-    function toggleGrid() {
-      const grid = document.getElementById("gridOverlay");
-      const isChecked = gridToggle.checked;
-      grid.style.display = isChecked ? "block" : "none";
-    }
-
-    // Gesture Zoom Sync
-    zoomSlider.oninput = (e) => {
-      const val = parseFloat(e.target.value);
-      menuZoom.value = val;
-      document.getElementById("menuZoomVal").innerText = val.toFixed(1) + "x";
-      document.getElementById("zoomVal").innerText = val.toFixed(1) + "x";
-      applyConstraint("zoom", val);
-
-      // If hardware zoom is applied, also apply a bit of CSS scale to ensure "zoom at point" feel
-      // or just rely on hardware zoom if possible. Hardware zoom is centered.
-    };
-
-
-    brightnessSlider.oninput = (e) => {
-      const val = parseFloat(e.target.value);
-      document.getElementById("brightnessVal").innerText = val.toFixed(1);
-      menuExposure.value = val;
-      document.getElementById("menuExpVal").innerText = val.toFixed(1);
-      applyConstraint("exposureCompensation", val);
-    };
-
-    // Call checkCapabilities after stream start
-    setInterval(checkCapabilities, 2000);
-
-    let trackCapabilities = null;
-    async function checkCapabilities() {
-      if (!mediaStream) return;
-      const track = mediaStream.getVideoTracks()[0];
-      if (!track) return;
-      try {
-        trackCapabilities = track.getCapabilities();
-        if (trackCapabilities.zoom) {
-          zoomSlider.min = trackCapabilities.zoom.min;
-          zoomSlider.max = trackCapabilities.zoom.max;
-          zoomSlider.step = trackCapabilities.zoom.step || 0.1;
-          menuZoom.min = trackCapabilities.zoom.min;
-          menuZoom.max = trackCapabilities.zoom.max;
-          menuZoom.step = trackCapabilities.zoom.step || 0.1;
-        }
-        if (trackCapabilities.exposureCompensation) {
-          brightnessSlider.min = trackCapabilities.exposureCompensation.min;
-          brightnessSlider.max = trackCapabilities.exposureCompensation.max;
-          brightnessSlider.step = trackCapabilities.exposureCompensation.step || 0.1;
-          menuExposure.min = trackCapabilities.exposureCompensation.min;
-          menuExposure.max = trackCapabilities.exposureCompensation.max;
-          menuExposure.step = trackCapabilities.exposureCompensation.step || 0.1;
-        }
-      } catch (e) {
-        console.warn("Error getting capabilities:", e);
-      }
-    }
-
-    async function applyConstraint(name, value) {
-      if (!mediaStream) return;
-      const track = mediaStream.getVideoTracks()[0];
-      const constraints = { advanced: [{ [name]: value }] };
-      try {
-        await track.applyConstraints(constraints);
-      } catch (e) {
-        console.warn("Failed to apply constraint:", name, e);
-      }
-    }
-
     function toggleMic() {
       micOn = !micOn;
       if (mediaStream) {
@@ -1121,22 +514,6 @@
       camBtn.classList.toggle("off", !camOn);
     }
 
-    // Exit Warning
-    window.addEventListener("beforeunload", (e) => {
-      // If uploading or transferring, warn
-      if (isoRecorder && isoRecorder.state === "recording") {
-        e.preventDefault();
-        e.returnValue = "Recording in progress. Are you sure you want to leave?";
-        return e.returnValue;
-      }
-      const badge = document.getElementById("liveBadge");
-      if (badge && (badge.textContent === "SENDING" || badge.textContent === "UPLOADING")) {
-        e.preventDefault();
-        e.returnValue = "Upload in progress. Leaving will corrupt the file.";
-        return e.returnValue;
-      }
-    });
-
     async function leave() {
       if (await confirm("Stop Streaming?\n\nThis will end your session and take you back to the home page.", "destructive")) {
         location.href = 'index.html';
@@ -1146,66 +523,38 @@
     /* ===== ORIENTATION ===== */
     const rotations = {};
     function applyOrientation() {
-      let orient = 0;
-      if (screen.orientation && screen.orientation.angle !== undefined) {
-        orient = screen.orientation.angle;
-      } else {
-        orient = window.orientation || 0;
-      }
-
+      const orient = window.orientation;
       let rot = 0;
       if (orient === 90) rot = -90;
       if (orient === -90) rot = 90;
       if (orient === 180) rot = 180;
 
-      // Signal Director (they need coordinates to match their fixed grid)
-      if (rotations[socket.id] !== rot) {
-        rotations[socket.id] = rot;
-        socket.emit("camera-rotate", { room: streamId, rotation: rot });
-      }
+      rotations[socket.id] = rot;
+      socket.emit("camera-rotate", { room: streamId, rotation: rot });
 
-      // LOCAL PREVIEW RWD: 
-      // In portrait, we use object-fit: contain.
-      // In landscape, we use object-fit: cover via CSS.
-      // We only apply a subtle scale for "Live" status, but don't fight the browser's native rotation.
-      const isLandscape = Math.abs(orient) === 90;
-      video.style.transform = isLive ? `scale(1.05)` : `none`;
+      video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot}deg)`;
     }
     window.addEventListener("orientationchange", applyOrientation);
-    if (screen.orientation) screen.orientation.addEventListener("change", applyOrientation);
     setInterval(applyOrientation, 2000);
 
     /* ===== ACCESS CHECK ===== */
     async function checkAccess() {
-      // Set initial name from URL if present
-      if (streamName) {
-        document.getElementById("streamNameDisplay").innerText = streamName;
-      }
-
       try {
         const res = await fetch("/api/streams");
         const all = await res.json();
         const stream = all.find(s => s.id === streamId);
 
-        if (stream) {
-          // Update display name from server record
-          document.getElementById("streamNameDisplay").innerText = stream.name || streamId;
-
-          if (stream.camera_access === "protected") {
-            console.log("🔒 Camera: Protected stream detected");
-            overlay.style.display = "flex";
-            joinBtn.onclick = () => {
-              const pass = passInput.value.trim();
-              if (!pass) return;
-              socket.emit("join", { room: streamId, role: "camera", password: pass });
-            };
-          } else {
-            console.log("🔓 Camera: Public stream detected");
-            overlay.style.display = "none";
-            socket.emit("join", { room: streamId, role: "camera" });
-          }
+        if (stream && stream.camera_access === "protected") {
+          console.log("🔒 Camera: Protected stream detected");
+          overlay.style.display = "flex";
+          joinBtn.onclick = () => {
+            const pass = passInput.value.trim();
+            if (!pass) return;
+            socket.emit("join", { room: streamId, role: "camera", password: pass });
+          };
         } else {
-          console.warn("Stream not found in registry");
+          console.log("🔓 Camera: Public stream detected");
+          overlay.style.display = "none";
           socket.emit("join", { room: streamId, role: "camera" });
         }
       } catch (e) {
