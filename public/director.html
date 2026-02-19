@@ -1545,16 +1545,11 @@
 
         // 5. SIGNAL SAVE TO CAMERAS (Triggers P2P)
         Object.keys(peers).forEach(id => {
-          socket.emit("control", { to: id, data: { type: "stop-iso", save: "transfer" } });
+          socket.emit("control", { to: id, data: { type: "stop-iso", save: "hold" } });
         });
 
-        console.log("⏳ Requests sent. Waiting for P2P transfers...");
-
-        // If NO peers, trigger selection immediately (only local program)
-        if (Object.keys(peers).length === 0) {
-          console.log("No peers. Showing selection immediately.");
-          setTimeout(showDownloadSelectionModal, 1000);
-        }
+        console.log("⏳ Stop signals sent. Showing Selection Modal...");
+        setTimeout(showDownloadSelectionModal, 500);
 
       } catch (e) {
         console.error("CRITICAL ERROR in stopAndFinalize:", e);
@@ -1881,208 +1876,7 @@
       return new Blob([data.buffer], { type: "video/mp4" });
     }
 
-    async function processSelectedDownloads() {
-      const btn = document.querySelector("#renderPhase button");
-      if (btn) { btn.disabled = true; btn.innerText = "Processing... Please Wait"; }
 
-      // Gather Selections
-      const ops = {
-        final: document.getElementById('sel_final_mix')?.checked ?
-          document.querySelector('input[name="fmt_final_mix"]:checked').value : null,
-        program: document.getElementById('sel_program')?.checked ?
-          document.querySelector('input[name="fmt_program"]:checked').value : null,
-        isos: {},
-        mirrors: {}
-      };
-
-      Object.keys(peers).forEach(id => {
-        if (document.getElementById(`sel_iso_${id}`)?.checked) {
-          ops.isos[id] = document.querySelector(`input[name="fmt_iso_${id}"]:checked`).value;
-        }
-        if (document.getElementById(`sel_mirror_${id}`)?.checked) {
-          ops.mirrors[id] = document.querySelector(`input[name="fmt_mirror_${id}"]:checked`).value;
-        }
-      });
-
-      // UI Helpers
-      const updateStatus = (pct, msg) => {
-        if (btn) btn.innerText = `${msg} (${pct}%)`;
-      };
-
-      try {
-        updateStatus(0, "Loading Engine");
-        const { ffmpeg, fetchFile } = await ensureFFmpeg();
-
-        // Track Transcoded Files to avoid double work
-        // Key: type_id (e.g. 'iso_cam1') -> Value: filename in MEMFS
-        const memFiles = {};
-
-        // ===========================
-        // 1. PREPARE ISO INPUTS (Common Step)
-        // ===========================
-        // If Final Mix OR any ISO(mp4) is needed, we likely need to write ISOs to FS.
-        const needsIsoProcessing = ops.final || Object.values(ops.isos).includes('mp4');
-        const activeCamIds = Object.keys(receivedRecordings);
-
-        if (needsIsoProcessing) {
-          for (let i = 0; i < activeCamIds.length; i++) {
-            const id = activeCamIds[i];
-            const blob = receivedRecordings[id];
-            if (!blob) continue;
-
-            const name = `iso_${id}.webm`;
-            updateStatus(10, `Reading Camera ${i + 1}`);
-            await ffmpeg.writeFile(name, await fetchFile(blob));
-            memFiles[`iso_${id}_webm`] = name;
-          }
-        }
-
-        // ===========================
-        // 2. GENERATE FINAL MIX
-        // ===========================
-        if (ops.final) {
-          // A. Transcode ISOs to MP4 (Stitching requires concat friendly fmt)
-          for (let i = 0; i < activeCamIds.length; i++) {
-            const id = activeCamIds[i];
-            if (!memFiles[`iso_${id}_webm`]) continue;
-
-            const outName = `iso_${id}.mp4`;
-            updateStatus(20, `Converting Cam ${i + 1} to MP4`);
-            await ffmpeg.exec(["-i", memFiles[`iso_${id}_webm`], "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", outName]);
-            memFiles[`iso_${id}_mp4`] = outName;
-          }
-
-          // B. Process Cuts
-          updateStatus(40, "Processing Cuts");
-          const segments = [];
-          for (let i = 0; i < isoEdl.length; i++) {
-            const cut = isoEdl[i];
-            const nextCut = isoEdl[i + 1];
-            let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : null;
-
-            let inputFile = memFiles[`iso_${cut.camId}_mp4`];
-            if (!inputFile) continue;
-
-            const segName = `seg_${i}.mp4`;
-            const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
-            if (duration) args.push("-t", String(duration));
-            args.push("-c", "copy", segName);
-
-            await ffmpeg.exec(args);
-            segments.push(segName);
-          }
-
-          // C. Stitch
-          if (segments.length > 0) {
-            updateStatus(60, "Stitching Mix");
-            await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\n"));
-            await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
-
-            // D. Download Final
-            const timestamp = formatDate(Date.now());
-            const finalData = await ffmpeg.readFile("final_mix.mp4");
-            const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
-            downloadBlob(finalBlob, `courtstream_final_${timestamp}.mp4`);
-          }
-        }
-
-        // ===========================
-        // 3. PROCESS INDIVIDUAL ISOs
-        // ===========================
-        for (const id of activeCamIds) {
-          const fmt = ops.isos[id];
-          const timestamp = formatDate(Date.now());
-          if (fmt === 'webm') {
-            // Direct Download
-            if (receivedRecordings[id]) downloadBlob(receivedRecordings[id], `camera_${id}_${timestamp}.webm`);
-          } else if (fmt === 'mp4') {
-            // Check if we already have it from stitching phase
-            if (memFiles[`iso_${id}_mp4`]) {
-              const data = await ffmpeg.readFile(memFiles[`iso_${id}_mp4`]);
-              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `camera_${id}_${timestamp}.mp4`);
-            } else {
-              // We need to convert it now
-              if (!memFiles[`iso_${id}_webm`]) {
-                // Write if missing
-                await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
-              }
-              updateStatus(70, `Converting Cam ${id}`);
-              await ffmpeg.exec(["-i", `iso_${id}.webm`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", `iso_${id}.mp4`]);
-              const data = await ffmpeg.readFile(`iso_${id}.mp4`);
-              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `camera_${id}_${timestamp}.mp4`);
-            }
-          }
-        }
-
-        // ===========================
-        // 4. PROCESS MIRRORS (Local)
-        // ===========================
-        const mirrorIds = Object.keys(ops.mirrors);
-        for (const id of mirrorIds) {
-          const fmt = ops.mirrors[id]; // 'mp4' or 'webm'
-          // Recorders are indexed by key (which is usually peerID or index)
-          // Need to map ID to recorder?? 
-          // Actually `cameraRecorders` is object: { peerId: { recorder, ... } }
-          const rec = cameraRecorders[id];
-          if (rec && rec.chunks.length) {
-            const blob = new Blob(rec.chunks, { type: "video/webm" });
-            const timestamp = formatDate(Date.now());
-            const name = `mirror_${id}_${timestamp}`;
-
-            if (fmt === 'webm') {
-              downloadBlob(blob, name + ".webm");
-            } else {
-              updateStatus(80, `Converting Mirror ${id}`);
-              await ffmpeg.writeFile("mirror_in.webm", await fetchFile(blob));
-              await ffmpeg.exec(["-i", "mirror_in.webm", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "out_mirror.mp4"]);
-              const data = await ffmpeg.readFile("out_mirror.mp4");
-              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), name + ".mp4");
-              // Cleanup
-              await ffmpeg.deleteFile("mirror_in.webm");
-              await ffmpeg.deleteFile("out_mirror.mp4");
-            }
-          }
-        }
-
-        // ===========================
-        // 5. PROCESS PROGRAM (Local)
-        // ===========================
-        if (ops.program && programChunks.length) {
-          const blob = new Blob(programChunks, { type: "video/webm" });
-          const timestamp = formatDate(Date.now());
-          const name = `program_${timestamp}`;
-
-          if (ops.program === 'webm') {
-            downloadBlob(blob, name + ".webm");
-          } else {
-            updateStatus(90, "Converting Program");
-            await ffmpeg.writeFile("prog_in.webm", await fetchFile(blob));
-            await ffmpeg.exec(["-i", "prog_in.webm", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "out_prog.mp4"]);
-            const data = await ffmpeg.readFile("out_prog.mp4");
-            downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), name + ".mp4");
-          }
-        }
-
-        updateStatus(100, "Done!");
-        if (btn) btn.innerText = "All Downloads Complete";
-        setTimeout(() => location.reload(), 2000);
-
-      } catch (e) {
-        console.error("Processing Error:", e);
-        alert("Error processing files: " + e.message);
-        if (btn) { btn.disabled = false; btn.innerText = "Retry"; }
-      }
-    }
-
-    function downloadBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
 
     function enableInstantDownload(id, blob, filename) {
       const el = document.getElementById(id);
@@ -2195,6 +1989,246 @@
         console.warn("Signal error:", e);
       }
     });
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    async function processSelectedDownloads() {
+      const btn = document.querySelector("#renderPhase button");
+      if (btn) { btn.disabled = true; btn.innerText = "Initializing Transfer..."; }
+
+      // Gather Selections
+      const ops = {
+        final: document.getElementById('sel_final_mix')?.checked ?
+          document.querySelector('input[name="fmt_final_mix"]:checked').value : null,
+        program: document.getElementById('sel_program')?.checked ?
+          document.querySelector('input[name="fmt_program"]:checked').value : null,
+        isos: {},
+        mirrors: {}
+      };
+
+      const activeCamIds = Object.keys(peers);
+      const camerasToTransfer = new Set();
+
+      // Determine which cameras need to transfer
+      if (ops.final) {
+        // Final Mix needs ALL active cameras
+        activeCamIds.forEach(id => camerasToTransfer.add(id));
+      }
+
+      Object.keys(peers).forEach(id => {
+        if (document.getElementById(`sel_iso_${id}`)?.checked) {
+          ops.isos[id] = document.querySelector(`input[name="fmt_iso_${id}"]:checked`).value;
+          camerasToTransfer.add(id);
+        }
+        if (document.getElementById(`sel_mirror_${id}`)?.checked) {
+          ops.mirrors[id] = document.querySelector(`input[name="fmt_mirror_${id}"]:checked`).value;
+        }
+      });
+
+      // 1. REQUEST TRANSFERS
+      const missing = Array.from(camerasToTransfer).filter(id => !receivedRecordings[id]);
+
+      if (missing.length > 0) {
+        console.log("Requesting transfers for:", missing);
+
+        // Show Transfer Modal Re-purposed
+        const dash = document.getElementById("transferModal");
+        if (dash) {
+          dash.style.display = "flex";
+        }
+
+        missing.forEach(id => {
+          socket.emit("control", { to: id, data: { type: "request-transfer" } });
+        });
+
+        // Wait loop
+        if (btn) btn.innerText = "Waiting for Camera Files...";
+        await waitForTransfers(camerasToTransfer);
+
+        // Hide transfer modal once done
+        if (dash) dash.style.display = "none";
+      }
+
+      // UI Helpers
+      const updateStatus = (pct, msg) => {
+        if (btn) btn.innerText = `${msg} (${pct}%)`;
+      };
+
+      try {
+        updateStatus(0, "Loading Engine");
+        const { ffmpeg, fetchFile } = await ensureFFmpeg();
+
+        // Track Transcoded Files
+        const memFiles = {};
+
+        // ===========================
+        // 3. PREPARE ISO INPUTS
+        // ===========================
+        const needsIsoProcessing = ops.final || Object.values(ops.isos).includes('mp4');
+
+        if (needsIsoProcessing) {
+          const requiredIds = Array.from(camerasToTransfer);
+          for (let i = 0; i < requiredIds.length; i++) {
+            const id = requiredIds[i];
+            const blob = receivedRecordings[id];
+            if (!blob) continue;
+
+            const name = `iso_${id}.webm`;
+            updateStatus(10, `Reading Camera ${i + 1}`);
+            await ffmpeg.writeFile(name, await fetchFile(blob));
+            memFiles[`iso_${id}_webm`] = name;
+          }
+        }
+
+        // ===========================
+        // 4. GENERATE FINAL MIX
+        // ===========================
+        if (ops.final) {
+          // A. Transcode ISOs to MP4
+          for (let i = 0; i < camerasToTransfer.size; i++) {
+            const id = Array.from(camerasToTransfer)[i];
+            if (!memFiles[`iso_${id}_webm`]) continue;
+
+            const outName = `iso_${id}.mp4`;
+            updateStatus(20, `Converting Cam ${i + 1} to MP4`);
+            await ffmpeg.exec(["-i", memFiles[`iso_${id}_webm`], "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", outName]);
+            memFiles[`iso_${id}_mp4`] = outName;
+          }
+
+          // B. Process Cuts
+          updateStatus(40, "Processing Cuts");
+          const segments = [];
+          for (let i = 0; i < isoEdl.length; i++) {
+            const cut = isoEdl[i];
+            const nextCut = isoEdl[i + 1];
+            let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : null;
+
+            let inputFile = memFiles[`iso_${cut.camId}_mp4`];
+            if (!inputFile) continue;
+
+            const segName = `seg_${i}.mp4`;
+            const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
+            if (duration) args.push("-t", String(duration));
+            args.push("-c", "copy", segName);
+
+            await ffmpeg.exec(args);
+            segments.push(segName);
+          }
+
+          // C. Stitch
+          if (segments.length > 0) {
+            updateStatus(60, "Stitching Mix");
+            await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\n"));
+            await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
+
+            // D. Download Final
+            const timestamp = formatDate(Date.now());
+            const finalData = await ffmpeg.readFile("final_mix.mp4");
+            const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
+            downloadBlob(finalBlob, `courtstream_final_${timestamp}.mp4`);
+          }
+        }
+
+        // ===========================
+        // 5. PROCESS INDIVIDUAL ISOs
+        // ===========================
+        const isoIds = Object.keys(ops.isos);
+        for (const id of isoIds) {
+          const fmt = ops.isos[id];
+          const timestamp = formatDate(Date.now());
+          if (fmt === 'webm') {
+            if (receivedRecordings[id]) downloadBlob(receivedRecordings[id], `camera_${id}_${timestamp}.webm`);
+          } else if (fmt === 'mp4') {
+            if (memFiles[`iso_${id}_mp4`]) {
+              const data = await ffmpeg.readFile(memFiles[`iso_${id}_mp4`]);
+              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `camera_${id}_${timestamp}.mp4`);
+            } else {
+              if (!memFiles[`iso_${id}_webm`]) {
+                await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
+              }
+              updateStatus(70, `Converting Cam ${id}`);
+              await ffmpeg.exec(["-i", `iso_${id}.webm`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", `iso_${id}.mp4`]);
+              const data = await ffmpeg.readFile(`iso_${id}.mp4`);
+              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `camera_${id}_${timestamp}.mp4`);
+            }
+          }
+        }
+
+        // ===========================
+        // 6. PROCESS MIRRORS (Local)
+        // ===========================
+        const mirrorIds = Object.keys(ops.mirrors);
+        for (const id of mirrorIds) {
+          const fmt = ops.mirrors[id];
+          const rec = cameraRecorders[id];
+          if (rec && rec.chunks.length) {
+            const blob = new Blob(rec.chunks, { type: "video/webm" });
+            const timestamp = formatDate(Date.now());
+            const name = `mirror_${id}_${timestamp}`;
+
+            if (fmt === 'webm') {
+              downloadBlob(blob, name + ".webm");
+            } else {
+              updateStatus(80, `Converting Mirror ${id}`);
+              await ffmpeg.writeFile("mirror_in.webm", await fetchFile(blob));
+              await ffmpeg.exec(["-i", "mirror_in.webm", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "out_mirror.mp4"]);
+              const data = await ffmpeg.readFile("out_mirror.mp4");
+              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), name + ".mp4");
+              await ffmpeg.deleteFile("mirror_in.webm");
+              await ffmpeg.deleteFile("out_mirror.mp4");
+            }
+          }
+        }
+
+        // ===========================
+        // 7. PROCESS PROGRAM (Local)
+        // ===========================
+        if (ops.program && programChunks.length) {
+          const blob = new Blob(programChunks, { type: "video/webm" });
+          const timestamp = formatDate(Date.now());
+          const name = `program_${timestamp}`;
+
+          if (ops.program === 'webm') {
+            downloadBlob(blob, name + ".webm");
+          } else {
+            updateStatus(90, "Converting Program");
+            await ffmpeg.writeFile("prog_in.webm", await fetchFile(blob));
+            await ffmpeg.exec(["-i", "prog_in.webm", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "out_prog.mp4"]);
+            const data = await ffmpeg.readFile("out_prog.mp4");
+            downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), name + ".mp4");
+          }
+        }
+
+        updateStatus(100, "Done!");
+        if (btn) btn.innerText = "All Downloads Complete";
+        setTimeout(() => location.reload(), 2000);
+
+      } catch (e) {
+        console.error("Processing Error:", e);
+        alert("Error processing files: " + e.message);
+        if (btn) { btn.disabled = false; btn.innerText = "Retry"; }
+      }
+    }
+
+    function waitForTransfers(requiredSet) {
+      return new Promise(resolve => {
+        const check = setInterval(() => {
+          const missing = Array.from(requiredSet).filter(id => !receivedRecordings[id]);
+          if (missing.length === 0) {
+            clearInterval(check);
+            resolve();
+          }
+        }, 500);
+      });
+    }
+
   </script>
   <script src="feedback.js"></script>
   <div id="renderProgressPanel"

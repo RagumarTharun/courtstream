@@ -442,6 +442,12 @@
           console.log("🛑 Received stop-iso via Control channel");
           handleStopIso(data);
         }
+        else if (data.type === "request-transfer") {
+          handleTransferRequest();
+        }
+        else if (data.type === "discard-recording") {
+          handleDiscardRequest();
+        }
       });
 
       socket.on("signal", async ({ from, data }) => {
@@ -621,6 +627,8 @@
       handleStopIso(options);
     });
 
+    let heldIsoBlob = null; // Store blob for delayed transfer
+
     function handleStopIso(options) {
       console.log("🛑 Stopping ISO Recording. Options:", options);
       if (!isoRecorder || isoRecorder.state === "inactive") {
@@ -640,6 +648,15 @@
         const blob = new Blob(isoChunks, { type: "video/webm" });
         isoChunks = []; // Free memory
 
+        if (options && options.save === 'hold') {
+          console.log("✋ Holding ISO Recording in memory. Waiting for transfer request...");
+          heldIsoBlob = blob;
+          liveBadge.textContent = "HELD";
+          liveBadge.style.background = "#eab308"; // Yellow/Orange
+          return;
+        }
+
+        // Legacy/Direct Transfer (if save !== 'hold')
         if (dataChannel && dataChannel.readyState === "open") {
           console.log("🚀 Starting P2P Transfer to Director...");
           transferRecording(blob);
@@ -650,7 +667,37 @@
         }
       };
       isoRecorder.stop();
-      liveBadge.innerHTML = "SENDING";
+      if (options && options.save === 'hold') {
+        liveBadge.innerHTML = "SAVING";
+      } else {
+        liveBadge.innerHTML = "SENDING";
+      }
+    }
+
+    // New Handlers for Delayed Workflow
+    function handleTransferRequest() {
+      console.log("📨 Received Transfer Request from Director");
+      if (!heldIsoBlob) {
+        console.warn("⚠️ No held recording to transfer!");
+        return;
+      }
+
+      if (dataChannel && dataChannel.readyState === "open") {
+        liveBadge.innerHTML = "SENDING";
+        liveBadge.style.background = "#b91c1c";
+        transferRecording(heldIsoBlob);
+        // Verify if we want to clear it? Maybe keep until confirmed? 
+        // Let's keep it until discard or new session clears it.
+      } else {
+        alert("Director disconnected. Cannot transfer.");
+      }
+    }
+
+    function handleDiscardRequest() {
+      console.log("🗑️ Discard Request. Clearing held blob.");
+      heldIsoBlob = null;
+      liveBadge.textContent = "CLEARED";
+      setTimeout(() => liveBadge.style.display = "none", 2000);
     }
 
     async function transferRecording(blob) {
