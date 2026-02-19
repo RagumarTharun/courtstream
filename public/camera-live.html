@@ -475,14 +475,6 @@
         </svg>
       </button>
 
-      <!-- SWITCH -->
-      <button id="switchBtn" class="ctrl" onclick="toggleCameraSource()">
-        <svg viewBox="0 0 24 24">
-          <path
-            d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 11.5V13H9v2.5L5.5 12 9 8.5V11h6V8.5l3.5 3.5-3.5 3.5z" />
-        </svg>
-      </button>
-
       <!-- LEAVE -->
       <button class="ctrl end" onclick="leave()">
         <svg viewBox="0 0 24 24">
@@ -658,12 +650,11 @@
     let videoSender;
     let micOn = true;
     let camOn = true;
-    let facing = "environment";
+    let facing = "user";
     let directorId = null;
-    let pc = null; // Add missing global pc declaration
     let isLive = false;
     let videoDevices = [];
-    let currentDeviceIndex = -1;
+    let currentDeviceIndex = 0;
     let hasPickedDefault = false;
     let resolveCameraReady;
     const cameraReady = new Promise(r => { resolveCameraReady = r; });
@@ -698,18 +689,6 @@
 
       if (!videoDevices.length) return;
 
-      // Don't auto-set index if we are enforcing environment mode
-      // This prevents locking to the front camera if it happens to be index 0
-      if (facing === "environment") {
-        console.log("Environment mode active. Ignoring default device index unless explicitly set.");
-        if (currentDeviceIndex === -1 && videoDevices.length > 0) {
-          // Only if we absolutely need a fallback, check for back camera match
-          const backIdx = videoDevices.findIndex(d => d.label.toLowerCase().includes("back") || d.label.toLowerCase().includes("environment"));
-          if (backIdx >= 0) currentDeviceIndex = backIdx;
-        }
-        return;
-      }
-
       const currentId = mediaStream && mediaStream.getVideoTracks()[0]
         ? mediaStream.getVideoTracks()[0].getSettings().deviceId
         : null;
@@ -717,15 +696,6 @@
       if (currentId) {
         const idx = videoDevices.findIndex(d => d.deviceId === currentId);
         if (idx >= 0) currentDeviceIndex = idx;
-      }
-
-      // ... switch button update ...
-      const swBtn = document.getElementById("switchBtn");
-      if (videoDevices.length > 1) {
-        swBtn.style.display = "flex";
-      } else {
-        console.log("Only 1 camera detected associated with labels");
-        swBtn.style.display = "flex";
       }
     }
 
@@ -738,41 +708,28 @@
       });
 
       if (backIndex >= 0) {
-        console.log("Found back camera by label, using ID:", videoDevices[backIndex].label);
+        console.log("Found back camera, switching default.");
         currentDeviceIndex = backIndex;
         facing = "environment";
       } else {
-        console.log("No back camera found by label. Relying on facingMode.");
-        // Do NOT set currentDeviceIndex to arbitrary 0. Leave it -1.
-        facing = "environment";
+        console.log("No back camera found, staying with default (user/webcam).");
+        facing = "user";
       }
     }
 
     async function getStreamWithFallback() {
-      const attempts = [];
-
-      // 1. Specific Device ID if found (Strongest)
-      // Check if facing matches preference (if we care about consistency)
-      if (currentDeviceIndex >= 0 && videoDevices[currentDeviceIndex]) {
-        attempts.push({ video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } }, audio: true });
-      }
-
-      // 2. Exact Facing Mode (Strong)
-      attempts.push({ video: { facingMode: { exact: facing } }, audio: true });
-
-      // 3. Ideal Facing Mode (Weak)
-      attempts.push({ video: { facingMode: facing }, audio: true });
-
-      // 4. Any Camera (Fallback)
-      attempts.push({ video: true, audio: true });
+      const attempts = [
+        { video: { facingMode: facing }, audio: true },
+        { video: true, audio: true },
+        { video: true }
+      ];
 
       let lastError;
       for (const constraints of attempts) {
         try {
-          console.log("Camera Probe:", JSON.stringify(constraints));
+          console.log("Restoration Probe:", JSON.stringify(constraints));
           return await navigator.mediaDevices.getUserMedia(constraints);
         } catch (err) {
-          console.warn("Probe failed:", err.name);
           lastError = err;
         }
       }
@@ -783,76 +740,42 @@
     }
 
     async function startCamera() {
-      // 1. Force Back Camera Default on First Load
+      await loadVideoDevices();
+
       if (!hasPickedDefault) {
-        console.log("🚀 Initial Load: Forcing Environment (Back) Camera");
-        facing = "environment";
-        currentDeviceIndex = -1; // Reset index to avoid locking to wrong ID
+        pickDefaultBackCamera();
         hasPickedDefault = true;
       }
 
-      await loadVideoDevices();
+      const stream = await getStreamWithFallback();
+      video.srcObject = stream;
 
-      // 2. Stop Existing Stream
-      if (mediaStream) {
+      // NO DYNAMIC PROBING - Keeps it stable for old devices
+
+      if (!mediaStream) {
+        stream.getTracks().forEach(t => {
+          const sender = pc.addTrack(t, stream);
+          if (t.kind === "video") videoSender = sender;
+        });
+      } else {
+        await videoSender.replaceTrack(stream.getVideoTracks()[0]);
         mediaStream.getTracks().forEach(t => t.stop());
-        video.srcObject = null;
       }
 
-      // 3. Get New Stream
-      try {
-        const stream = await getStreamWithFallback();
-        mediaStream = stream;
-        video.srcObject = stream;
-
-        console.log("✅ Camera Started. Facing:", facing);
-
-        // 4. Update WebRTC Sender
-        if (!videoSender) {
-          stream.getTracks().forEach(t => {
-            const sender = pc.addTrack(t, stream);
-            if (t.kind === "video") videoSender = sender;
-          });
-        } else {
-          const vidTrack = stream.getVideoTracks()[0];
-          if (vidTrack) await videoSender.replaceTrack(vidTrack);
-        }
-
-        if (resolveCameraReady) {
-          resolveCameraReady();
-          resolveCameraReady = null;
-        }
-
-      } catch (e) {
-        console.error("Failed to start camera:", e);
-        alert("Camera Error: " + e.message);
+      mediaStream = stream;
+      if (resolveCameraReady) {
+        resolveCameraReady();
+        resolveCameraReady = null;
       }
     }
 
-    // let pc, directorId, pendingCandidates already declared above
-
-
-    // SEPARATE SETUP FUNCTION FOR RECONNECTION
-    async function setupPeerConnection() {
-      if (pc) {
-        console.log("♻️ Closing existing PeerConnection for reset...");
-        pc.close();
-      }
-
-      // RESET STATE
-      dataChannel = null;
-      videoSender = null;
-
+    async function initWebRTC() {
       const config = await getTurnConfig();
       pc = new RTCPeerConnection(config);
+      setupDataChannel();
 
-      // Add Tracks (re-add if stream exists)
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => {
-          const sender = pc.addTrack(track, mediaStream);
-          if (track.kind === "video") videoSender = sender;
-        });
-      }
+      checkAccess();
+      startCamera(); // Ensure camera starts after PC is initialized to add tracks
 
       pc.onicecandidate = e => {
         if (e.candidate) {
@@ -862,48 +785,18 @@
         }
       };
 
-      pc.onconnectionstatechange = () => {
-        console.log("Rx Connection State:", pc.connectionState);
-        if (pc.connectionState === "connected") {
-          showToast("✅ Connected to Director");
-          document.getElementById("liveBadge").style.display = "inline-block";
-          document.getElementById("liveBadge").innerText = "LIVE";
-          document.getElementById("liveBadge").style.background = "#ef4444";
-          const v = document.querySelector("video");
-          if (v) v.style.border = "2px solid #ef4444";
-        } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-          showToast("❌ Director Disconnected", "error");
-          document.getElementById("liveBadge").style.display = "none";
-          const v = document.querySelector("video");
-          if (v) v.style.border = "none";
-        }
-      };
-
-      // DATA CHANNEL HANDLER (Reset on new PC)
-      pc.ondatachannel = (event) => {
-        console.log("📡 Data Channel Received:", event.channel.label);
-        dataChannel = event.channel;
-        dataChannel.onopen = () => {
-          console.log("✅ Data Channel Open");
-          showToast("🔗 Data Transfer Ready");
-        };
-        dataChannel.onmessage = handleMessage;
-      };
-    }
-
-    async function initWebRTC() {
-      await setupPeerConnection();
-      checkAccess();
-      startCamera();
-
       socket.on("control", ({ from, data }) => {
         console.log("Control:", data);
         if (data && data.type === "live") {
           const isLive = data.on;
           document.getElementById("liveBadge").style.display = isLive ? "inline-block" : "none";
+
+          // Show the name of the stream (which is the camera name set by director)
           if (data.name) {
             document.getElementById("streamNameDisplay").innerText = data.name;
           }
+
+          // Optional: Visual feedback on the video border
           const v = document.querySelector("video");
           if (v) v.style.border = isLive ? "2px solid #ef4444" : "none";
         }
@@ -914,12 +807,7 @@
 
         if (data.type === "offer") {
           console.log("📡 Camera: Received offer from director", from);
-          showToast("📡 Connecting...");
           directorId = from;
-
-          // ALWAYS RESET PC on new Offer
-          await setupPeerConnection();
-
           await cameraReady;
           try {
             await pc.setRemoteDescription(new RTCSessionDescription(data));
@@ -934,7 +822,6 @@
             }
           } catch (e) {
             console.error("Signaling error:", e);
-            showToast("❌ Connection Failed", "error");
           }
           return;
         }
@@ -951,11 +838,24 @@
 
     /* ===== DATA CHANNEL ===== */
     let dataChannel = null;
+    function setupDataChannel() {
+      if (!pc) return;
+      // Director creates the channel usually (offerer), but we can creating it here too if negotiated
+      // However, director sends OFFER. So Director should create Data Channel.
+      // We just need to handle ondatachannel.
+
+      pc.ondatachannel = (event) => {
+        console.log("📡 Data Channel Received:", event.channel.label);
+        dataChannel = event.channel;
+        dataChannel.onopen = () => console.log("✅ Data Channel Open");
+        dataChannel.onmessage = handleMessage;
+      };
+    }
 
     function handleMessage(event) {
       const msg = JSON.parse(event.data);
       if (msg.type === "ack") {
-        // handle flow control
+        // handle flow control if needed
       }
     }
     initWebRTC();
@@ -1237,21 +1137,6 @@
       }
     });
 
-    /* ===== CAMERA SOURCE SWITCHING ===== */
-    async function toggleCameraSource() {
-      // Simple Toggle: Environment <-> User
-      // We rely on getStreamWithFallback to handle the constraint
-
-      console.log("🔄 Toggling Camera...");
-      facing = (facing === "environment") ? "user" : "environment";
-      currentDeviceIndex = -1; // Reset device ID lock to allow generic facing mode fallback
-
-      // Update Button Icon (Optional check)
-      console.log("Target Facing:", facing);
-
-      await startCamera();
-    }
-
     async function leave() {
       if (await confirm("Stop Streaming?\n\nThis will end your session and take you back to the home page.", "destructive")) {
         location.href = 'index.html';
@@ -1273,16 +1158,16 @@
       if (orient === -90) rot = 90;
       if (orient === 180) rot = 180;
 
-      // Send more robust data to director
-      if (socket.connected) {
-        socket.emit("camera-rotate", {
-          room: streamId,
-          rotation: rot,
-          orientation: orient
-        });
+      // Signal Director (they need coordinates to match their fixed grid)
+      if (rotations[socket.id] !== rot) {
+        rotations[socket.id] = rot;
+        socket.emit("camera-rotate", { room: streamId, rotation: rot });
       }
 
       // LOCAL PREVIEW RWD: 
+      // In portrait, we use object-fit: contain.
+      // In landscape, we use object-fit: cover via CSS.
+      // We only apply a subtle scale for "Live" status, but don't fight the browser's native rotation.
       const isLandscape = Math.abs(orient) === 90;
       video.style.transform = isLive ? `scale(1.05)` : `none`;
     }
@@ -1349,10 +1234,7 @@
     socket.on("start-iso", async ({ sessionId }) => {
       console.log("🎥 Starting ISO Recording for Session:", sessionId);
       currentIsoSessionId = sessionId;
-      if (!mediaStream) {
-        showToast("❌ No Camera Stream!", "error");
-        return;
-      }
+      if (!mediaStream) return;
 
       isoChunks = [];
       try {
@@ -1367,59 +1249,25 @@
         isoRecorder.ondataavailable = e => {
           if (e.data && e.data.size > 0) isoChunks.push(e.data);
         };
-        isoRecorder.onerror = (e) => showToast("❌ Recorder Error: " + e.error.message, "error");
-
         isoRecorder.start(1000); // 1s chunks
 
         // Visual indicator
         liveBadge.textContent = "REC";
         liveBadge.style.background = "#b91c1c";
         liveBadge.style.display = "inline-block";
-        showToast("🔴 Recording Started");
 
       } catch (e) {
         console.error("Failed to start ISO recorder:", e);
-        showToast("❌ Start Failed: " + e.message, "error");
-        alert("Recording Start Failed: " + e.message);
       }
     });
 
-    // Helper: Visual Toast
-    function showToast(msg, type = "info") {
-      const t = document.createElement("div");
-      t.innerText = msg;
-      t.style.position = "fixed";
-      t.style.bottom = "80px";
-      t.style.left = "50%";
-      t.style.transform = "translateX(-50%)";
-      t.style.background = type === "error" ? "#ef4444" : "#1e293b";
-      t.style.color = "white";
-      t.style.padding = "10px 20px";
-      t.style.borderRadius = "8px";
-      t.style.zIndex = "10000";
-      t.style.fontSize = "14px";
-      t.style.boxShadow = "0 4px 6px rgba(0,0,0,0.3)";
-      document.body.appendChild(t);
-      setTimeout(() => t.remove(), 3000);
-      console.log(`[TOAST] ${msg}`);
-    }
-
     socket.on("stop-iso", (options) => {
-      showToast("🛑 Stop Signal Received");
       console.log("🛑 Stopping ISO Recording. Options:", options);
-
-      if (!isoRecorder) {
-        showToast("⚠️ No Recorder Found!", "error");
-        return;
-      }
-      if (isoRecorder.state === "inactive") {
-        showToast("⚠️ Recorder Already Inactive", "error");
-        return;
-      }
+      if (!isoRecorder || isoRecorder.state === "inactive") return;
 
       isoRecorder.onstop = () => {
         if (options && options.save === false) {
-          showToast("🗑️ Recording Discarded");
+          console.log("🗑️ ISO Save skipped by director. Discarding blob.");
           isoChunks = [];
           liveBadge.textContent = "DONE";
           setTimeout(() => liveBadge.style.display = "none", 1000);
@@ -1429,184 +1277,72 @@
         const blob = new Blob(isoChunks, { type: "video/webm" });
         isoChunks = []; // Free memory
 
-        if (blob.size === 0) {
-          showToast("⚠️ Recording Empty (0 bytes)", "error");
-          return;
+        if (dataChannel && dataChannel.readyState === "open") {
+          console.log("🚀 Starting P2P Transfer to Director...");
+          transferRecording(blob);
+        } else {
+          console.error("❌ Data Channel not open. Cannot transfer.");
+          alert("Connection to Director lost. Cannot transfer recording.");
+          liveBadge.style.display = "none";
         }
-
-        liveBadge.textContent = "SAVED";
-        liveBadge.style.background = "#10b981";
-
-        // P2P TRANSFER (Director Collection Workflow)
-        if (options && options.save === "transfer") {
-          console.log(`🔍 Checking P2P Status. DC: ${dataChannel ? "Found" : "Missing"}, State: ${dataChannel ? dataChannel.readyState : "N/A"}`);
-
-          if (dataChannel && dataChannel.readyState === "open") {
-            showToast("🚀 Starting Transfer...");
-            liveBadge.textContent = "SENDING";
-            liveBadge.style.background = "#eab308";
-            liveBadge.style.display = "inline-block";
-            // STABILITY DELAY: Give DC a moment to breathe
-            setTimeout(() => transferRecording(blob), 100);
-          } else {
-            const msg = `❌ Transfer Failed: DC ${dataChannel ? dataChannel.readyState : "Missing"}`;
-            console.error(msg);
-            showToast(msg, "error");
-            lastRecordingBlob = blob; // Save for recovery
-            showRecoveryUI();
-          }
-          return;
-        }
-
-        // FALLBACK
-        showToast("💾 Saved Locally (Fallback)");
-        setTimeout(() => liveBadge.style.display = "none", 3000);
       };
-
-      try {
-        isoRecorder.stop();
-        liveBadge.innerHTML = "SAVING";
-      } catch (e) {
-        showToast("❌ Error Stopping: " + e.message, "error");
-      }
+      isoRecorder.stop();
+      liveBadge.innerHTML = "SENDING";
     });
 
     async function transferRecording(blob) {
-      lastRecordingBlob = blob; // Save for retry
-
-      if (!dataChannel || dataChannel.readyState !== "open") {
-        console.error("❌ Transfer aborted: Data channel not open.");
-        showToast("❌ Connection Lost During Transfer", "error");
-        showRecoveryUI();
-        return;
-      }
-
-      const CHUNK_SIZE = 16 * 1024; // 16KB chunks
+      const CHUNK_SIZE = 16 * 1024; // 16KB safe chunk size
       const totalSize = blob.size;
       const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
 
-      console.log(`📤 Starting Transfer: ${totalSize} bytes in ${totalChunks} chunks`);
-
-      // 1. Send Metadata
-      try {
-        dataChannel.send(JSON.stringify({
-          type: "meta",
-          size: totalSize,
-          mime: blob.type,
-          name: `camera_${socket.id}.webm`
-        }));
-      } catch (e) {
-        console.error("❌ Failed to send metadata:", e);
-        showToast("❌ Metadata Send Failed", "error");
-        return;
-      }
-
-      // STABILITY DELAY: Ensure Meta is processed before binary flood
-      await new Promise(r => setTimeout(r, 100));
+      // metadata
+      dataChannel.send(JSON.stringify({
+        type: "meta",
+        size: totalSize,
+        mime: blob.type,
+        name: `camera_${socket.id}.webm`
+      }));
 
       const buffer = await blob.arrayBuffer();
       const overlay = document.getElementById("uploadProgressOverlay");
       const fill = document.getElementById("uploadProgressFill");
 
-      if (overlay) overlay.style.display = "flex";
+      overlay.style.display = "flex";
 
       const updateProgress = (p) => {
-        if (fill) fill.style.width = p + "%";
-        // Also update badge as backup
-        liveBadge.textContent = `SEND ${p}%`;
+        fill.style.width = p + "%";
       };
 
       for (let i = 0; i < totalChunks; i++) {
-        // Stop if channel closes mid-transfer
-        if (dataChannel.readyState !== "open") {
-          console.error("❌ Transfer stopped: Channel closed unexpectedly.");
-          showToast("❌ Transfer Interrupted", "error");
-          showRecoveryUI();
-          break;
-        }
-
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, totalSize);
         const chunk = buffer.slice(start, end);
 
-        // Flow Control: Restore 256KB limit (Matches Feb 18 "Good" State)
-        while (dataChannel.bufferedAmount > 256 * 1024) {
+        // Wait for buffer to clear if backpressure is high
+        // Max buffer size for Chrome is high, but we should be gentle
+        while (dataChannel.bufferedAmount > 256 * 1024) { // 256KB buffer limit for flow control
           await new Promise(r => setTimeout(r, 10));
         }
 
         try {
           dataChannel.send(chunk);
         } catch (e) {
-          console.error("❌ Tx Error:", e);
-          showRecoveryUI();
+          console.error("Tx Error:", e);
           break;
         }
 
-        if (i % 50 === 0 || i === totalChunks - 1) {
-          updateProgress(Math.floor(((i + 1) / totalChunks) * 100));
-          // Yield to event loop to keep UI responsive
-          await new Promise(r => setTimeout(r, 0));
+        if (i % 20 === 0) {
+          updateProgress(Math.floor((i / totalChunks) * 100));
         }
       }
 
       updateProgress(100);
-
-      try {
-        dataChannel.send(JSON.stringify({ type: "end" }));
-        console.log("✅ Transfer Logic Complete");
-        showToast("✅ Transfer Complete");
-      } catch (e) { console.error("Error sending end signal", e); }
-
+      dataChannel.send(JSON.stringify({ type: "end" }));
+      console.log("✅ Transfer Complete");
       setTimeout(() => {
-        if (overlay) overlay.style.display = "none";
-        liveBadge.textContent = "DONE";
-        liveBadge.style.background = "#10b981";
-        setTimeout(() => liveBadge.style.display = "none", 2000);
-      }, 500);
-    }
-
-    /* ===== RECOVERY LOGIC ===== */
-    let lastRecordingBlob = null;
-
-    function showRecoveryUI() {
-      const panel = document.getElementById("recoveryPanel");
-      if (panel) panel.style.display = "flex";
-      liveBadge.innerText = "FAILED";
-      liveBadge.style.background = "#ef4444";
-      liveBadge.style.display = "inline-block";
-    }
-
-    function hideRecoveryUI() {
-      const panel = document.getElementById("recoveryPanel");
-      if (panel) panel.style.display = "none";
-    }
-
-    function retryTransfer() {
-      hideRecoveryUI();
-      if (lastRecordingBlob) {
-        showToast("🔄 Retrying Transfer...");
-        if (dataChannel && dataChannel.readyState === "open") {
-          transferRecording(lastRecordingBlob);
-        } else {
-          showToast("⚠️ Connection closed. Refresh Director & Sync.", "error");
-          setTimeout(showRecoveryUI, 1000);
-        }
-      }
-    }
-
-    function downloadLocal() {
-      if (!lastRecordingBlob) return;
-      const url = URL.createObjectURL(lastRecordingBlob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `camera_backup_${Date.now()}.webm`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast("💾 Saved to Device");
-      hideRecoveryUI();
-      liveBadge.style.display = "none";
+        overlay.style.display = "none";
+        liveBadge.style.display = "none";
+      }, 1000);
     }
 
     async function uploadIso(blob) {
@@ -1699,26 +1435,6 @@
     <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden;">
       <div id="renderProgressFill" style="width:0%; height:100%; background:#3b82f6; transition: width 0.3s ease;">
       </div>
-    </div>
-  </div>
-
-  <!-- RECOVERY PANEL (Added for reliability) -->
-  <div id="recoveryPanel"
-    style="display:none; position:fixed; bottom:20px; left:20px; right:20px; background:#1e293b; padding:20px; border-radius:12px; border:1px solid #ef4444; z-index:20000; flex-direction:column; gap:10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-    <div style="color:#ef4444; font-weight:bold; display:flex; align-items:center; gap:8px;">
-      <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-      </svg>
-      <span>Transfer Failed</span>
-    </div>
-    <div style="color:#cbd5e1; font-size:14px;">The connection to Director was lost. Your recording is safe.</div>
-    <div style="display:flex; gap:10px;">
-      <button onclick="retryTransfer()"
-        style="flex:1; padding:12px; background:#eab308; color:black; border:none; border-radius:8px; font-weight:600;">🔄
-        Retry Transfer</button>
-      <button onclick="downloadLocal()"
-        style="flex:1; padding:12px; background:#3b82f6; color:white; border:none; border-radius:8px; font-weight:600;">💾
-        Save to Device</button>
     </div>
   </div>
 </body>
