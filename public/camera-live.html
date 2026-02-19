@@ -475,6 +475,14 @@
         </svg>
       </button>
 
+      <!-- SWITCH -->
+      <button id="switchBtn" class="ctrl" onclick="toggleCameraSource()">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 11.5V13H9v2.5L5.5 12 9 8.5V11h6V8.5l3.5 3.5-3.5 3.5z" />
+        </svg>
+      </button>
+
       <!-- LEAVE -->
       <button class="ctrl end" onclick="leave()">
         <svg viewBox="0 0 24 24">
@@ -696,6 +704,18 @@
       if (currentId) {
         const idx = videoDevices.findIndex(d => d.deviceId === currentId);
         if (idx >= 0) currentDeviceIndex = idx;
+      }
+
+      // Fix: Update Switch Button Visibility
+      const swBtn = document.getElementById("switchBtn");
+      if (videoDevices.length > 1) {
+        swBtn.style.display = "flex";
+      } else {
+        // Even if 1 device, sometimes enumerateDevices is weird.
+        // But if truly 1, locking it is fine.
+        // However, user complained about MISSING button. So let's force valid check.
+        console.log("Only 1 camera detected associated with labels");
+        swBtn.style.display = "flex"; // Force show it so they can at least Try (fallback Toggling)
       }
     }
 
@@ -1149,6 +1169,26 @@
       }
     });
 
+    /* ===== CAMERA SOURCE SWITCHING ===== */
+    async function toggleCameraSource() {
+      if (!videoDevices.length) return;
+
+      // Cycle to next camera
+      currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+      const device = videoDevices[currentDeviceIndex];
+      console.log("🔄 Switching to camera:", device.label);
+
+      // Update facing mode assumption based on label
+      const label = (device.label || "").toLowerCase();
+      if (label.includes("front") || label.includes("user")) {
+        facing = "user";
+      } else {
+        facing = "environment";
+      }
+
+      await startCamera(); // This uses currentDeviceIndex
+    }
+
     async function leave() {
       if (await confirm("Stop Streaming?\n\nThis will end your session and take you back to the home page.", "destructive")) {
         location.href = 'index.html';
@@ -1170,16 +1210,16 @@
       if (orient === -90) rot = 90;
       if (orient === 180) rot = 180;
 
-      // Signal Director (they need coordinates to match their fixed grid)
-      if (rotations[socket.id] !== rot) {
-        rotations[socket.id] = rot;
-        socket.emit("camera-rotate", { room: streamId, rotation: rot });
+      // Send more robust data to director
+      if (socket.connected) {
+        socket.emit("camera-rotate", {
+          room: streamId,
+          rotation: rot,
+          orientation: orient
+        });
       }
 
       // LOCAL PREVIEW RWD: 
-      // In portrait, we use object-fit: contain.
-      // In landscape, we use object-fit: cover via CSS.
-      // We only apply a subtle scale for "Live" status, but don't fight the browser's native rotation.
       const isLandscape = Math.abs(orient) === 90;
       video.style.transform = isLive ? `scale(1.05)` : `none`;
     }
@@ -1289,6 +1329,23 @@
         const blob = new Blob(isoChunks, { type: "video/webm" });
         isoChunks = []; // Free memory
 
+        if (options && options.save === "local_download") {
+          console.log("💾 Saving ISO Locally...");
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `iso_${currentIsoSessionId}_${socket.id}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+
+          liveBadge.textContent = "SAVED";
+          liveBadge.style.background = "#10b981";
+          setTimeout(() => liveBadge.style.display = "none", 3000);
+          return;
+        }
+
+        // FALLBACK: P2P TRANSFER (Old Way, kept just in case)
         if (dataChannel && dataChannel.readyState === "open") {
           console.log("🚀 Starting P2P Transfer to Director...");
           transferRecording(blob);
@@ -1299,7 +1356,7 @@
         }
       };
       isoRecorder.stop();
-      liveBadge.innerHTML = "SENDING";
+      liveBadge.innerHTML = "SAVING";
     });
 
     async function transferRecording(blob) {
