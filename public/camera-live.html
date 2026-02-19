@@ -1441,7 +1441,6 @@
         if (options && options.save === "transfer") {
           console.log(`🔍 Checking P2P Status. DC: ${dataChannel ? "Found" : "Missing"}, State: ${dataChannel ? dataChannel.readyState : "N/A"}`);
 
-
           if (dataChannel && dataChannel.readyState === "open") {
             showToast("🚀 Starting Transfer...");
             liveBadge.textContent = "SENDING";
@@ -1452,8 +1451,8 @@
             const msg = `❌ Transfer Failed: DC ${dataChannel ? dataChannel.readyState : "Missing"}`;
             console.error(msg);
             showToast(msg, "error");
-            alert(msg + "\n\nTry refreshing Director & Camera, then 'Sync'.");
-            liveBadge.style.display = "none";
+            lastRecordingBlob = blob; // Save for recovery
+            showRecoveryUI();
           }
           return;
         }
@@ -1472,9 +1471,12 @@
     });
 
     async function transferRecording(blob) {
+      lastRecordingBlob = blob; // Save for retry
+
       if (!dataChannel || dataChannel.readyState !== "open") {
         console.error("❌ Transfer aborted: Data channel not open.");
         showToast("❌ Connection Lost During Transfer", "error");
+        showRecoveryUI();
         return;
       }
 
@@ -1515,6 +1517,7 @@
         if (dataChannel.readyState !== "open") {
           console.error("❌ Transfer stopped: Channel closed unexpectedly.");
           showToast("❌ Transfer Interrupted", "error");
+          showRecoveryUI();
           break;
         }
 
@@ -1532,6 +1535,7 @@
           dataChannel.send(chunk);
         } catch (e) {
           console.error("❌ Tx Error:", e);
+          showRecoveryUI();
           break;
         }
 
@@ -1556,6 +1560,50 @@
         liveBadge.style.background = "#10b981";
         setTimeout(() => liveBadge.style.display = "none", 2000);
       }, 500);
+    }
+
+    /* ===== RECOVERY LOGIC ===== */
+    let lastRecordingBlob = null;
+
+    function showRecoveryUI() {
+      const panel = document.getElementById("recoveryPanel");
+      if (panel) panel.style.display = "flex";
+      liveBadge.innerText = "FAILED";
+      liveBadge.style.background = "#ef4444";
+      liveBadge.style.display = "inline-block";
+    }
+
+    function hideRecoveryUI() {
+      const panel = document.getElementById("recoveryPanel");
+      if (panel) panel.style.display = "none";
+    }
+
+    function retryTransfer() {
+      hideRecoveryUI();
+      if (lastRecordingBlob) {
+        showToast("🔄 Retrying Transfer...");
+        if (dataChannel && dataChannel.readyState === "open") {
+          transferRecording(lastRecordingBlob);
+        } else {
+          showToast("⚠️ Connection closed. Refresh Director & Sync.", "error");
+          setTimeout(showRecoveryUI, 1000);
+        }
+      }
+    }
+
+    function downloadLocal() {
+      if (!lastRecordingBlob) return;
+      const url = URL.createObjectURL(lastRecordingBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `camera_backup_${Date.now()}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("💾 Saved to Device");
+      hideRecoveryUI();
+      liveBadge.style.display = "none";
     }
 
     async function uploadIso(blob) {
@@ -1648,6 +1696,26 @@
     <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden;">
       <div id="renderProgressFill" style="width:0%; height:100%; background:#3b82f6; transition: width 0.3s ease;">
       </div>
+    </div>
+  </div>
+
+  <!-- RECOVERY PANEL (Added for reliability) -->
+  <div id="recoveryPanel"
+    style="display:none; position:fixed; bottom:20px; left:20px; right:20px; background:#1e293b; padding:20px; border-radius:12px; border:1px solid #ef4444; z-index:20000; flex-direction:column; gap:10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+    <div style="color:#ef4444; font-weight:bold; display:flex; align-items:center; gap:8px;">
+      <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+      </svg>
+      <span>Transfer Failed</span>
+    </div>
+    <div style="color:#cbd5e1; font-size:14px;">The connection to Director was lost. Your recording is safe.</div>
+    <div style="display:flex; gap:10px;">
+      <button onclick="retryTransfer()"
+        style="flex:1; padding:12px; background:#eab308; color:black; border:none; border-radius:8px; font-weight:600;">🔄
+        Retry Transfer</button>
+      <button onclick="downloadLocal()"
+        style="flex:1; padding:12px; background:#3b82f6; color:white; border:none; border-radius:8px; font-weight:600;">💾
+        Save to Device</button>
     </div>
   </div>
 </body>
