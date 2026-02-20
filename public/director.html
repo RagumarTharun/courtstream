@@ -1439,9 +1439,10 @@
     function pauseRecording() { }
     function resumeRecording() { }
 
-    function stopRecordingRequest() {
+    async function stopRecordingRequest() {
       if (recordingState === "idle") return;
-      document.getElementById("stopModal").style.display = "flex";
+      // Skip modal, go straight to finalize
+      await stopAndFinalize('all');
     }
 
     function closeStopModal() {
@@ -1476,9 +1477,9 @@
     async function stopAndFinalize(mode) {
       console.log("Finalizing Recording (Selection Mode)...");
 
-      // 1. UI FEEDBACK
-      const dash = document.getElementById("transferModal");
-      if (dash) dash.style.display = "flex";
+      // 1. UI FEEDBACK - Skipped to prevent flicker
+      // const dash = document.getElementById("transferModal");
+      // if (dash) dash.style.display = "flex";
 
       try {
         console.log("🛑 Stopping session...");
@@ -1549,7 +1550,7 @@
         });
 
         console.log("⏳ Stop signals sent. Showing Selection Modal...");
-        setTimeout(showDownloadSelectionModal, 500);
+        showDownloadSelectionModal();
 
       } catch (e) {
         console.error("CRITICAL ERROR in stopAndFinalize:", e);
@@ -2207,8 +2208,11 @@
         }
 
         updateStatus(100, "Done!");
-        if (btn) btn.innerText = "All Downloads Complete";
-        setTimeout(() => location.reload(), 2000);
+        if (btn) {
+          btn.innerText = "Done - Start New Session";
+          btn.disabled = false;
+          btn.onclick = () => location.reload();
+        }
 
       } catch (e) {
         console.error("Processing Error:", e);
