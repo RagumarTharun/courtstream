@@ -1105,7 +1105,10 @@
         row.innerHTML = `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                     <span class="name">Camera ${id.substring(0, 4)}</span>
-                    <span class="pct" style="color: #94a3b8;">0%</span>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span id="retry_${id}" style="display:none; color:var(--red); cursor:pointer; font-size:11px; text-decoration:underline;" onclick="retryTransfer('${id}')">Retry?</span>
+                        <span class="pct" style="color: #94a3b8;">0%</span>
+                    </div>
                 </div>
                 <div class="dash-progress">
                     <div class="progress-fill dash-fill"></div>
@@ -1117,6 +1120,8 @@
       row.querySelector(".progress-fill").style.width = percent + "%";
       row.querySelector(".pct").innerText = percent + "%";
       if (done) {
+        const retryBtn = document.getElementById(`retry_${id}`);
+        if (retryBtn) retryBtn.style.display = "none";
         row.querySelector(".progress-fill").classList.add("done");
         row.querySelector(".progress-fill").style.background = "#10b981";
         row.querySelector(".pct").innerText = "Ready";
@@ -1124,12 +1129,25 @@
       }
     }
 
+    function retryTransfer(id) {
+      if (id === 'program') return;
+      console.log(`🔄 Retrying transfer for: ${id}`);
+      const row = document.getElementById(`xfer_${id}`);
+      if (row) {
+        row.querySelector(".pct").innerText = "Retrying...";
+        row.querySelector(".pct").style.color = "var(--muted)";
+        const retryBtn = document.getElementById(`retry_${id}`);
+        if (retryBtn) retryBtn.style.display = "none";
+      }
+      socket.emit("control", { to: id, data: { type: "request-transfer" } });
+    }
+
     async function checkTransfersComplete() {
       const activePeers = Object.keys(peers).filter(pid => peers[pid].stream);
       const missing = activePeers.filter(pid => !receivedRecordings[pid]);
       const allReceived = missing.length === 0;
 
-      console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
+      console.log(`Checking Transfers: Active = ${activePeers.length}, Received = ${Object.keys(receivedRecordings).length}, Missing = [${missing.join(', ')}]`);
     }
 
     async function createPeer(id, clientId = null) {
@@ -1148,7 +1166,7 @@
       const nameInput = document.createElement("input");
       nameInput.className = "camera-name";
       cameraCount += 1;
-      nameInput.value = `Camera ${cameraCount}`;
+      nameInput.value = `Camera ${cameraCount} `;
 
       const actions = document.createElement("div");
       actions.className = "camera-actions";
@@ -1162,7 +1180,7 @@
       peers[id].name = nameInput.value;
 
       nameInput.oninput = () => {
-        peers[id].name = nameInput.value.trim() || `Camera ${cameraCount}`;
+        peers[id].name = nameInput.value.trim() || `Camera ${cameraCount} `;
       };
 
       pc.ontrack = e => {
@@ -1207,7 +1225,7 @@
       peers[id].fileMeta = null;
       peers[id].receivedSize = 0;
 
-      dc.onopen = () => console.log(`✅ Data Channel Open with ${id}`);
+      dc.onopen = () => console.log(`✅ Data Channel Open with ${id} `);
       dc.onmessage = (event) => handleDataMessage(id, event.data);
 
       pc.createOffer()
@@ -1434,7 +1452,7 @@
       recordStartTime = Date.now();
 
       // 1. START ISO (Server-Side)
-      isoSessionId = `session_${Date.now()}`;
+      isoSessionId = `session_${Date.now()} `;
       isoEdl = [];
 
       // Log initial camera or First available if none selected
@@ -1579,10 +1597,8 @@
       // Show Transfer Modal as container for selection
       document.getElementById("transferModal").style.display = "flex";
 
-      // Ensure Selection Modal Exists or Reuse existing modal structure
-      // We'll reuse the "completePhase" div but inject our new UI
       const container = document.getElementById("completePhase");
-      if (!container) return; // Should exist
+      if (!container) return;
 
       // Show render phase container but empty
       document.getElementById("renderPhase").style.display = "block";
@@ -1600,7 +1616,6 @@
                 
                 <div id="selectionList" style="display:flex; flex-direction:column; gap:12px; max-height:400px; overflow-y:auto; margin-bottom:24px;">
                     
-                    <!-- Final Mix -->
                     <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
                         <label style="display:flex; align-items:center; cursor:pointer; font-weight:600;">
                             <input type="checkbox" id="sel_final_mix" checked style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
@@ -1612,11 +1627,10 @@
                         </div>
                     </div>
 
-                    <!-- Director Program -->
                     <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
                         <label style="display:flex; align-items:center; cursor:pointer;">
                             <input type="checkbox" id="sel_program" style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
-                            Director Program (Local)
+                            Director Program (Local Mirror)
                         </label>
                          <div style="margin-top:8px; margin-left:30px; display:flex; gap:15px; font-size:13px; color:#cbd5e1;">
                             <label><input type="radio" name="fmt_program" value="mp4"> MP4</label>
@@ -1625,47 +1639,40 @@
                     </div>
         `;
 
-      // Add Cameras
       Object.keys(peers).forEach(id => {
         const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
-
         html += `
-                <!-- Camera ${name} -->
-                <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
-                    <div style="font-weight:600; color:#3b82f6; margin-bottom:8px;">${name}</div>
-                    
-                    <!-- Quality ISO -->
-                    <div style="margin-bottom:8px;">
-                        <label style="display:flex; align-items:center; cursor:pointer;">
-                            <input type="checkbox" id="sel_iso_${id}" style="accent-color:#3b82f6; margin-right:8px;">
-                            Quality Feed (ISO)
-                        </label>
-                        <div style="margin-left:24px; font-size:12px; color:#64748b; display:flex; gap:10px;">
-                             <label><input type="radio" name="fmt_iso_${id}" value="mp4"> MP4</label>
-                             <label><input type="radio" name="fmt_iso_${id}" value="webm" checked> WebM</label>
+                    <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span style="color:white; font-weight:500;">${name}</span>
+                            <div style="display:flex; gap:8px;">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
+                                    <input type="checkbox" id="sel_iso_${id}" checked style="accent-color:#3b82f6;"> ISO Source
+                                </label>
+                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
+                                    <input type="checkbox" id="sel_mirror_${id}" style="accent-color:#3b82f6;"> Mirror
+                                </label>
+                            </div>
+                        </div>
+                        <div style="margin-left:0; display:flex; gap:15px; font-size:12px; color:#cbd5e1; border-top:1px solid #262b3d; padding-top:8px;">
+                            <span style="color:#64748b;">Convert To:</span>
+                            <label><input type="radio" name="fmt_iso_${id}" value="mp4" checked> MP4</label>
+                            <label><input type="radio" name="fmt_iso_${id}" value="webm"> WebM</label>
                         </div>
                     </div>
-
-                    <!-- Instant Mirror -->
-                    <div>
-                        <label style="display:flex; align-items:center; cursor:pointer;">
-                            <input type="checkbox" id="sel_mirror_${id}" style="accent-color:#3b82f6; margin-right:8px;">
-                            Instant Mirror (Local)
-                        </label>
-                         <div style="margin-left:24px; font-size:12px; color:#64748b; display:flex; gap:10px;">
-                             <label><input type="radio" name="fmt_mirror_${id}" value="mp4"> MP4</label>
-                             <label><input type="radio" name="fmt_mirror_${id}" value="webm" checked> WebM</label>
-                        </div>
-                    </div>
-                </div>
-            `;
+                `;
       });
 
       html += `
                 </div>
-                <button onclick="processSelectedDownloads()" class="btn-premium" style="width:100%; justify-content:center; padding:14px; font-size:16px;">
-                    Process Selected Files
-                </button>
+                <div id="downloadButtons" style="display:flex; flex-direction:column; gap:12px;">
+                    <button class="btn-premium" onclick="processSelectedDownloads()" style="width:100%; height:48px; font-size:16px; justify-content:center;">
+                        Start Processing & Download
+                    </button>
+                    <button class="dash-btn" onclick="closeStopModal()" style="width:100%; border-color:#334155; color:#94a3b8;">
+                        Back to Recording
+                    </button>
+                </div>
             </div>
         `;
 
@@ -1685,17 +1692,16 @@
       if (id) div.id = id;
 
       div.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <span class="name">${name}</span> 
-            <div style="display:flex; align-items:center;">
-                <span class="status-badge processing">${status}</span>
-            </div>
-        </div>
-        <!-- Optional Progress -->
-        <div class="dash-progress" style="display:none;"> <!-- Hidden by default, shown if needed -->
-             <div class="dash-fill" style="width: 0%"></div>
-        </div>
-      `;
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="name">${name}</span> 
+                    <div style="display:flex; align-items:center;">
+                        <span class="status-badge processing">${status}</span>
+                    </div>
+                </div>
+                <div class="dash-progress" style="display:none;">
+                    <div class="dash-fill" style="width: 0%"></div>
+                </div>
+            `;
       list.appendChild(div);
       return div;
     }
@@ -1744,7 +1750,7 @@
       rec.ondataavailable = e => {
         if (e.data && e.data.size > 0) {
           chunks.push(e.data);
-          // console.log(`Captured chunk: ${e.data.size} bytes`);
+          // console.log(`Captured chunk: ${ e.data.size } bytes`);
         }
       };
       return rec;
@@ -2098,16 +2104,38 @@
           const aCodec = ext === 'mp4' ? ["-c:a", "aac", "-b:a", "128k"] : ["-c:a", "libvorbis"];
 
           // A. Ensure all required source files are in FFmpeg memory
+          let usedFallback = false;
           for (let i = 0; i < camerasToTransfer.size; i++) {
             const id = Array.from(camerasToTransfer)[i];
             if (!memFiles[`iso_${id}_webm`]) {
-              const blob = receivedRecordings[id];
+              let blob = receivedRecordings[id];
+
+              // FALLBACK LOGIC
+              if (!blob && cameraRecorders[id] && cameraRecorders[id].chunks.length) {
+                console.warn(`⚠️ Using local mirror fallback for camera ${id}`);
+                blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+                usedFallback = true;
+              }
+
               if (blob) {
                 const name = `iso_${id}.webm`;
                 await ffmpeg.writeFile(name, await fetchFile(blob));
                 memFiles[`iso_${id}_webm`] = name;
               }
             }
+          }
+
+          if (usedFallback) {
+            const warn = document.createElement("div");
+            warn.style.padding = "8px";
+            warn.style.marginTop = "10px";
+            warn.style.background = "rgba(234, 179, 8, 0.1)";
+            warn.style.border = "1px solid rgba(234, 179, 8, 0.2)";
+            warn.style.borderRadius = "8px";
+            warn.style.color = "#eab308";
+            warn.style.fontSize = "12px";
+            warn.innerText = "⚠️ Some segments using local mirror fallback due to connection issues.";
+            document.getElementById("downloadButtons").appendChild(warn);
           }
 
           // B. Process Cuts with Re-encoding (Fixes Glitches)
@@ -2229,6 +2257,21 @@
         document.getElementById("completePhase").style.display = "block";
         if (btn) btn.innerText = "Processing Complete";
 
+        // Add Re-render button
+        if (!document.getElementById("rerenderBtn")) {
+          const area = document.getElementById("downloadButtons");
+          const reb = document.createElement("button");
+          reb.id = "rerenderBtn";
+          reb.className = "dash-btn";
+          reb.style.marginTop = "16px";
+          reb.style.width = "100%";
+          reb.style.background = "transparent";
+          reb.style.border = "1px dashed var(--border)";
+          reb.innerText = "Re-render Again";
+          reb.onclick = () => processSelectedDownloads(ops); // re-use ops
+          area.appendChild(reb);
+        }
+
       } catch (e) {
         console.error("Processing Error:", e);
         alert("Error processing files: " + e.message);
@@ -2238,10 +2281,26 @@
 
     function waitForTransfers(requiredSet) {
       return new Promise(resolve => {
+        const start = Date.now();
+        const timeout = 20000; // 20s timeout
         const check = setInterval(() => {
           const missing = Array.from(requiredSet).filter(id => !receivedRecordings[id]);
-          if (missing.length === 0) {
+          const elapsed = Date.now() - start;
+
+          if (missing.length === 0 || elapsed > timeout) {
             clearInterval(check);
+            if (missing.length > 0) {
+              console.warn("⚠️ waitForTransfers timed out for:", missing);
+              missing.forEach(id => {
+                const retryBtn = document.getElementById(`retry_${id}`);
+                if (retryBtn) retryBtn.style.display = "inline-block";
+                const row = document.getElementById(`xfer_${id}`);
+                if (row) {
+                  row.querySelector(".pct").innerText = "Timed Out";
+                  row.querySelector(".pct").style.color = "var(--red)";
+                }
+              });
+            }
             resolve();
           }
         }, 500);
