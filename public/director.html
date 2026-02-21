@@ -434,7 +434,7 @@
 
     .dashboard-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1.2fr;
       gap: 20px;
       max-width: 1200px;
       margin: 0 auto;
@@ -755,21 +755,7 @@
     </div>
 
     <div class="dashboard-grid">
-      <!-- COL 1: INSTANT EXPORTS -->
-      <div class="dashboard-col">
-        <h2>
-          <span>⚡ Instant Exports</span>
-          <span class="status-badge success">READY</span>
-        </h2>
-        <div id="instantList">
-          <!-- Populated dynamically -->
-        </div>
-        <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid #334155;">
-          <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">Files saved to your Downloads folder.</div>
-        </div>
-      </div>
-
-      <!-- COL 2: SOURCE TRANSFERS -->
+      <!-- COL 1: SOURCE TRANSFERS -->
       <div class="dashboard-col">
         <h2>
           <span>📡 Source Transfers</span>
@@ -780,26 +766,29 @@
         </div>
       </div>
 
-      <!-- COL 3: FINAL RENDER -->
+      <!-- COL 2: FINAL RENDER / READY LIST -->
       <div class="dashboard-col">
         <h2>
-          <span>🎞️ Final Render</span>
+          <span> Download Ready</span>
           <span id="renderStatusBadge" class="status-badge pending">WAITING</span>
         </h2>
 
-        <div id="renderPhase" style="display: none;">
-          <div style="margin-bottom: 8px; color: #e2e8f0; font-size: 14px;" id="renderStatusText">Waiting for sources...
+        <!-- Active Rendering Status -->
+        <div id="renderPhase" style="display: none; margin-bottom: 20px;">
+          <div style="margin-bottom: 12px; color: #e2e8f0; font-size: 14px;" id="renderStatusText">Waiting for
+            sources...
           </div>
           <div class="dash-progress">
-            <div id="renderProgressBar" class="dash-fill"></div>
+            <div id="renderProgressFill" class="dash-fill" style="width: 0%"></div>
           </div>
         </div>
 
-        <div id="completePhase" style="display: none; margin-top: 16px;">
-          <div class="file-item"
-            style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
-            <span style="color: #10b981; font-weight: 600;">✅ Done!</span>
-          </div>
+        <div id="readyList" style="display: flex; flex-direction: column; gap: 8px; flex: 1; overflow-y: auto;">
+          <!-- Rendered files appear here -->
+        </div>
+
+        <div id="completePhase"
+          style="display: none; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
           <div id="downloadButtons"></div>
           <div style="display: flex; gap: 12px; margin-top: 24px;">
             <button class="dash-btn" onclick="showDownloadSelectionModal()"
@@ -1590,7 +1579,7 @@
         if (dash) dash.style.display = "flex";
 
         // Populate Instant List with local program
-        const list = document.getElementById("instantList");
+        const list = document.getElementById("readyList");
         if (list) {
           list.innerHTML = "";
           if (programChunks.length) {
@@ -1706,7 +1695,7 @@
     }
 
     function addToInstantList(name, status, id = null) {
-      const list = document.getElementById("instantList");
+      const list = document.getElementById("readyList");
       const div = document.createElement("div");
       div.className = "file-item";
       if (id) div.id = id;
@@ -1722,11 +1711,10 @@
                     <div class="dash-fill" style="width: 0%"></div>
                 </div>
             `;
-      list.appendChild(div);
-      return div;
+      list.prepend(div);
     }
 
-    function updateInstantStatus(id, text, type = "processing", progress = -1) {
+    function updateInstantStatus(id, text, type = "success", blob = null) {
       const el = document.getElementById(id);
       if (!el) return;
 
@@ -1736,23 +1724,26 @@
         badge.className = `status-badge ${type}`;
       }
 
-      const progBar = el.querySelector(".dash-progress");
-      const progFill = el.querySelector(".dash-fill");
-
-      if (progress >= 0 && progBar && progFill) {
-        progBar.style.display = "block";
-        progFill.style.width = `${progress}%`;
-      } else if (progress < 0 && progBar) {
-        progBar.style.display = "none";
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const nameEl = el.querySelector(".name");
+        const name = nameEl ? nameEl.innerText : "File";
+        el.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; width:100%;">
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                    <span class="name" style="font-weight:600; color:#4ade80;">${name}</span>
+                    <span style="font-size:10px; color:#64748b;">${(blob.size / 1024 / 1024).toFixed(1)} MB</span>
+                </div>
+                <a href="${url}" download="${name}.webm" class="dash-btn" style="padding:4px 12px; font-size:11px; background:#10b981; border:none; height:auto;">
+                    Download
+                </a>
+            </div>
+          `;
       }
     }
 
     function markInstantComplete() {
-      const badges = document.querySelectorAll("#instantList .status-badge");
-      badges.forEach(b => {
-        b.className = "status-badge success";
-        b.innerText = "SAVED";
-      });
+      // Done via updateInstantStatus
     }
 
 
@@ -2004,13 +1995,33 @@
       }
     });
     function downloadBlob(blob, filename) {
+      const list = document.getElementById("readyList");
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+
+      const div = document.createElement("div");
+      div.className = "file-item";
+      div.style.background = "rgba(16, 185, 129, 0.05)";
+      div.style.border = "1px solid rgba(16, 185, 129, 0.15)";
+
+      div.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display:flex; flex-direction:column; gap:2px;">
+                <span class="name" style="font-weight:600; color:#4ade80;">${filename}</span>
+                <span style="font-size:10px; color:#64748b;">${(blob.size / 1024 / 1024).toFixed(1)} MB</span>
+            </div>
+            <a href="${url}" download="${filename}" class="dash-btn" style="padding:4px 12px; font-size:11px; background:#10b981; border:none; height:auto;">
+                Download
+            </a>
+        </div>
+      `;
+      list.prepend(div); // Newest at top
+
+      // Update badge
+      const badge = document.getElementById("renderStatusBadge");
+      if (badge) {
+        badge.className = "status-badge success";
+        badge.innerText = "FILES READY";
+      }
     }
 
     async function processSelectedDownloads() {

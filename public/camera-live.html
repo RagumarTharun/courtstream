@@ -248,10 +248,15 @@
 
     <!-- Upload Progress -->
     <div id="uploadProgressOverlay">
-      <div style="font-size: 11px; font-weight: 600; color: #94a3b8;">Uploading High Quality Clip...</div>
+      <div id="uploadStatusText" style="font-size: 11px; font-weight: 600; color: #94a3b8;">Uploading High Quality
+        Clip...</div>
       <div class="progress-bar">
         <div id="uploadProgressFill" class="progress-fill"></div>
       </div>
+      <button id="retryUploadBtn" onclick="retryTransfer()"
+        style="display:none; margin-top:8px; background:#3b82f6; color:white; border:none; border-radius:4px; padding:6px; font-size:11px; font-weight:600; cursor:pointer;">
+        Retry Upload
+      </button>
     </div>
 
   </div>
@@ -714,59 +719,88 @@
       setTimeout(() => liveBadge.style.display = "none", 2000);
     }
 
+    let isTransferring = false;
     async function transferRecording(blob) {
+      if (isTransferring) return;
+      isTransferring = true;
+
       const CHUNK_SIZE = 16 * 1024; // 16KB safe chunk size
       const totalSize = blob.size;
       const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
 
-      // metadata
-      dataChannel.send(JSON.stringify({
-        type: "meta",
-        size: totalSize,
-        mime: blob.type,
-        name: `camera_${socket.id}.webm`
-      }));
-
-      const buffer = await blob.arrayBuffer();
       const overlay = document.getElementById("uploadProgressOverlay");
       const fill = document.getElementById("uploadProgressFill");
+      const statusText = document.getElementById("uploadStatusText");
+      const retryBtn = document.getElementById("retryUploadBtn");
 
       overlay.style.display = "flex";
+      retryBtn.style.display = "none";
+      statusText.innerText = "Transferring to Director...";
+      statusText.style.color = "#94a3b8";
 
-      const updateProgress = (p) => {
-        fill.style.width = p + "%";
-      };
+      try {
+        // metadata
+        dataChannel.send(JSON.stringify({
+          type: "meta",
+          size: totalSize,
+          mime: blob.type,
+          name: `camera_${socket.id}.webm`
+        }));
 
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, totalSize);
-        const chunk = buffer.slice(start, end);
+        const buffer = await blob.arrayBuffer();
+        const updateProgress = (p) => {
+          fill.style.width = p + "%";
+        };
 
-        // Wait for buffer to clear if backpressure is high
-        // Max buffer size for Chrome is high, but we should be gentle
-        while (dataChannel.bufferedAmount > 256 * 1024) { // 256KB buffer limit for flow control
-          await new Promise(r => setTimeout(r, 10));
-        }
+        for (let i = 0; i < totalChunks; i++) {
+          if (!dataChannel || dataChannel.readyState !== "open") {
+            throw new Error("Connection closed during transfer");
+          }
 
-        try {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, totalSize);
+          const chunk = buffer.slice(start, end);
+
+          while (dataChannel.bufferedAmount > 256 * 1024) {
+            await new Promise(r => setTimeout(r, 10));
+            if (!dataChannel || dataChannel.readyState !== "open") throw new Error("Connection lost");
+          }
+
           dataChannel.send(chunk);
-        } catch (e) {
-          console.error("Tx Error:", e);
-          break;
+
+          if (i % 20 === 0) {
+            updateProgress(Math.floor((i / totalChunks) * 100));
+          }
         }
 
-        if (i % 20 === 0) {
-          updateProgress(Math.floor((i / totalChunks) * 100));
-        }
+        updateProgress(100);
+        dataChannel.send(JSON.stringify({ type: "end" }));
+        console.log("✅ Transfer Complete");
+        statusText.innerText = "Transfer Complete!";
+        statusText.style.color = "#10b981";
+
+        setTimeout(() => {
+          overlay.style.display = "none";
+          liveBadge.style.display = "none";
+          isTransferring = false;
+        }, 1500);
+
+      } catch (e) {
+        console.error("Transfer Error:", e);
+        statusText.innerText = "Transfer Failed: " + e.message;
+        statusText.style.color = "#ef4444";
+        retryBtn.style.display = "block";
+        isTransferring = false;
       }
+    }
 
-      updateProgress(100);
-      dataChannel.send(JSON.stringify({ type: "end" }));
-      console.log("✅ Transfer Complete");
-      setTimeout(() => {
-        overlay.style.display = "none";
-        liveBadge.style.display = "none";
-      }, 1000);
+    function retryTransfer() {
+      if (heldIsoBlob) {
+        transferRecording(heldIsoBlob);
+      } else {
+        alert("No data found to retry. Recording might have been discarded.");
+        document.getElementById("uploadProgressOverlay").style.display = "none";
+      }
     }
 
     async function uploadIso(blob) {
