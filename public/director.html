@@ -1726,8 +1726,21 @@
     function stopRecorder(rec) {
       return new Promise(resolve => {
         if (!rec || rec.state === "inactive") return resolve();
-        rec.onstop = () => resolve();
-        rec.stop();
+        let timeout = setTimeout(() => {
+          console.warn("Stop recorder timed out");
+          resolve();
+        }, 1000);
+        rec.onstop = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        try {
+          rec.stop();
+        } catch (e) {
+          console.warn("Error stopping recorder:", e);
+          clearTimeout(timeout);
+          resolve();
+        }
       });
     }
 
@@ -1884,7 +1897,7 @@
       if (recordingState !== "idle") {
         if (await confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
           try {
-            await stopRecording();
+            await stopAndFinalize('all');
             // Allow time for downloads to initiate
             setTimeout(() => location.href = "playback.html", 1500);
           } catch (e) {
@@ -1895,6 +1908,11 @@
       } else {
         location.href = "playback.html";
       }
+    }
+
+    // Alias for compatibility
+    async function stopRecording() {
+      return stopAndFinalize('all');
     }
 
     /* ===== SIGNAL ===== */
