@@ -1106,7 +1106,8 @@
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                     <span class="name">Camera ${id.substring(0, 4)}</span>
                     <div style="display: flex; gap: 8px; align-items: center;">
-                        <span id="retry_${id}" style="display:none; color:var(--red); cursor:pointer; font-size:11px; text-decoration:underline;" onclick="retryTransfer('${id}')">Retry?</span>
+                        <span id="retry_${id}" style="display:none; color:var(--blue); cursor:pointer; font-size:11px; text-decoration:underline; font-weight:600;" onclick="retryTransfer('${id}')">Retry?</span>
+                        <span id="cancel_${id}" style="display:none; color:var(--red); cursor:pointer; font-size:11px; text-decoration:underline;" onclick="cancelTransfer('${id}')">Skip/Fallback</span>
                         <span class="pct" style="color: #94a3b8;">0%</span>
                     </div>
                 </div>
@@ -1121,7 +1122,9 @@
       row.querySelector(".pct").innerText = percent + "%";
       if (done) {
         const retryBtn = document.getElementById(`retry_${id}`);
+        const cancelBtn = document.getElementById(`cancel_${id}`);
         if (retryBtn) retryBtn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "none";
         row.querySelector(".progress-fill").classList.add("done");
         row.querySelector(".progress-fill").style.background = "#10b981";
         row.querySelector(".pct").innerText = "Ready";
@@ -1137,9 +1140,26 @@
         row.querySelector(".pct").innerText = "Retrying...";
         row.querySelector(".pct").style.color = "var(--muted)";
         const retryBtn = document.getElementById(`retry_${id}`);
+        const cancelBtn = document.getElementById(`cancel_${id}`);
         if (retryBtn) retryBtn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "inline-block";
       }
       socket.emit("control", { to: id, data: { type: "request-transfer" } });
+    }
+
+    const cancelledTransfers = new Set();
+    function cancelTransfer(id) {
+      console.warn(`🛑 Cancelling transfer and using fallback for: ${id}`);
+      cancelledTransfers.add(id);
+      const row = document.getElementById(`xfer_${id}`);
+      if (row) {
+        row.querySelector(".pct").innerText = "Skipped (Fallback)";
+        row.querySelector(".pct").style.color = "var(--orange)";
+        const retryBtn = document.getElementById(`retry_${id}`);
+        const cancelBtn = document.getElementById(`cancel_${id}`);
+        if (retryBtn) retryBtn.style.display = "inline-block";
+        if (cancelBtn) cancelBtn.style.display = "none";
+      }
     }
 
     async function checkTransfersComplete() {
@@ -2059,9 +2079,18 @@
         });
 
         // Wait loop
+        cancelledTransfers.clear(); // Clear on new process start
         if (btn) btn.innerText = "Waiting for Camera Files...";
         await waitForTransfers(camerasToTransfer);
 
+        // Final check: did we get everything or was it skipped?
+        const stillMissing = Array.from(camerasToTransfer).filter(id => !receivedRecordings[id] && !cancelledTransfers.has(id));
+        if (stillMissing.length > 0) {
+          if (!confirm(`Still waiting for: ${stillMissing.map(id => peers[id]?.name || id).join(', ')}. Proceed with fallback (local mirror)?`)) {
+            if (btn) { btn.disabled = false; btn.innerText = "Start Processing & Download"; }
+            return;
+          }
+        }
       }
 
       // UI Helpers
@@ -2076,8 +2105,34 @@
       };
 
       try {
+        let lastProgressTime = Date.now();
+        const checkStuck = setInterval(() => {
+          if (Date.now() - lastProgressTime > 40000) { // 40 seconds of silence
+            console.warn("⚠️ Rendering seems stuck...");
+            const warnArea = document.getElementById("downloadButtons");
+            if (warnArea && !document.getElementById("forceRetryBtn")) {
+              const frb = document.createElement("button");
+              frb.id = "forceRetryBtn";
+              frb.className = "dash-btn";
+              frb.style.marginTop = "8px";
+              frb.style.border = "1px solid var(--red)";
+              frb.style.color = "var(--red)";
+              frb.innerText = "⚠️ Rendering Stuck? Force Retry";
+              frb.onclick = () => {
+                clearInterval(checkStuck);
+                location.reload(); // Hard reset for safety if FFmpeg hangs
+              };
+              warnArea.appendChild(frb);
+            }
+          }
+        }, 5000);
+
         updateStatus(0, "Loading Engine");
         const { ffmpeg, fetchFile } = await ensureFFmpeg();
+
+        ffmpeg.on("log", ({ message }) => {
+          lastProgressTime = Date.now(); // Any log activity counts as progress
+        });
 
         // Track Transcoded Files
         const memFiles = {};
@@ -2275,13 +2330,16 @@
         }
 
         updateStatus(100, "Done!");
+        if (typeof checkStuck !== 'undefined') clearInterval(checkStuck);
         const renderPanel = document.getElementById("renderProgressPanel");
         if (renderPanel) renderPanel.style.display = "none";
+        const forceRetry = document.getElementById("forceRetryBtn");
+        if (forceRetry) forceRetry.remove();
 
         document.getElementById("completePhase").style.display = "block";
         if (btn) {
           btn.innerText = "Processing Complete";
-          btn.disabled = false; // Allow re-runs if needed, though rerenderBtn is also there
+          btn.disabled = false;
         }
 
         // Add Re-render button
@@ -2311,26 +2369,40 @@
     function waitForTransfers(requiredSet) {
       return new Promise(resolve => {
         const start = Date.now();
-        const timeout = 20000; // 20s timeout
+        const timeout = 60000; // Increase to 60s for high-quality files
         const check = setInterval(() => {
-          const missing = Array.from(requiredSet).filter(id => !receivedRecordings[id]);
+          const missing = Array.from(requiredSet).filter(id => !receivedRecordings[id] && !cancelledTransfers.has(id));
           const elapsed = Date.now() - start;
 
           if (missing.length === 0 || elapsed > timeout) {
             clearInterval(check);
             if (missing.length > 0) {
-              console.warn("⚠️ waitForTransfers timed out for:", missing);
+              console.warn("⚠️ waitForTransfers timed out or finished with missing:", missing);
               missing.forEach(id => {
-                const retryBtn = document.getElementById(`retry_${id}`);
-                if (retryBtn) retryBtn.style.display = "inline-block";
-                const row = document.getElementById(`xfer_${id}`);
-                if (row) {
-                  row.querySelector(".pct").innerText = "Timed Out";
-                  row.querySelector(".pct").style.color = "var(--red)";
+                if (!receivedRecordings[id] && !cancelledTransfers.has(id)) {
+                  const retryBtn = document.getElementById(`retry_${id}`);
+                  const cancelBtn = document.getElementById(`cancel_${id}`);
+                  if (retryBtn) retryBtn.style.display = "inline-block";
+                  if (cancelBtn) cancelBtn.style.display = "inline-block";
+                  const row = document.getElementById(`xfer_${id}`);
+                  if (row) {
+                    row.querySelector(".pct").innerText = "Waiting...";
+                    row.querySelector(".pct").style.color = "var(--orange)";
+                  }
                 }
               });
             }
             resolve();
+          } else {
+            // After 5s, show "Skip/Fallback" buttons so user can proceed if they want
+            if (elapsed > 5000) {
+              missing.forEach(id => {
+                const cancelBtn = document.getElementById(`cancel_${id}`);
+                const retryBtn = document.getElementById(`retry_${id}`);
+                if (cancelBtn) cancelBtn.style.display = "inline-block";
+                if (retryBtn) retryBtn.style.display = "inline-block";
+              });
+            }
           }
         }, 500);
       });
