@@ -299,6 +299,13 @@
 
     const pendingCandidates = []; // Buffer signals until remote description is set
 
+    // Persistent identity for discovery stability
+    let clientId = sessionStorage.getItem("courtstream_client_id");
+    if (!clientId) {
+      clientId = "cam_" + Math.random().toString(36).substring(2, 9);
+      sessionStorage.setItem("courtstream_client_id", clientId);
+    }
+
     /* ===== WEBRTC ===== */
     let turnConfig = null;
     async function getTurnConfig() {
@@ -483,6 +490,13 @@
           }
         }
       });
+
+      socket.on("peer-joined", ({ id, role }) => {
+        if (role === "director") {
+          console.log("🎬 Director joined! Refreshing connection...");
+          checkAccess();
+        }
+      });
     }
 
     /* ===== DATA CHANNEL ===== */
@@ -563,17 +577,17 @@
           joinBtn.onclick = () => {
             const pass = passInput.value.trim();
             if (!pass) return;
-            socket.emit("join", { room: streamId, role: "camera", password: pass });
+            socket.emit("join", { room: streamId, role: "camera", password: pass, clientId });
           };
         } else {
           console.log("🔓 Camera: Public stream detected");
           overlay.style.display = "none";
-          socket.emit("join", { room: streamId, role: "camera" });
+          socket.emit("join", { room: streamId, role: "camera", clientId });
         }
       } catch (e) {
         console.warn("Check access failed, defaulting to public join", e);
         overlay.style.display = "none";
-        socket.emit("join", { room: streamId, role: "camera" });
+        socket.emit("join", { room: streamId, role: "camera", clientId });
       }
     }
 

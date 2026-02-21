@@ -885,14 +885,6 @@
     let isDownloadingInstant = false;
     let isRenderPending = false;
 
-    /* ===== JOIN ===== */
-    socket.emit("join", { room: streamId, role: "director" });
-
-    // Proactive Discovery: Poll for peers every 5 seconds to catch missed joins
-    setInterval(() => {
-      socket.emit("join", { room: streamId, role: "director" }); // Re-emit join to trigger server-side existing-peers list
-    }, 5000);
-
     /* ===== EXISTING PEERS ===== */
     socket.on("existing-peers", peersList => {
       console.log("👥 Existing peers:", peersList);
@@ -901,14 +893,24 @@
       const activeIds = new Set(peersList.map(p => p.id));
 
       // 1. Add new peers
-      peersList.forEach(({ id, role }) => {
+      peersList.forEach(({ id, role, clientId }) => {
         if (!id || id === socket.id) return;
         if (role === "viewer") {
           if (!viewers[id]) queueOrCreateViewer(id);
           return;
         }
-        if (role === "director") return; // Ignore other directors
-        if (!peers[id]) createPeer(id);
+        if (role === "director") return;
+
+        // Deduplication by clientId
+        if (clientId) {
+          const oldId = Object.keys(peers).find(pid => peers[pid].clientId === clientId);
+          if (oldId && oldId !== id) {
+            console.log("♻️ Duplicate camera detected via clientId, replacing:", clientId);
+            removePeer(oldId);
+          }
+        }
+
+        if (!peers[id]) createPeer(id, clientId);
       });
 
       // 2. Garbage Collect Stale Peers
@@ -921,8 +923,8 @@
     });
 
     /* ===== PEER JOINED ===== */
-    socket.on("peer-joined", ({ id, role }) => {
-      console.log("👤 Peer joined:", id, "role:", role);
+    socket.on("peer-joined", ({ id, role, clientId }) => {
+      console.log("👤 Peer joined:", id, "role:", role, "clientId:", clientId);
       if (!id || id === socket.id) return;
       if (role === "viewer") {
         if (viewers[id]) return;
@@ -930,9 +932,27 @@
         return;
       }
       if (role === "director") return;
+
+      // Deduplication by clientId
+      if (clientId) {
+        const oldId = Object.keys(peers).find(pid => peers[pid].clientId === clientId);
+        if (oldId && oldId !== id) {
+          console.log("♻️ Duplicate camera detected on join, replacing:", clientId);
+          removePeer(oldId);
+        }
+      }
+
       if (peers[id]) return;
-      createPeer(id);
+      createPeer(id, clientId);
     });
+
+    /* ===== JOIN ===== */
+    socket.emit("join", { room: streamId, role: "director" });
+
+    // Proactive Discovery: Poll for peers every 5 seconds to catch missed joins
+    setInterval(() => {
+      socket.emit("join", { room: streamId, role: "director" }); // Re-emit join to trigger server-side existing-peers list
+    }, 5000);
 
     socket.on("viewer-ready", ({ id }) => {
       console.log("👀 Viewer ready:", id);
@@ -1112,14 +1132,15 @@
       console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
     }
 
-    async function createPeer(id) {
-      if (!id || peers[id]) return;
-
+    async function createPeer(id, clientId = null) {
+      console.log("📡 Director: Creating peer for", id, "ClientId:", clientId);
       const config = await getTurnConfig();
       const pc = new RTCPeerConnection(config);
 
       pc.addTransceiver("video", { direction: "recvonly" });
       pc.addTransceiver("audio", { direction: "recvonly" });
+
+      peers[id] = { pc, stream: null, slot: null, name: "Camera " + id.substring(0, 4), clientId };
 
       const slot = document.createElement("div");
       slot.className = "camera-slot";
@@ -1137,7 +1158,8 @@
 
       strip.appendChild(slot);
 
-      peers[id] = { pc, slot, stream: null, name: nameInput.value };
+      peers[id].slot = slot;
+      peers[id].name = nameInput.value;
 
       nameInput.oninput = () => {
         peers[id].name = nameInput.value.trim() || `Camera ${cameraCount}`;

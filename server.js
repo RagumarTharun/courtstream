@@ -607,9 +607,10 @@ io.on("connection", socket => {
       socket.join(room);
       socket.room = room;
       socket.data.role = role; // Official Socket.IO way to store metadata
+      socket.data.clientId = payload.clientId || null; // Persistent client ID
       socket.emit("join-success");
 
-      console.log(`👤 ${socket.id} joined room ${room} as ${role}`);
+      console.log(`👤 ${socket.id} joined room ${room} as ${role} (Client: ${socket.data.clientId})`);
 
       const clients = io.sockets.adapter.rooms.get(room) || new Set();
       const others = [...clients].filter(id => id !== socket.id);
@@ -623,13 +624,18 @@ io.on("connection", socket => {
       // Send existing peers to the new joiner
       socket.emit("existing-peers", others.map(id => {
         const s = io.sockets.sockets.get(id);
-        return { id, role: s ? s.data.role : null };
+        return {
+          id,
+          role: s ? s.data.role : null,
+          clientId: s ? s.data.clientId : null
+        };
       }));
 
       // Notify others in the room
       socket.to(room).emit("peer-joined", {
         id: socket.id,
-        role: socket.data.role
+        role: socket.data.role,
+        clientId: socket.data.clientId
       });
 
       // BINGO: If viewer, notify director immediately after join is consolidated
