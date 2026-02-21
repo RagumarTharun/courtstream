@@ -743,10 +743,6 @@
         <div id="transferList" style="display: flex; flex-direction: column; gap: 8px;">
           <!-- Dynamic Transfer Rows -->
         </div>
-        <!-- Safety: Manual Bypass -->
-        <button onclick="startClientSideRender()"
-          style="margin-top: 20px; background: transparent; border: 1px dashed #475569; color: #64748b; font-size: 10px; cursor: pointer; padding: 4px; width: 100%;">Force
-          Render (Debug)</button>
       </div>
 
       <!-- COL 3: FINAL RENDER -->
@@ -1080,15 +1076,9 @@
       console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
 
       if (allReceived) {
-        console.log("🎉 All ISO transfers complete. Checking render lock...");
+        console.log("🎉 All ISO transfers complete. Showing Selection Modal...");
         setTimeout(() => {
-          if (isDownloadingInstant) {
-            console.log("⏳ Instant download in progress. Queuing render...");
-            isRenderPending = true;
-          } else {
-            console.log("🚀 Starting Client-Side Render...");
-            startClientSideRender();
-          }
+          showDownloadSelectionModal();
         }, 1000);
       }
     }
@@ -1432,6 +1422,9 @@
         if (peers[id].stream) startCameraRecorder(id, peers[id].stream);
       });
 
+      // Clear previous recordings
+      Object.keys(receivedRecordings).forEach(key => delete receivedRecordings[key]);
+
       tickTimer();
     }
 
@@ -1558,24 +1551,10 @@
       }
     }
 
-    async function checkTransfersComplete() {
-      const activePeers = Object.keys(peers).filter(pid => peers[pid].stream);
-      const missing = activePeers.filter(pid => !receivedRecordings[pid]);
-      const allReceived = missing.length === 0;
-
-      console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
-
-      if (allReceived) {
-        console.log("🎉 All ISO transfers complete. Showing Selection Modal...");
-        setTimeout(() => {
-          showDownloadSelectionModal();
-        }, 1000);
-      }
-    }
 
     function showDownloadSelectionModal() {
-      // Hide Transfer Modal
-      document.getElementById("transferModal").style.display = "none";
+      // Show Transfer Modal as container for selection
+      document.getElementById("transferModal").style.display = "flex";
 
       // Ensure Selection Modal Exists or Reuse existing modal structure
       // We'll reuse the "completePhase" div but inject our new UI
@@ -1674,6 +1653,7 @@
 
     function addToInstantList(name, status, id = null) {
       const list = document.getElementById("instantList");
+      const div = document.createElement("div");
       div.className = "file-item";
       if (id) div.id = id;
 
@@ -1722,44 +1702,6 @@
       });
     }
 
-    /* ===== RENDER PROGRESS ===== */
-    socket.on("render-progress", ({ progress, status }) => {
-      // Update modal if active
-      const modalStatus = document.getElementById("modalRenderStatus");
-      const modalFill = document.getElementById("modalRenderFill");
-      const modalPercent = document.getElementById("modalRenderPercent");
-
-      if (modalStatus) modalStatus.innerText = status;
-      if (modalFill) modalFill.style.width = Math.max(0, progress) + "%";
-      if (modalPercent) modalPercent.innerText = Math.max(0, progress) + "%";
-
-      // Error case in progress
-      if (progress < 0 && modalStatus) {
-        modalStatus.style.color = "#ef4444";
-        if (modalFill) modalFill.style.background = "#ef4444";
-      }
-
-      // Legacy panel update (optional cleanup later)
-      const bar = document.getElementById("renderProgressPanel");
-      const fill = document.getElementById("renderProgressFill");
-      const text = document.getElementById("renderStatusText");
-
-      if (progress < 0) {
-        if (text) text.innerText = "Error: " + status;
-        if (fill) fill.style.background = "#ef4444";
-        setTimeout(() => { if (bar) bar.style.display = "none"; }, 5000);
-        return;
-      }
-
-      if (bar) bar.style.display = "flex";
-      if (fill) fill.style.width = progress + "%";
-      if (fill) fill.style.background = "#3b82f6";
-      if (text) text.innerText = status + " (" + progress + "%)";
-
-      if (progress >= 100) {
-        setTimeout(() => { if (bar) bar.style.display = "none"; }, 3000);
-      }
-    });
 
     function tickTimer() {
       clearInterval(recordTimerInt);
