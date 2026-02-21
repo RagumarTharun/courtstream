@@ -2032,48 +2032,63 @@
         // 4. GENERATE FINAL MIX
         // ===========================
         if (ops.final) {
-          // A. Transcode ISOs to MP4
+          const ext = ops.final === 'webm' ? 'webm' : 'mp4';
+          const vCodec = ext === 'mp4' ? ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"] : ["-c:v", "libvpx", "-deadline", "realtime", "-b:v", "2M"];
+          const aCodec = ext === 'mp4' ? ["-c:a", "aac", "-b:a", "128k"] : ["-c:a", "libvorbis"];
+
+          // A. Ensure all required source files are in FFmpeg memory
           for (let i = 0; i < camerasToTransfer.size; i++) {
             const id = Array.from(camerasToTransfer)[i];
-            if (!memFiles[`iso_${id}_webm`]) continue;
-
-            const outName = `iso_${id}.mp4`;
-            updateStatus(20, `Converting Cam ${i + 1} to MP4`);
-            await ffmpeg.exec(["-i", memFiles[`iso_${id}_webm`], "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", outName]);
-            memFiles[`iso_${id}_mp4`] = outName;
+            if (!memFiles[`iso_${id}_webm`]) {
+              const blob = receivedRecordings[id];
+              if (blob) {
+                const name = `iso_${id}.webm`;
+                await ffmpeg.writeFile(name, await fetchFile(blob));
+                memFiles[`iso_${id}_webm`] = name;
+              }
+            }
           }
 
-          // B. Process Cuts
-          updateStatus(40, "Processing Cuts");
+          // B. Process Cuts with Re-encoding (Fixes Glitches)
+          updateStatus(40, `Processing Cuts (${ext.toUpperCase()})`);
           const segments = [];
           for (let i = 0; i < isoEdl.length; i++) {
             const cut = isoEdl[i];
             const nextCut = isoEdl[i + 1];
             let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : null;
 
-            let inputFile = memFiles[`iso_${cut.camId}_mp4`];
+            let inputFile = memFiles[`iso_${cut.camId}_webm`];
             if (!inputFile) continue;
 
-            const segName = `seg_${i}.mp4`;
-            const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
+            const segName = `seg_${i}.${ext}`;
+            // Input seeking (-ss before -i) is faster and more accurate for re-encoding
+            const args = ["-ss", String(cut.timestamp / 1000)];
+            args.push("-i", inputFile);
             if (duration) args.push("-t", String(duration));
-            args.push("-c", "copy", segName);
+            args.push(...vCodec, ...aCodec, segName);
 
+            updateStatus(40 + Math.round((i / isoEdl.length) * 20), `Cutting Segment ${i + 1}/${isoEdl.length}`);
             await ffmpeg.exec(args);
             segments.push(segName);
           }
 
           // C. Stitch
           if (segments.length > 0) {
-            updateStatus(60, "Stitching Mix");
+            updateStatus(70, "Stitching Mix");
             await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\n"));
-            await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "final_mix.mp4"]);
+            const finalName = `final_mix.${ext}`;
+            await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", finalName]);
 
             // D. Download Final
             const timestamp = formatDate(Date.now());
-            const finalData = await ffmpeg.readFile("final_mix.mp4");
-            const finalBlob = new Blob([finalData.buffer], { type: "video/mp4" });
-            downloadBlob(finalBlob, `courtstream_final_${timestamp}.mp4`);
+            const finalData = await ffmpeg.readFile(finalName);
+            const finalMime = ext === 'mp4' ? "video/mp4" : "video/webm";
+            downloadBlob(new Blob([finalData.buffer], { type: finalMime }), `courtstream_final_${timestamp}.${ext}`);
+
+            // Cleanup segments
+            for (const seg of segments) await ffmpeg.deleteFile(seg);
+            await ffmpeg.deleteFile(finalName);
+            await ffmpeg.deleteFile("list.txt");
           }
         }
 
@@ -2087,18 +2102,14 @@
           if (fmt === 'webm') {
             if (receivedRecordings[id]) downloadBlob(receivedRecordings[id], `camera_${id}_${timestamp}.webm`);
           } else if (fmt === 'mp4') {
-            if (memFiles[`iso_${id}_mp4`]) {
-              const data = await ffmpeg.readFile(memFiles[`iso_${id}_mp4`]);
-              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `camera_${id}_${timestamp}.mp4`);
-            } else {
-              if (!memFiles[`iso_${id}_webm`]) {
-                await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
-              }
-              updateStatus(70, `Converting Cam ${id}`);
-              await ffmpeg.exec(["-i", `iso_${id}.webm`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", `iso_${id}.mp4`]);
-              const data = await ffmpeg.readFile(`iso_${id}.mp4`);
-              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `camera_${id}_${timestamp}.mp4`);
+            updateStatus(80, `Converting ISO ${id} to MP4`);
+            if (!memFiles[`iso_${id}_webm`]) {
+              await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
             }
+            await ffmpeg.exec(["-i", `iso_${id}.webm`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", `iso_${id}.mp4`]);
+            const data = await ffmpeg.readFile(`iso_${id}.mp4`);
+            downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `camera_${id}_${timestamp}.mp4`);
+            await ffmpeg.deleteFile(`iso_${id}.mp4`);
           }
         }
 
