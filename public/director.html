@@ -1960,10 +1960,12 @@
       });
 
       // 1. REQUEST TRANSFERS
+      const missing = Array.from(camerasToTransfer).filter(id => !receivedRecordings[id]);
       if (missing.length > 0) {
         console.log("Requesting transfers for:", missing);
 
         // Populate Transfer List ONLY with what we need
+        const dash = document.getElementById("transferModal");
         const tList = document.getElementById("transferList");
         if (tList) {
           tList.innerHTML = "";
