@@ -535,6 +535,45 @@
         height: auto;
       }
     }
+
+    .dash-btn {
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .dash-btn:hover {
+      filter: brightness(1.1);
+      border-color: var(--blue);
+    }
+
+    .btn-premium {
+      background: var(--blue);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-premium:hover {
+      background: #2563eb;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
   </style>
 </head>
 
@@ -762,10 +801,10 @@
             <span style="color: #10b981; font-weight: 600;">✅ Done!</span>
           </div>
           <div id="downloadButtons"></div>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 12px; margin-top: 24px;">
             <button class="dash-btn" onclick="showDownloadSelectionModal()"
-              style="background: #3b82f6; margin-top: 24px;">Process More Files</button>
-            <button class="dash-btn" onclick="location.reload()" style="background: #334155; margin-top: 24px;">New
+              style="background: var(--blue); flex: 2; border: none;">Process More Files</button>
+            <button class="dash-btn" onclick="location.reload()" style="background: #334155; flex: 1;">New
               Session</button>
           </div>
         </div>
