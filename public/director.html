@@ -1105,9 +1105,9 @@
         row.innerHTML = `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                     <span class="name">Camera ${id.substring(0, 4)}</span>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <span id="retry_${id}" style="display:none; color:var(--blue); cursor:pointer; font-size:11px; text-decoration:underline; font-weight:600;" onclick="retryTransfer('${id}')">Retry?</span>
-                        <span id="cancel_${id}" style="display:none; color:var(--red); cursor:pointer; font-size:11px; text-decoration:underline;" onclick="cancelTransfer('${id}')">Skip/Fallback</span>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button id="retry_${id}" style="display:none; background:#2563eb; color:white; border:none; border-radius:4px; padding:2px 8px; font-size:10px; cursor:pointer;" onclick="retryTransfer('${id}')">Retry</button>
+                        <button id="cancel_${id}" style="display:none; background:#475569; color:white; border:none; border-radius:4px; padding:2px 8px; font-size:10px; cursor:pointer;" onclick="cancelTransfer('${id}')">Skip</button>
                         <span class="pct" style="color: #94a3b8;">0%</span>
                     </div>
                 </div>
@@ -2081,6 +2081,15 @@
         // Wait loop
         cancelledTransfers.clear(); // Clear on new process start
         if (btn) btn.innerText = "Waiting for Camera Files...";
+
+        // Show Retry/Skip buttons immediately for visibility
+        missing.forEach(id => {
+          const r = document.getElementById(`retry_${id}`);
+          const c = document.getElementById(`cancel_${id}`);
+          if (r) r.style.display = "inline-block";
+          if (c) c.style.display = "inline-block";
+        });
+
         await waitForTransfers(camerasToTransfer);
 
         // Final check: did we get everything or was it skipped?
