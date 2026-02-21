@@ -2104,6 +2104,12 @@
             const args = ["-ss", String(cut.timestamp / 1000)];
             args.push("-i", inputFile);
             if (duration) args.push("-t", String(duration));
+
+            // NORMALIZATION: Force 720p, 30fps, 44.1kHz audio to ensure seamless stitching
+            args.push("-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p");
+            args.push("-r", "30");
+            args.push("-ar", "44100");
+
             args.push(...vCodec, ...aCodec, segName);
 
             updateStatus(40 + Math.round((i / isoEdl.length) * 20), `Cutting Segment ${i + 1}/${isoEdl.length}`);
