@@ -723,11 +723,7 @@
           <span class="status-badge success">READY</span>
         </h2>
         <div id="instantList">
-          <!-- Instant file items will go here -->
-          <div class="file-item">
-            <span>Program Feed (Local)</span>
-            <span class="status-badge success">SAVED</span>
-          </div>
+          <!-- Populated dynamically -->
         </div>
         <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid #334155;">
           <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">Files saved to your Downloads folder.</div>
@@ -763,11 +759,15 @@
         <div id="completePhase" style="display: none; margin-top: 16px;">
           <div class="file-item"
             style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
-            <span style="color: #10b981; font-weight: 600;">✅ Rendering Complete</span>
+            <span style="color: #10b981; font-weight: 600;">✅ Done!</span>
           </div>
           <div id="downloadButtons"></div>
-          <button class="dash-btn" onclick="location.reload()" style="background: #334155; margin-top: 24px;">Start New
-            Session</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="dash-btn" onclick="showDownloadSelectionModal()"
+              style="background: #3b82f6; margin-top: 24px;">Process More Files</button>
+            <button class="dash-btn" onclick="location.reload()" style="background: #334155; margin-top: 24px;">New
+              Session</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1066,21 +1066,11 @@
     }
 
     async function checkTransfersComplete() {
-      // Check against active cameras locally known (from peers)
-      // Note: director program is already local, so we just need peers
-      const activePeers = Object.keys(peers).filter(pid => peers[pid].stream); // only active streams
-
+      const activePeers = Object.keys(peers).filter(pid => peers[pid].stream);
       const missing = activePeers.filter(pid => !receivedRecordings[pid]);
       const allReceived = missing.length === 0;
 
       console.log(`Checking Transfers: Active=${activePeers.length}, Received=${Object.keys(receivedRecordings).length}, Missing=[${missing.join(', ')}]`);
-
-      if (allReceived) {
-        console.log("🎉 All ISO transfers complete. Showing Selection Modal...");
-        setTimeout(() => {
-          showDownloadSelectionModal();
-        }, 1000);
-      }
     }
 
     async function createPeer(id) {
@@ -1496,44 +1486,16 @@
 
         await Promise.all(stopPromises);
 
-        // 4. SETUP TRANSFER UI
-        // We wait for transfers before showing selection modal.
-        const tList = document.getElementById("transferList");
-        if (tList) {
-          tList.innerHTML = "";
-          // Active Peers
-          Object.keys(peers).forEach(id => {
-            const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
-            const row = document.createElement("div");
-            row.id = `xfer_${id}`;
-            row.className = "file-item";
-            row.innerHTML = `
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                      <span class="name">${name}</span>
-                      <span class="pct" style="color: #94a3b8;">Waiting...</span>
-                  </div>
-                  <div class="dash-progress">
-                      <div class="progress-fill dash-fill" style="width: 0%"></div>
-                  </div>
-              `;
-            tList.appendChild(row);
-          });
+        // 4. SHOW DASHBOARD
+        const dash = document.getElementById("transferModal");
+        if (dash) dash.style.display = "flex";
 
-          // Program placeholder (Local is always ready basically)
+        // Populate Instant List with local program
+        const list = document.getElementById("instantList");
+        if (list) {
+          list.innerHTML = "";
           if (programChunks.length) {
-            const row = document.createElement("div");
-            row.id = `xfer_program`;
-            row.className = "file-item";
-            row.innerHTML = `
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                      <span class="name">Director Program (Local)</span>
-                      <span class="pct" style="color: #10b981;">Ready</span>
-                  </div>
-                   <div class="dash-progress">
-                      <div class="progress-fill dash-fill" style="width: 100%; background: #10b981;"></div>
-                  </div>
-              `;
-            tList.appendChild(row);
+            addToInstantList("Director Program (Local)", "SAVED");
           }
         }
 
@@ -1649,6 +1611,10 @@
       // Override the Render Phase/Progress panel deeply
       const renderPanel = document.getElementById("renderPhase");
       renderPanel.innerHTML = html;
+      renderPanel.style.display = "block";
+
+      // Hide complete phase if returning
+      document.getElementById("completePhase").style.display = "none";
     }
 
     function addToInstantList(name, status, id = null) {
@@ -1994,15 +1960,29 @@
       });
 
       // 1. REQUEST TRANSFERS
-      const missing = Array.from(camerasToTransfer).filter(id => !receivedRecordings[id]);
-
       if (missing.length > 0) {
         console.log("Requesting transfers for:", missing);
 
-        // Show Transfer Modal Re-purposed
-        const dash = document.getElementById("transferModal");
-        if (dash) {
-          dash.style.display = "flex";
+        // Populate Transfer List ONLY with what we need
+        const tList = document.getElementById("transferList");
+        if (tList) {
+          tList.innerHTML = "";
+          missing.forEach(id => {
+            const name = peers[id]?.name || `Camera ${id.substring(0, 4)}`;
+            const row = document.createElement("div");
+            row.id = `xfer_${id}`;
+            row.className = "file-item";
+            row.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span class="name">${name}</span>
+                        <span class="pct" style="color: #94a3b8;">0%</span>
+                    </div>
+                    <div class="dash-progress">
+                        <div class="progress-fill dash-fill" style="width: 0%"></div>
+                    </div>
+                `;
+            tList.appendChild(row);
+          });
         }
 
         missing.forEach(id => {
@@ -2168,11 +2148,8 @@
         }
 
         updateStatus(100, "Done!");
-        if (btn) {
-          btn.innerText = "Done - Start New Session";
-          btn.disabled = false;
-          btn.onclick = () => location.reload();
-        }
+        document.getElementById("completePhase").style.display = "block";
+        if (btn) btn.innerText = "Processing Complete";
 
       } catch (e) {
         console.error("Processing Error:", e);
