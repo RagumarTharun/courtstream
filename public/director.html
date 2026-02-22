@@ -249,9 +249,19 @@
       border: 1px solid var(--border);
       position: relative;
       overflow: hidden;
-      cursor: pointer;
+      cursor: grab;
       flex-shrink: 0;
       padding-top: 6px;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+
+    .camera-slot.dragging {
+      opacity: 0.5;
+      cursor: grabbing;
+    }
+
+    .camera-slot.drag-over {
+      border: 2px dashed var(--blue);
     }
 
     .camera-slot video {
@@ -628,6 +638,13 @@
     <div class="panel side-panel" id="cameraStrip">
       <div class="side-title">
         <span>Cameras</span>
+        <button class="mini-btn" onclick="refreshCameras()" title="Refresh all cameras">
+          <svg viewBox="0 0 24 24" width="12" height="12">
+            <path fill="currentColor"
+              d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+          </svg>
+          Refresh
+        </button>
       </div>
     </div>
 
@@ -865,6 +882,7 @@
     /* ===== RECORDING ===== */
     let recordingState = "idle"; // idle | recording | paused
     let recordStartTime = 0;
+    let recordEndTime = 0;
     let recordTimerInt = null;
     let programRecorder = null;
     const programChunks = [];
@@ -959,8 +977,8 @@
       const p = peers[id];
       if (!p) return;
 
-      p.pc.close();
-      p.slot.remove();
+      if (p.pc) p.pc.close();
+      if (p.slot) p.slot.remove();
       delete peers[id];
       delete rotations[id];
 
@@ -970,6 +988,56 @@
         placeholder.style.display = "block";
         updateViewerFeeds();
       }
+    }
+
+    function refreshCameras() {
+      console.log("🔄 Triggering remote camera refresh...");
+      socket.emit("join", { room: streamId, role: "director" });
+      // Also explicitly tell all connected peers to re-handshake if needed
+      Object.keys(peers).forEach(pid => {
+        socket.emit("control", { to: pid, data: { type: "refresh" } });
+      });
+    }
+
+    /* ===== DRAG AND DROP ===== */
+    let draggedSlot = null;
+
+    function handleDragStart(e) {
+      draggedSlot = this;
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', this.dataset.peerId);
+    }
+
+    function handleDragOver(e) {
+      if (e.preventDefault) e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      this.classList.add('drag-over');
+      return false;
+    }
+
+    function handleDragLeave(e) {
+      this.classList.remove('drag-over');
+    }
+
+    function handleDrop(e) {
+      if (e.stopPropagation) e.stopPropagation();
+      this.classList.remove('drag-over');
+
+      if (draggedSlot !== this) {
+        const rect = this.getBoundingClientRect();
+        // Check both vertical and horizontal midpoints for RWD flexibility
+        const isAfter = (e.clientY > rect.top + rect.height / 2) || (e.clientX > rect.left + rect.width / 2);
+        const next = isAfter ? this.nextSibling : this;
+        strip.insertBefore(draggedSlot, next);
+      }
+      return false;
+    }
+
+    function handleDragEnd(e) {
+      this.classList.remove('dragging');
+      document.querySelectorAll('.camera-slot').forEach(s => s.classList.remove('drag-over'));
+      draggedSlot = null;
     }
 
     socket.on("peer-left", ({ id }) => {
@@ -1171,14 +1239,35 @@
 
       const slot = document.createElement("div");
       slot.className = "camera-slot";
+      slot.draggable = true;
+      slot.dataset.peerId = id;
+
+      // Drag events
+      slot.addEventListener('dragstart', handleDragStart);
+      slot.addEventListener('dragover', handleDragOver);
+      slot.addEventListener('dragleave', handleDragLeave);
+      slot.addEventListener('drop', handleDrop);
+      slot.addEventListener('dragend', handleDragEnd);
 
       const nameInput = document.createElement("input");
       nameInput.className = "camera-name";
       cameraCount += 1;
-      nameInput.value = `Camera ${cameraCount} `;
+      nameInput.value = peers[id].name || `Camera ${cameraCount} `;
 
       const actions = document.createElement("div");
       actions.className = "camera-actions";
+
+      const stopBtn = document.createElement("button");
+      stopBtn.className = "mini-btn";
+      stopBtn.style.color = "var(--red)";
+      stopBtn.innerText = "Close"; // Changed from Stop to Close for clarity
+      stopBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm(`Remove ${peers[id].name}?`)) {
+          removePeer(id);
+        }
+      };
+      actions.appendChild(stopBtn);
 
       slot.appendChild(actions);
       slot.appendChild(nameInput);
@@ -1188,9 +1277,13 @@
       peers[id].slot = slot;
       peers[id].name = nameInput.value;
 
-      nameInput.oninput = () => {
+      nameInput.oninput = (e) => {
+        e.stopPropagation();
         peers[id].name = nameInput.value.trim() || `Camera ${cameraCount} `;
       };
+
+      // Prevent drag when interacting with input
+      nameInput.onmousedown = (e) => e.stopPropagation();
 
       pc.ontrack = e => {
         console.log("🎥 Received track from:", id);
@@ -1399,11 +1492,6 @@
     // const isoToggle = document.getElementById("isoToggle"); // REMOVED
     const qrBtn = document.getElementById("qrBtn");
 
-    recordBtn.onclick = toggleRecord;
-
-    // Fix: Attach QR button listener
-    if (qrBtn) qrBtn.onclick = openQr;
-
     // ISO Toggle logic removed
 
     function toggleRecord() {
@@ -1557,6 +1645,7 @@
 
         // 2. STOP RECORDING STATE (Local)
         recordingState = "idle";
+        recordEndTime = Date.now();
         clearInterval(recordTimerInt);
         const recBtn = document.getElementById("recordBtn");
         if (recBtn) recBtn.classList.remove("recording", "active");
@@ -1631,8 +1720,8 @@
                             Final Mix (Stitched Program)
                         </label>
                         <div style="margin-top:8px; margin-left:30px; display:flex; gap:15px; font-size:13px; color:#cbd5e1;">
-                            <label><input type="radio" name="fmt_final_mix" value="mp4" checked> MP4 (Compatibility)</label>
-                            <label><input type="radio" name="fmt_final_mix" value="webm"> WebM (Fast)</label>
+                            <label><input type="radio" name="fmt_final_mix" value="mp4"> MP4 (Compatibility)</label>
+                            <label><input type="radio" name="fmt_final_mix" value="webm" checked> WebM (Fast)</label>
                         </div>
                     </div>
 
@@ -1656,7 +1745,7 @@
                             <span style="color:white; font-weight:500;">${name}</span>
                             <div style="display:flex; gap:8px;">
                                 <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
-                                    <input type="checkbox" id="sel_iso_${id}" checked style="accent-color:#3b82f6;"> ISO Source
+                                    <input type="checkbox" id="sel_iso_${id}" style="accent-color:#3b82f6;"> ISO Source
                                 </label>
                                 <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
                                     <input type="checkbox" id="sel_mirror_${id}" style="accent-color:#3b82f6;"> Mirror
@@ -1678,8 +1767,16 @@
                     <button class="btn-premium" onclick="processSelectedDownloads()" style="width:100%; height:48px; font-size:16px; justify-content:center;">
                         Start Processing & Download
                     </button>
-                    <button class="dash-btn" onclick="closeStopModal()" style="width:100%; border-color:#334155; color:#94a3b8;">
-                        Back to Recording
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                        <button class="dash-btn" onclick="downloadRawOnly()" style="border-color:#334155; color:#cbd5e1;">
+                            Download Raw Only
+                        </button>
+                        <button class="dash-btn" onclick="deferSession()" style="border-color:#334155; color:#cbd5e1;">
+                            Defer Rendering
+                        </button>
+                    </div>
+                    <button class="dash-btn" onclick="location.reload()" style="width:100%; border-color:#334155; color:#94a3b8; font-size:12px; margin-top:8px;">
+                        Discard & New Session
                     </button>
                 </div>
             </div>
@@ -2024,6 +2121,28 @@
       }
     }
 
+    function downloadRawOnly() {
+      if (confirm("Download all individual raw camera recordings? This will skip stitching the final video.")) {
+        // Automatically select all ISOs and Mirrors but UNSELECT Final Mix
+        document.getElementById('sel_final_mix').checked = false;
+        Object.keys(peers).forEach(id => {
+          const iso = document.getElementById(`sel_iso_${id}`);
+          if (iso) iso.checked = true;
+        });
+        processSelectedDownloads();
+      }
+    }
+
+    function deferSession() {
+      if (confirm("Save recording data and defer rendering? You will be able to download/render these files later as long as this session ID remains valid on the server.")) {
+        // For now, we just tell the user where to find them or hide the modal
+        alert("Session Deferred. Your recordings are safe on the server and in the cameras. You can revisit this dashboard by stopping the recording again or using the download history (coming soon).");
+        document.getElementById("transferModal").style.display = "none";
+        // Reset state so they can continue or start new
+        recordingState = "idle";
+      }
+    }
+
     async function processSelectedDownloads() {
       const btn = document.querySelector("#renderPhase button");
       if (btn) { btn.disabled = true; btn.innerText = "Initializing Transfer..."; }
@@ -2127,7 +2246,7 @@
       try {
         let lastProgressTime = Date.now();
         const checkStuck = setInterval(() => {
-          if (Date.now() - lastProgressTime > 40000) { // 40 seconds of silence
+          if (Date.now() - lastProgressTime > 30000) { // 30 seconds of silence
             console.warn("⚠️ Rendering seems stuck...");
             const warnArea = document.getElementById("downloadButtons");
             if (warnArea && !document.getElementById("forceRetryBtn")) {
@@ -2135,9 +2254,10 @@
               frb.id = "forceRetryBtn";
               frb.className = "dash-btn";
               frb.style.marginTop = "8px";
-              frb.style.border = "1px solid var(--red)";
-              frb.style.color = "var(--red)";
-              frb.innerText = "⚠️ Rendering Stuck? Force Retry";
+              frb.style.border = "2px solid #ef4444";
+              frb.style.color = "#ef4444";
+              frb.style.fontWeight = "bold";
+              frb.innerText = "🛑 Rendering Stuck? Force Reload & Reset";
               frb.onclick = () => {
                 clearInterval(checkStuck);
                 location.reload(); // Hard reset for safety if FFmpeg hangs
@@ -2225,7 +2345,20 @@
           for (let i = 0; i < isoEdl.length; i++) {
             const cut = isoEdl[i];
             const nextCut = isoEdl[i + 1];
-            let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : null;
+
+            // Calculate duration: if no next cut, use recordEndTime to bound it
+            let duration = 0;
+            if (nextCut) {
+              duration = (nextCut.timestamp - cut.timestamp) / 1000;
+            } else {
+              duration = (recordEndTime - (recordStartTime + cut.timestamp)) / 1000;
+            }
+
+            // SAFETY: Skip extremely short segments (< 0.1s) that can crash converters
+            if (duration < 0.1) {
+              console.warn(`⏭ Skipping segment ${i + 1}: duration too short (${duration}s)`);
+              continue;
+            }
 
             let inputFile = memFiles[`iso_${cut.camId}_webm`];
             if (!inputFile) continue;

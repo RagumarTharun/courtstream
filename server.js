@@ -316,6 +316,25 @@ app.post("/api/render-iso", async (req, res) => {
 
   const outputFilename = `render_${sessionId}.mp4`;
   const outputPath = path.join(__dirname, "public", "uploads", "iso", outputFilename);
+
+  // VERIFY ALL SOURCE FILES EXIST
+  const missingFiles = [];
+  const uniqueCams = [...new Set(edl.map(cut => cut.camId))];
+  uniqueCams.forEach(camId => {
+    const filePath = uploads[camId];
+    if (!filePath || !fs.existsSync(filePath)) {
+      missingFiles.push(camId);
+    }
+  });
+
+  if (missingFiles.length > 0) {
+    console.error(`❌ Render Aborted: Missing files for cameras: ${missingFiles.join(", ")}`);
+    return res.status(400).json({
+      error: `Missing recording files for cameras: ${missingFiles.join(", ")}. Please ensure uploads are complete.`,
+      missingCams: missingFiles
+    });
+  }
+
   console.log(`🎬 Starting Render for Session ${sessionId} (${edl.length} clips)...`);
 
   const broadcastProgress = (progress, status) => {

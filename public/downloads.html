@@ -372,6 +372,7 @@
 
                     if (data.sourceFiles && data.sourceFiles.length > 0) {
                         const list = document.getElementById("sourceFilesList");
+                        list.innerHTML = ""; // Clear list before adding
                         document.getElementById("sourceFilesSection").style.display = "block";
 
                         data.sourceFiles.forEach(file => {
@@ -383,12 +384,13 @@
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;">
                                     <path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/>
                                 </svg>
-                                Download ${file.camId === "director_program" ? "Program Source" : file.camId.substring(0, 8)}
+                                Download ${file.camId === "director_program" ? "Program Source" : (file.camId ? file.camId.substring(0, 8) : "Source")}
                             `;
                             list.appendChild(btn);
                         });
                     }
-                } else {
+                }
+                else {
                     alert("Render failed: " + data.error);
                 }
             } catch (e) {

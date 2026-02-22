@@ -457,6 +457,13 @@
         else if (data.type === "request-transfer") {
           handleTransferRequest();
         }
+        else if (data.type === "refresh") {
+          console.log("Director requested refresh. Resetting PC...");
+          if (pc) {
+            pc.close();
+            initWebRTC();
+          }
+        }
         else if (data.type === "discard-recording") {
           handleDiscardRequest();
         }
