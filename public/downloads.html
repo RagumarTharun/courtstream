@@ -234,8 +234,12 @@
                 </div>
 
                 <div style="margin-bottom: 24px;">
+                    <button class="btn btn-success" onclick="downloadAllFiles()"
+                        style="width: 100%; margin-bottom: 12px; font-weight: 600;">
+                        Download All Files
+                    </button>
                     <div style="font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 8px;">FINAL MIX</div>
-                    <a id="downloadLink" href="#" download class="btn btn-success">
+                    <a id="downloadLink" href="#" download class="btn btn-primary" style="background:#2563eb;">
                         Download Final Program (Edited)
                     </a>
                 </div>
@@ -377,7 +381,7 @@
 
                         data.sourceFiles.forEach(file => {
                             const btn = document.createElement("a");
-                            btn.className = "btn btn-outline";
+                            btn.className = "btn btn-outline source-download-link";
                             btn.href = file.url;
                             btn.download = file.filename;
                             btn.innerHTML = `
@@ -395,6 +399,26 @@
                 }
             } catch (e) {
                 alert("Network error triggering render");
+            }
+        }
+
+        function downloadAllFiles() {
+            const links = document.querySelectorAll('.source-download-link');
+            let delay = 0;
+            links.forEach(link => {
+                if (link.href && link.href !== '#' && link.style.display !== 'none') {
+                    setTimeout(() => {
+                        link.click();
+                    }, delay);
+                    delay += 500;
+                }
+            });
+
+            const mainLink = document.getElementById("downloadLink");
+            if (mainLink.href && mainLink.href !== '#' && mainLink.style.display !== 'none') {
+                setTimeout(() => {
+                    mainLink.click();
+                }, delay);
             }
         }
 

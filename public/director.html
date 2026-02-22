@@ -807,7 +807,11 @@
         <div id="completePhase"
           style="display: none; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
           <div id="downloadButtons"></div>
-          <div style="display: flex; gap: 12px; margin-top: 24px;">
+          <button class="dash-btn" onclick="downloadAllReadyFiles()"
+            style="width: 100%; margin-bottom: 12px; background: #10b981; border: none; font-weight: 600;">
+            Download All
+          </button>
+          <div style="display: flex; gap: 12px;">
             <button class="dash-btn" onclick="window.location.href='render.html'"
               style="background: var(--blue); flex: 2; border: none;">Render</button>
             <button class="dash-btn" onclick="location.reload()" style="background: #334155; flex: 1;">New
@@ -2146,7 +2150,7 @@
       const url = URL.createObjectURL(blob);
 
       const div = document.createElement("div");
-      div.className = "file-item";
+      div.className = "file-item ready-download-item";
       div.style.background = "rgba(16, 185, 129, 0.05)";
       div.style.border = "1px solid rgba(16, 185, 129, 0.15)";
 
@@ -2156,7 +2160,7 @@
                 <span class="name" style="font-weight:600; color:#4ade80;">${filename}</span>
                 <span style="font-size:10px; color:#64748b;">${(blob.size / 1024 / 1024).toFixed(1)} MB</span>
             </div>
-            <a href="${url}" download="${filename}" class="dash-btn" style="padding:4px 12px; font-size:11px; background:#10b981; border:none; height:auto;">
+            <a href="${url}" download="${filename}" class="dash-btn ready-download-link" style="padding:4px 12px; font-size:11px; background:#10b981; border:none; height:auto;">
                 Download
             </a>
         </div>
@@ -2169,6 +2173,17 @@
         badge.className = "status-badge success";
         badge.innerText = "FILES READY";
       }
+    }
+
+    function downloadAllReadyFiles() {
+      const links = document.querySelectorAll('.ready-download-link');
+      let delay = 0;
+      links.forEach(link => {
+        setTimeout(() => {
+          link.click();
+        }, delay);
+        delay += 500; // stagger downloads slightly
+      });
     }
 
     function downloadRawOnly() {
