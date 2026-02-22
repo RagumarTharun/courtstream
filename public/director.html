@@ -1689,8 +1689,9 @@
         // 5. SHOW DOWNLOAD SELECTION & APPLY CHOICE
         showDownloadSelectionModal(mode);
 
-        // AUTO-EXECUTE if directed
-        if (mode === 'render_now' || mode === 'raw_later' || mode === 'instant') {
+        // AUTO-EXECUTE only for Raw Later and Instant
+        // Render Now shows the selection screen first
+        if (mode === 'raw_later' || mode === 'instant') {
           console.log("⚡ Auto-triggering process based on choice:", mode);
           setTimeout(() => processSelectedDownloads(mode), 500);
         }
@@ -1703,18 +1704,27 @@
 
 
     function showDownloadSelectionModal(mode = 'all') {
-      // Show Transfer Modal as container for selection
-      document.getElementById("transferModal").style.display = "flex";
+      const dash = document.getElementById("transferModal");
+      if (dash) dash.style.display = "flex";
 
-      const container = document.getElementById("completePhase");
-      if (!container) return;
+      const renderPanel = document.getElementById("renderPhase");
+      if (!renderPanel) return;
 
-      // Show render phase container but empty
-      document.getElementById("renderPhase").style.display = "block";
+      if (mode === 'raw_later' || mode === 'instant') {
+        // Skip selection UI, show simple status
+        renderPanel.innerHTML = `
+                <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 12px; padding: 30px; text-align: center;">
+                    <div class="loader" style="margin: 0 auto 15px auto;"></div>
+                    <h3 style="color:white; margin:0;">Processing ${mode === 'raw_later' ? 'Raw Feeds' : 'Instant Previews'}...</h3>
+                    <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Transferring and preparing your downloads.</p>
+                </div>
+            `;
+        renderPanel.style.display = "block";
+        return;
+      }
 
-      // Inject Selection UI
+      // Inject Selection UI for Manual/Render Mode
       const timestamp = formatDate(Date.now());
-
       let html = `
             <div style="max-width: 600px; margin: 0 auto; background: #161922; border: 1px solid #262b3d; border-radius: 12px; padding: 24px;">
                 <h2 style="margin-top:0; color:white; display:flex; align-items:center; gap:10px;">
@@ -1738,7 +1748,7 @@
 
                     <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
                         <label style="display:flex; align-items:center; cursor:pointer;">
-                            <input type="checkbox" id="sel_program" ${mode === 'instant' ? 'checked' : ''} style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
+                            <input type="checkbox" id="sel_program" style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
                             Director Program (Local Mirror)
                         </label>
                          <div style="margin-top:8px; margin-left:30px; display:flex; gap:15px; font-size:13px; color:#cbd5e1;">
@@ -1756,7 +1766,7 @@
                             <span style="color:white; font-weight:500;">${name}</span>
                             <div style="display:flex; gap:8px;">
                                 <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
-                                    <input type="checkbox" id="sel_iso_${id}" ${mode === 'raw_later' ? 'checked' : ''} style="accent-color:#3b82f6;"> ISO Source
+                                    <input type="checkbox" id="sel_iso_${id}" style="accent-color:#3b82f6;"> ISO Source
                                 </label>
                                 <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
                                     <input type="checkbox" id="sel_mirror_${id}" style="accent-color:#3b82f6;"> Mirror
@@ -1793,11 +1803,8 @@
             </div>
         `;
 
-      // Override the Render Phase/Progress panel deeply
-      const renderPanel = document.getElementById("renderPhase");
       renderPanel.innerHTML = html;
       renderPanel.style.display = "block";
-
       // Hide complete phase if returning
       document.getElementById("completePhase").style.display = "none";
     }
@@ -2134,13 +2141,7 @@
 
     function downloadRawOnly() {
       if (confirm("Download all individual raw camera recordings? This will skip stitching the final video.")) {
-        // Automatically select all ISOs and Mirrors but UNSELECT Final Mix
-        document.getElementById('sel_final_mix').checked = false;
-        Object.keys(peers).forEach(id => {
-          const iso = document.getElementById(`sel_iso_${id}`);
-          if (iso) iso.checked = true;
-        });
-        processSelectedDownloads();
+        processSelectedDownloads('raw_later');
       }
     }
 
@@ -2155,45 +2156,68 @@
     }
 
     async function processSelectedDownloads(autoMode = null) {
-      const btn = document.querySelector("#renderPhase button");
-      if (btn) { btn.disabled = true; btn.innerText = "Initializing..."; }
+      if (!autoMode) {
+        // If coming from manual selection, replace the UI with a processing indicator inside the panel
+        const renderPanel = document.getElementById("renderPhase");
+        if (renderPanel) {
+          renderPanel.innerHTML = `
+                <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 12px; padding: 30px; text-align: center;">
+                    <div class="loader" style="margin: 0 auto 15px auto;"></div>
+                    <h3 style="color:white; margin:0;">Processing Render Job...</h3>
+                    <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Preparing your final mix and selected files.</p>
+                </div>
+            `;
+        }
+      }
 
-      // Gather Selections
-      const ops = {
-        final: document.getElementById('sel_final_mix')?.checked ?
-          document.querySelector('input[name="fmt_final_mix"]:checked').value : null,
-        program: document.getElementById('sel_program')?.checked ?
-          document.querySelector('input[name="fmt_program"]:checked').value : null,
+      const btn = document.querySelector("#renderPhase button") || { disabled: false, innerText: "" };
+      if (btn && btn.disabled === false) { btn.disabled = true; btn.innerText = "Initializing..."; }
+
+      // 1. GATHER SELECTIONS (Special logic for Auto-Modes)
+      let ops = {
+        final: null,
+        program: null,
         isos: {},
         mirrors: {}
       };
 
-      const activeCamIds = Object.keys(peers);
-      const camerasToTransfer = new Set();
+      if (autoMode === 'raw_later' || autoMode === 'render_now') {
+        // "Raw" choice: Select all High-Quality ISOs + EDL
+        // Note: 'render_now' also starts with raw download + EDL as safety
+        Object.keys(peers).forEach(id => ops.isos[id] = 'webm');
+        if (autoMode === 'render_now') ops.final = 'webm';
+      } else if (autoMode === 'instant') {
+        // "Instant" choice: Select all Mirrors + Local Program
+        ops.program = 'webm';
+        Object.keys(peers).forEach(id => ops.mirrors[id] = 'webm');
+      } else {
+        // MANUAL MODE: Read from checkboxes if they exist
+        ops.final = document.getElementById('sel_final_mix')?.checked ?
+          document.querySelector('input[name="fmt_final_mix"]:checked')?.value : null;
+        ops.program = document.getElementById('sel_program')?.checked ?
+          document.querySelector('input[name="fmt_program"]:checked')?.value : null;
 
-      // Determine which cameras need to transfer
-      if (ops.final) {
-        // Final Mix needs ALL active cameras
-        activeCamIds.forEach(id => camerasToTransfer.add(id));
+        Object.keys(peers).forEach(id => {
+          if (document.getElementById(`sel_iso_${id}`)?.checked) {
+            ops.isos[id] = document.querySelector(`input[name="fmt_iso_${id}"]:checked`)?.value || 'webm';
+          }
+          if (document.getElementById(`sel_mirror_${id}`)?.checked) {
+            ops.mirrors[id] = document.querySelector(`input[name="fmt_mirror_${id}"]:checked`)?.value || 'webm';
+          }
+        });
       }
 
-      Object.keys(peers).forEach(id => {
-        if (document.getElementById(`sel_iso_${id}`)?.checked) {
-          ops.isos[id] = document.querySelector(`input[name="fmt_iso_${id}"]:checked`).value;
-          camerasToTransfer.add(id);
-        }
-        if (document.getElementById(`sel_mirror_${id}`)?.checked) {
-          ops.mirrors[id] = document.querySelector(`input[name="fmt_mirror_${id}"]:checked`).value;
-        }
-      });
+      const activeCamIds = Object.keys(peers);
+      const camerasToTransfer = new Set();
+      if (ops.final) activeCamIds.forEach(id => camerasToTransfer.add(id));
+      Object.keys(ops.isos).forEach(id => camerasToTransfer.add(id));
 
-      // 1. REQUEST TRANSFERS
+      const isAuto = autoMode === 'raw_later' || autoMode === 'instant';
+
+      // 2. REQUEST TRANSFERS
       const missing = Array.from(camerasToTransfer).filter(id => !receivedRecordings[id]);
       if (missing.length > 0) {
         console.log("Requesting transfers for:", missing);
-
-        // Populate Transfer List ONLY with what we need
-        const dash = document.getElementById("transferModal");
         const tList = document.getElementById("transferList");
         if (tList) {
           tList.innerHTML = "";
@@ -2214,33 +2238,9 @@
             tList.appendChild(row);
           });
         }
-
-        missing.forEach(id => {
-          socket.emit("control", { to: id, data: { type: "request-transfer" } });
-        });
-
-        // Wait loop
-        cancelledTransfers.clear(); // Clear on new process start
+        missing.forEach(id => socket.emit("control", { to: id, data: { type: "request-transfer" } }));
         if (btn) btn.innerText = "Waiting for Camera Files...";
-
-        // Show Retry/Skip buttons immediately for visibility
-        missing.forEach(id => {
-          const r = document.getElementById(`retry_${id}`);
-          const c = document.getElementById(`cancel_${id}`);
-          if (r) r.style.display = "inline-block";
-          if (c) c.style.display = "inline-block";
-        });
-
         await waitForTransfers(camerasToTransfer);
-
-        // Final check: did we get everything or was it skipped?
-        const stillMissing = Array.from(camerasToTransfer).filter(id => !receivedRecordings[id] && !cancelledTransfers.has(id));
-        if (stillMissing.length > 0) {
-          if (!confirm(`Still waiting for: ${stillMissing.map(id => peers[id]?.name || id).join(', ')}. Proceed with fallback (local mirror)?`)) {
-            if (btn) { btn.disabled = false; btn.innerText = "Start Processing & Download"; }
-            return;
-          }
-        }
       }
 
       // UI Helpers
@@ -2248,54 +2248,21 @@
         if (btn) btn.innerText = `${msg} (${pct}%)`;
         const renderStatusDiv = document.getElementById("renderStatusText");
         const renderFillDiv = document.getElementById("renderProgressFill");
-        const renderPanel = document.getElementById("renderProgressPanel");
+        const pPanel = document.getElementById("renderProgressPanel");
         if (renderStatusDiv) renderStatusDiv.innerText = msg;
         if (renderFillDiv) renderFillDiv.style.width = `${pct}%`;
-        if (renderPanel) renderPanel.style.display = "flex";
+        if (pPanel) pPanel.style.display = pct < 100 ? "flex" : "none";
       };
 
       try {
-        let lastProgressTime = Date.now();
-        const checkStuck = setInterval(() => {
-          if (Date.now() - lastProgressTime > 30000) { // 30 seconds of silence
-            console.warn("⚠️ Rendering seems stuck...");
-            const warnArea = document.getElementById("downloadButtons");
-            if (warnArea && !document.getElementById("forceRetryBtn")) {
-              const frb = document.createElement("button");
-              frb.id = "forceRetryBtn";
-              frb.className = "dash-btn";
-              frb.style.marginTop = "8px";
-              frb.style.border = "2px solid #ef4444";
-              frb.style.color = "#ef4444";
-              frb.style.fontWeight = "bold";
-              frb.innerText = "🛑 Rendering Stuck? Force Reload & Reset";
-              frb.onclick = () => {
-                clearInterval(checkStuck);
-                location.reload(); // Hard reset for safety if FFmpeg hangs
-              };
-              warnArea.appendChild(frb);
-            }
-          }
-        }, 5000);
-
         updateStatus(0, "Loading Engine");
         const { ffmpeg, fetchFile } = await ensureFFmpeg();
+        let lastProgressTime = Date.now();
+        ffmpeg.on("log", () => lastProgressTime = Date.now());
 
-        ffmpeg.on("log", ({ message }) => {
-          lastProgressTime = Date.now(); // Any log activity counts as progress
-        });
-
-        // Track Transcoded Files
         const memFiles = {};
 
-        // ===========================
-        // 3. PREPARE ISO INPUTS
-        // ===========================
-        const needsIsoProcessing = ops.final || Object.values(ops.isos).includes('mp4');
-
-        // ===========================
-        // 2. DOWNLOAD EDL (.json)
-        // ===========================
+        // EDL DOWNLOAD
         if (autoMode === 'raw_later' || autoMode === 'render_now' || ops.final) {
           try {
             const cutData = JSON.stringify(isoEdl, null, 2);
@@ -2303,21 +2270,11 @@
           } catch (e) { console.error("EDL Download failed:", e); }
         }
 
-        // ===========================
-        // 3. OPTIMIZED DOWNLOAD (RAW ONLY)
-        // ===========================
-        const onlyRawRequested = !ops.final &&
-          !Object.values(ops.isos).includes('mp4') &&
-          !Object.values(ops.mirrors).includes('mp4') &&
-          (!ops.program || ops.program === 'webm');
+        // OPTIMIZED RAW DOWNLOAD (Instant/Raw Later)
+        const onlyRaw = !ops.final && !Object.values(ops.isos).includes('mp4') && !Object.values(ops.mirrors).includes('mp4') && (!ops.program || ops.program === 'webm');
 
-        if (onlyRawRequested) {
-          updateStatus(90, "Preparing Raw Files...");
-
-          // Final Mix (WebM) if selected but not stitching
-          // (Usually ops.final implies stitching, so this block handles individual raw files)
-
-          // Individual RAW ISOs
+        if (onlyRaw) {
+          updateStatus(90, "Preparing Files...");
           Object.keys(ops.isos).forEach(id => {
             const blob = receivedRecordings[id];
             if (blob) {
@@ -2325,48 +2282,43 @@
               downloadBlob(blob, `camera_${safeName}_raw_${formatDate(Date.now())}.webm`);
             }
           });
-
-          // Mirrors
-          Object.keys(ops.mirrors).forEach(id => {
-            const blob = receivedRecordings[id]; // Actually we need the mirror blob here, which isn't saved yet
-            // (Mirrors are usually small, handled by P2P metadata if implemented)
-          });
-
-          // Program (Local)
           if (ops.program === 'webm' && programChunks.length) {
             downloadBlob(new Blob(programChunks, { type: "video/webm" }), `program_local_${formatDate(Date.now())}.webm`);
           }
+          // Mirrors
+          Object.keys(ops.mirrors).forEach(id => {
+            const rec = cameraRecorders[id];
+            if (rec && rec.chunks.length) downloadBlob(new Blob(rec.chunks, { type: "video/webm" }), `mirror_${id}_${formatDate(Date.now())}.webm`);
+          });
 
-          updateStatus(100, "Downloads Started!");
-          setTimeout(() => {
-            if (btn) { btn.disabled = false; btn.innerText = "Processing Complete"; }
-            document.getElementById("completePhase").style.display = "block";
-            const renderPanel = document.getElementById("renderProgressPanel");
-            if (renderPanel) renderPanel.style.display = "none";
-          }, 1000);
-          return; // EXIT EARLY
+          // Final UI Update: Hide selection, show simple status or download history
+          if (isAuto) {
+            document.getElementById("renderPhase").innerHTML = `
+                        <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid #22c55e; border-radius: 12px; padding: 30px; text-align: center;">
+                            <div style="font-size: 40px; margin-bottom: 10px;">✅</div>
+                            <h3 style="color:white; margin:0;">Downloads Ready!</h3>
+                            <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Your browser should have started the downloads automatically.</p>
+                            <button class="dash-btn" onclick="location.reload()" style="margin: 20px auto 0 auto; background: #334155; border:none;">New Session</button>
+                        </div>
+                    `;
+          }
+          updateStatus(100, "Done!");
+          document.getElementById("completePhase").style.display = "block";
+          return;
         }
 
+        // HEAVY PROCESSING (MP4 / STITCHING)
         let usedFallback = false;
         const needsIsoInMem = ops.final || Object.values(ops.isos).includes('mp4');
 
         if (needsIsoInMem) {
-          updateStatus(10, "Loading Camera Memory...");
-          // The ffmpeg and fetchFile are already defined above, no need to redefine
-          // const { ffmpeg, fetchFile } = await ensureFFmpeg(); // Removed redundant declaration
-
-          const requiredIds = Array.from(camerasToTransfer);
-          for (let i = 0; i < requiredIds.length; i++) {
-            const id = requiredIds[i];
+          updateStatus(10, "Loading Memory...");
+          for (const id of Array.from(camerasToTransfer)) {
             let blob = receivedRecordings[id];
-
-            // Fallback to local mirror if needed for the mix
-            if (!blob && cameraRecorders[id] && cameraRecorders[id].chunks.length) {
-              console.warn(`⚠️ Using local mirror fallback for camera ${id}`);
+            if (!blob && cameraRecorders[id]?.chunks.length) {
               blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
               usedFallback = true;
             }
-
             if (blob) {
               const name = `iso_${id}.webm`;
               await ffmpeg.writeFile(name, await fetchFile(blob));
@@ -2375,206 +2327,59 @@
           }
         }
 
-        // ===========================
-        // 5. GENERATE FINAL MIX
-        // ===========================
         if (ops.final) {
           const ext = ops.final === 'webm' ? 'webm' : 'mp4';
           const vCodec = ext === 'mp4' ? ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"] : ["-c:v", "libvpx", "-deadline", "realtime", "-b:v", "2M"];
           const aCodec = ext === 'mp4' ? ["-c:a", "aac", "-b:a", "128k"] : ["-c:a", "libvorbis"];
 
-          // A. Source files already ensured in memory above
-
-          if (usedFallback) {
-            const warn = document.createElement("div");
-            warn.style.padding = "8px";
-            warn.style.marginTop = "10px";
-            warn.style.background = "rgba(234, 179, 8, 0.1)";
-            warn.style.border = "1px solid rgba(234, 179, 8, 0.2)";
-            warn.style.borderRadius = "8px";
-            warn.style.color = "#eab308";
-            warn.style.fontSize = "12px";
-            warn.innerText = "⚠️ Some segments using local mirror fallback due to connection issues.";
-            document.getElementById("downloadButtons").appendChild(warn);
-          }
-
-          // B. Process Cuts with Re-encoding (Fixes Glitches)
-          updateStatus(40, `Processing Cuts (${ext.toUpperCase()})`);
+          updateStatus(40, `Processing Cuts...`);
           const segments = [];
           for (let i = 0; i < isoEdl.length; i++) {
             const cut = isoEdl[i];
             const nextCut = isoEdl[i + 1];
-
-            // Calculate duration: if no next cut, use recordEndTime to bound it
-            let duration = 0;
-            if (nextCut) {
-              duration = (nextCut.timestamp - cut.timestamp) / 1000;
-            } else {
-              duration = (recordEndTime - (recordStartTime + cut.timestamp)) / 1000;
-            }
-
-            // SAFETY: Skip extremely short segments (< 0.1s) that can crash converters
-            if (duration < 0.1) {
-              console.warn(`⏭ Skipping segment ${i + 1}: duration too short (${duration}s)`);
-              continue;
-            }
+            let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : (recordEndTime - (recordStartTime + cut.timestamp)) / 1000;
+            if (duration < 0.1) continue;
 
             let inputFile = memFiles[`iso_${cut.camId}_webm`];
             if (!inputFile) continue;
 
             const segName = `seg_${i}.${ext}`;
-            // Input seeking (-ss before -i) is faster and more accurate for re-encoding
-            const args = ["-ss", String(cut.timestamp / 1000)];
-            args.push("-i", inputFile);
+            const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
             if (duration) args.push("-t", String(duration));
+            args.push("-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p", "-r", "30", "-ar", "44100", ...vCodec, ...aCodec, segName);
 
-            // NORMALIZATION: Force 720p, 30fps, 44.1kHz audio to ensure seamless stitching
-            args.push("-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p");
-            args.push("-r", "30");
-            args.push("-ar", "44100");
-
-            args.push(...vCodec, ...aCodec, segName);
-
-            updateStatus(40 + Math.round((i / isoEdl.length) * 20), `Cutting Segment ${i + 1}/${isoEdl.length}`);
             await ffmpeg.exec(args);
             segments.push(segName);
+            updateStatus(40 + Math.round((i / isoEdl.length) * 30), `Segment ${i + 1}/${isoEdl.length}`);
           }
 
-          // C. Stitch
           if (segments.length > 0) {
-            updateStatus(70, "Stitching Mix");
+            updateStatus(80, "Stitching Mix...");
             await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\n"));
             const finalName = `final_mix.${ext}`;
             await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", finalName]);
-
-            // D. Download Final
-            const timestamp = formatDate(Date.now());
-            const finalData = await ffmpeg.readFile(finalName);
-            const finalMime = ext === 'mp4' ? "video/mp4" : "video/webm";
-            downloadBlob(new Blob([finalData.buffer], { type: finalMime }), `courtstream_final_${timestamp}.${ext}`);
-
-            // Cleanup segments
-            for (const seg of segments) await ffmpeg.deleteFile(seg);
-            await ffmpeg.deleteFile(finalName);
-            await ffmpeg.deleteFile("list.txt");
+            downloadBlob(new Blob([(await ffmpeg.readFile(finalName)).buffer], { type: ext === 'mp4' ? "video/mp4" : "video/webm" }), `courtstream_final_${formatDate(Date.now())}.${ext}`);
           }
         }
 
-        // ===========================
-        // 5. PROCESS INDIVIDUAL ISOs
-        // ===========================
-        const isoIds = Object.keys(ops.isos);
-        for (let i = 0; i < isoIds.length; i++) {
-          const id = isoIds[i];
-          const fmt = ops.isos[id];
-          const namePrefix = peers[id]?.name || `Camera ${id.substring(0, 4)}`;
-          const timestamp = formatDate(Date.now());
-          const basePct = 80;
-          const pctStep = 10 / Math.max(1, isoIds.length);
-          const currentPct = Math.round(basePct + (i * pctStep));
-
-          if (fmt === 'webm') {
-            if (receivedRecordings[id]) downloadBlob(receivedRecordings[id], `${sanitizeName(namePrefix)}_${timestamp}.webm`);
-          } else if (fmt === 'mp4') {
-            updateStatus(currentPct, `Converting ${namePrefix} to MP4`);
-            if (!memFiles[`iso_${id}_webm`]) {
-              if (receivedRecordings[id]) {
-                await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
-              } else if (cameraRecorders[id]) {
-                // Fallback for individual ISO if high-quality is missing
-                const fallbackBlob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
-                await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(fallbackBlob));
-              }
-            }
+        // INDIVIDUAL CONVERSIONS
+        for (const id of Object.keys(ops.isos)) {
+          if (ops.isos[id] === 'mp4') {
+            updateStatus(90, `Converting ${peers[id]?.name || id} to MP4`);
+            if (!memFiles[`iso_${id}_webm`] && receivedRecordings[id]) await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
             await ffmpeg.exec(["-i", `iso_${id}.webm`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", `iso_${id}.mp4`]);
-            const data = await ffmpeg.readFile(`iso_${id}.mp4`);
-            downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), `${sanitizeName(namePrefix)}_${timestamp}.mp4`);
-            await ffmpeg.deleteFile(`iso_${id}.mp4`);
+            downloadBlob(new Blob([(await ffmpeg.readFile(`iso_${id}.mp4`)).buffer], { type: 'video/mp4' }), `${peers[id]?.name || id}_${formatDate(Date.now())}.mp4`);
           }
         }
 
-        // ===========================
-        // 6. PROCESS MIRRORS (Local)
-        // ===========================
-        const mirrorIds = Object.keys(ops.mirrors);
-        for (const id of mirrorIds) {
-          const fmt = ops.mirrors[id];
-          const rec = cameraRecorders[id];
-          if (rec && rec.chunks.length) {
-            const blob = new Blob(rec.chunks, { type: "video/webm" });
-            const timestamp = formatDate(Date.now());
-            const name = `mirror_${id}_${timestamp}`;
-
-            if (fmt === 'webm') {
-              downloadBlob(blob, name + ".webm");
-            } else {
-              const basePct = 90;
-              const currentPct = Math.round(basePct + (Object.keys(ops.mirrors).indexOf(id) * (5 / Object.keys(ops.mirrors).length)));
-              const namePrefix = peers[id]?.name || id.substring(0, 4);
-              updateStatus(currentPct, `Converting Mirror ${namePrefix}`);
-              await ffmpeg.writeFile("mirror_in.webm", await fetchFile(blob));
-              await ffmpeg.exec(["-i", "mirror_in.webm", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "out_mirror.mp4"]);
-              const data = await ffmpeg.readFile("out_mirror.mp4");
-              downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), name + ".mp4");
-              await ffmpeg.deleteFile("mirror_in.webm");
-              await ffmpeg.deleteFile("out_mirror.mp4");
-            }
-          }
-        }
-
-        // ===========================
-        // 7. PROCESS PROGRAM (Local)
-        // ===========================
-        if (ops.program && programChunks.length) {
-          const blob = new Blob(programChunks, { type: "video/webm" });
-          const timestamp = formatDate(Date.now());
-          const name = `program_${timestamp}`;
-
-          if (ops.program === 'webm') {
-            downloadBlob(blob, name + ".webm");
-          } else {
-            updateStatus(90, "Converting Program");
-            await ffmpeg.writeFile("prog_in.webm", await fetchFile(blob));
-            await ffmpeg.exec(["-i", "prog_in.webm", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "out_prog.mp4"]);
-            const data = await ffmpeg.readFile("out_prog.mp4");
-            downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), name + ".mp4");
-          }
-        }
-
-        updateStatus(100, "Done!");
-        if (typeof checkStuck !== 'undefined') clearInterval(checkStuck);
-        const renderPanel = document.getElementById("renderProgressPanel");
-        if (renderPanel) renderPanel.style.display = "none";
-        const forceRetry = document.getElementById("forceRetryBtn");
-        if (forceRetry) forceRetry.remove();
-
+        updateStatus(100, "Finished!");
         document.getElementById("completePhase").style.display = "block";
-        if (btn) {
-          btn.innerText = "Processing Complete";
-          btn.disabled = false;
-        }
-
-        // Add Re-render button
-        if (!document.getElementById("rerenderBtn")) {
-          const area = document.getElementById("downloadButtons");
-          const reb = document.createElement("button");
-          reb.id = "rerenderBtn";
-          reb.className = "dash-btn";
-          reb.style.marginTop = "16px";
-          reb.style.width = "100%";
-          reb.style.background = "transparent";
-          reb.style.border = "1px dashed var(--border)";
-          reb.innerText = "Re-render Again";
-          reb.onclick = () => processSelectedDownloads(ops); // re-use ops
-          area.appendChild(reb);
-        }
+        if (btn) btn.innerText = "Processing Complete";
 
       } catch (e) {
         console.error("Processing Error:", e);
-        const renderPanel = document.getElementById("renderProgressPanel");
-        if (renderPanel) renderPanel.style.display = "none";
-        alert("Error processing files: " + e.message);
-        if (btn) { btn.disabled = false; btn.innerText = "Retry"; }
+        updateStatus(-1, "Error: " + e.message);
+        alert("Processing Failed: " + e.message);
       }
     }
 
