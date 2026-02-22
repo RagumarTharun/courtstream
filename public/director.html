@@ -812,7 +812,7 @@
             Download All
           </button>
           <div style="display: flex; gap: 12px;">
-            <button class="dash-btn" onclick="window.location.href='render.html'"
+            <button class="dash-btn" onclick="goToRenderStudio()"
               style="background: var(--blue); flex: 2; border: none;">Render</button>
             <button class="dash-btn" onclick="location.reload()" style="background: #334155; flex: 1;">New
               Session</button>
@@ -2184,6 +2184,12 @@
         }, delay);
         delay += 500; // stagger downloads slightly
       });
+    }
+
+    function goToRenderStudio() {
+      if (confirm("Proceed to Render Studio?\n\nPlease ensure you have downloaded all your necessary files (including raw videos and the JSON cuts file). Leaving this page will clear your current session's downloads.")) {
+        window.location.href = 'render.html';
+      }
     }
 
     function downloadRawOnly() {
