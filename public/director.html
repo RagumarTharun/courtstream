@@ -692,7 +692,7 @@
       <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
         <!-- Option 1: Render Now -->
         <button class="ctrl-btn" onclick="handleChoice('render_now')"
-          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px;">
+          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px; display:none;">
           <div style="text-align:left;">
             <div style="font-weight:600;">Render Now</div>
             <div style="font-size:11px; color:var(--muted);">Stitch high-quality Program feed now</div>
@@ -808,8 +808,8 @@
           style="display: none; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
           <div id="downloadButtons"></div>
           <div style="display: flex; gap: 12px; margin-top: 24px;">
-            <button class="dash-btn" onclick="showDownloadSelectionModal()"
-              style="background: var(--blue); flex: 2; border: none;">Process More Files</button>
+            <button class="dash-btn" onclick="window.location.href='render.html'"
+              style="background: var(--blue); flex: 2; border: none;">Render</button>
             <button class="dash-btn" onclick="location.reload()" style="background: #334155; flex: 1;">New
               Session</button>
           </div>
@@ -983,8 +983,12 @@
       console.log(`📡 Sending CLOSE signal to camera ${id}`);
       socket.emit("control", { to: id, data: { type: "close" } });
 
-      if (p.pc) p.pc.close();
-      if (p.slot) p.slot.remove();
+      if (p.pc) {
+        try { p.pc.close(); } catch (e) { }
+      }
+      if (p.slot) {
+        try { p.slot.remove(); } catch (e) { }
+      }
       delete peers[id];
       delete rotations[id];
 
@@ -1053,7 +1057,18 @@
         delete viewers[id];
         return;
       }
+
+      const leftPeerClientId = peers[id] ? peers[id].clientId : null;
       removePeer(id);
+
+      if (leftPeerClientId) {
+        Object.keys(peers).forEach(pid => {
+          if (peers[pid].clientId === leftPeerClientId) {
+            console.log("🧹 Sweeping duplicate phantom camera via clientId on peer-left:", leftPeerClientId);
+            removePeer(pid);
+          }
+        });
+      }
     });
 
     socket.on("camera-left", ({ id }) => {
@@ -1063,7 +1078,18 @@
         delete viewers[id];
         return;
       }
+
+      const leftPeerClientId = peers[id] ? peers[id].clientId : null;
       removePeer(id);
+
+      if (leftPeerClientId) {
+        Object.keys(peers).forEach(pid => {
+          if (peers[pid].clientId === leftPeerClientId) {
+            console.log("🧹 Sweeping duplicate phantom camera via clientId on camera-left:", leftPeerClientId);
+            removePeer(pid);
+          }
+        });
+      }
     });
 
     /* ===== CAMERA ROTATION (MANUAL) ===== */
@@ -1235,14 +1261,20 @@
 
     async function createPeer(id, clientId = null) {
       console.log("📡 Director: Creating peer for", id, "ClientId:", clientId);
+
+      const defaultName = clientId ? `Camera ${clientId.replace('cam_', '').substring(0, 4)}` : `Camera ${id.substring(0, 4)}`;
+      peers[id] = { pc: null, stream: null, slot: null, name: defaultName, clientId, pending: true };
+
       const config = await getTurnConfig();
+      if (!peers[id]) return; // Peer was removed while waiting for TURN config
+
       const pc = new RTCPeerConnection(config);
 
       pc.addTransceiver("video", { direction: "recvonly" });
       pc.addTransceiver("audio", { direction: "recvonly" });
 
-      const defaultName = clientId ? `Camera ${clientId.replace('cam_', '').substring(0, 4)}` : `Camera ${id.substring(0, 4)}`;
-      peers[id] = { pc, stream: null, slot: null, name: defaultName, clientId };
+      peers[id].pc = pc;
+      peers[id].pending = false;
 
       const slot = document.createElement("div");
       slot.className = "camera-slot";
@@ -2278,17 +2310,23 @@
           Object.keys(ops.isos).forEach(id => {
             const blob = receivedRecordings[id];
             if (blob) {
-              const safeName = (peers[id]?.name || id).replace(/\s+/g, '_');
-              downloadBlob(blob, `camera_${safeName}_raw_${formatDate(Date.now())}.webm`);
+              const safeCamName = sanitizeName(peers[id]?.name || id);
+              const safeStreamName = sanitizeName(streamName || streamId);
+              downloadBlob(blob, `${safeStreamName}_${safeCamName}_raw_quality.webm`);
             }
           });
           if (ops.program === 'webm' && programChunks.length) {
-            downloadBlob(new Blob(programChunks, { type: "video/webm" }), `program_local_${formatDate(Date.now())}.webm`);
+            const safeStreamName = sanitizeName(streamName || streamId);
+            downloadBlob(new Blob(programChunks, { type: "video/webm" }), `${safeStreamName}_program_local_instant.webm`);
           }
           // Mirrors
           Object.keys(ops.mirrors).forEach(id => {
             const rec = cameraRecorders[id];
-            if (rec && rec.chunks.length) downloadBlob(new Blob(rec.chunks, { type: "video/webm" }), `mirror_${id}_${formatDate(Date.now())}.webm`);
+            if (rec && rec.chunks.length) {
+              const safeCamName = sanitizeName(peers[id]?.name || id);
+              const safeStreamName = sanitizeName(streamName || streamId);
+              downloadBlob(new Blob(rec.chunks, { type: "video/webm" }), `${safeStreamName}_${safeCamName}_mirror_instant.webm`);
+            }
           });
 
           // Final UI Update: Hide selection, show simple status or download history
@@ -2358,7 +2396,8 @@
             await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\n"));
             const finalName = `final_mix.${ext}`;
             await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", finalName]);
-            downloadBlob(new Blob([(await ffmpeg.readFile(finalName)).buffer], { type: ext === 'mp4' ? "video/mp4" : "video/webm" }), `courtstream_final_${formatDate(Date.now())}.${ext}`);
+            const safeStreamName = sanitizeName(streamName || streamId);
+            downloadBlob(new Blob([(await ffmpeg.readFile(finalName)).buffer], { type: ext === 'mp4' ? "video/mp4" : "video/webm" }), `${safeStreamName}_final_mix_${formatDate(Date.now())}.${ext}`);
           }
         }
 
@@ -2368,7 +2407,9 @@
             updateStatus(90, `Converting ${peers[id]?.name || id} to MP4`);
             if (!memFiles[`iso_${id}_webm`] && receivedRecordings[id]) await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
             await ffmpeg.exec(["-i", `iso_${id}.webm`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", `iso_${id}.mp4`]);
-            downloadBlob(new Blob([(await ffmpeg.readFile(`iso_${id}.mp4`)).buffer], { type: 'video/mp4' }), `${peers[id]?.name || id}_${formatDate(Date.now())}.mp4`);
+            const safeCamName = sanitizeName(peers[id]?.name || id);
+            const safeStreamName = sanitizeName(streamName || streamId);
+            downloadBlob(new Blob([(await ffmpeg.readFile(`iso_${id}.mp4`)).buffer], { type: 'video/mp4' }), `${safeStreamName}_${safeCamName}_raw_quality.mp4`);
           }
         }
 

@@ -476,6 +476,7 @@
           const v = document.querySelector("video");
           if (v) v.style.border = "none";
           alert("Your camera feed was closed by the director.");
+          location.href = "index.html"; // Prompted Redirect
         }
         else if (data.type === "discard-recording") {
           handleDiscardRequest();
