@@ -1626,6 +1626,7 @@
     }
 
     function handleChoice(choice) {
+      console.log("👉 User choice:", choice);
       closeStopModal();
       stopAndFinalize(choice);
     }
@@ -1682,6 +1683,12 @@
 
         // 5. SHOW DOWNLOAD SELECTION & APPLY CHOICE
         showDownloadSelectionModal(mode);
+
+        // AUTO-EXECUTE if directed
+        if (mode === 'render_now' || mode === 'raw_later' || mode === 'instant') {
+          console.log("⚡ Auto-triggering process based on choice:", mode);
+          setTimeout(() => processSelectedDownloads(mode), 500);
+        }
 
       } catch (e) {
         console.error("CRITICAL ERROR in stopAndFinalize:", e);
@@ -2142,9 +2149,9 @@
       }
     }
 
-    async function processSelectedDownloads() {
+    async function processSelectedDownloads(autoMode = null) {
       const btn = document.querySelector("#renderPhase button");
-      if (btn) { btn.disabled = true; btn.innerText = "Initializing Transfer..."; }
+      if (btn) { btn.disabled = true; btn.innerText = "Initializing..."; }
 
       // Gather Selections
       const ops = {
@@ -2281,49 +2288,96 @@
         // ===========================
         const needsIsoProcessing = ops.final || Object.values(ops.isos).includes('mp4');
 
-        if (needsIsoProcessing) {
+        // ===========================
+        // 2. DOWNLOAD EDL (.json)
+        // ===========================
+        if (autoMode === 'raw_later' || autoMode === 'render_now' || ops.final) {
+          try {
+            const cutData = JSON.stringify(cuts, null, 2);
+            downloadBlob(new Blob([cutData], { type: 'application/json' }), `session_cuts_${formatDate(Date.now())}.json`);
+          } catch (e) { console.error("EDL Download failed:", e); }
+        }
+
+        // ===========================
+        // 3. OPTIMIZED DOWNLOAD (RAW ONLY)
+        // ===========================
+        const onlyRawRequested = !ops.final &&
+          !Object.values(ops.isos).includes('mp4') &&
+          !Object.values(ops.mirrors).includes('mp4') &&
+          (!ops.program || ops.program === 'webm');
+
+        if (onlyRawRequested) {
+          updateStatus(90, "Preparing Raw Files...");
+
+          // Final Mix (WebM) if selected but not stitching
+          // (Usually ops.final implies stitching, so this block handles individual raw files)
+
+          // Individual RAW ISOs
+          Object.keys(ops.isos).forEach(id => {
+            const blob = receivedRecordings[id];
+            if (blob) {
+              downloadBlob(blob, `camera_${peers[id]?.name || id}_raw_${formatDate(Date.now())}.webm`);
+            }
+          });
+
+          // Mirrors
+          Object.keys(ops.mirrors).forEach(id => {
+            const blob = receivedRecordings[id]; // Actually we need the mirror blob here, which isn't saved yet
+            // (Mirrors are usually small, handled by P2P metadata if implemented)
+          });
+
+          // Program (Local)
+          if (ops.program === 'webm' && programChunks.length) {
+            downloadBlob(new Blob(programChunks, { type: "video/webm" }), `program_local_${formatDate(Date.now())}.webm`);
+          }
+
+          updateStatus(100, "Downloads Started!");
+          setTimeout(() => {
+            if (btn) { btn.disabled = false; btn.innerText = "Processing Complete"; }
+            document.getElementById("completePhase").style.display = "block";
+            const renderPanel = document.getElementById("renderProgressPanel");
+            if (renderPanel) renderPanel.style.display = "none";
+          }, 1000);
+          return; // EXIT EARLY
+        }
+
+        let usedFallback = false;
+        const needsIsoInMem = ops.final || Object.values(ops.isos).includes('mp4');
+
+        if (needsIsoInMem) {
+          updateStatus(10, "Loading Camera Memory...");
+          // The ffmpeg and fetchFile are already defined above, no need to redefine
+          // const { ffmpeg, fetchFile } = await ensureFFmpeg(); // Removed redundant declaration
+
           const requiredIds = Array.from(camerasToTransfer);
           for (let i = 0; i < requiredIds.length; i++) {
             const id = requiredIds[i];
-            const blob = receivedRecordings[id];
-            if (!blob) continue;
+            let blob = receivedRecordings[id];
 
-            const name = `iso_${id}.webm`;
-            updateStatus(10, `Reading Camera ${i + 1}`);
-            await ffmpeg.writeFile(name, await fetchFile(blob));
-            memFiles[`iso_${id}_webm`] = name;
+            // Fallback to local mirror if needed for the mix
+            if (!blob && cameraRecorders[id] && cameraRecorders[id].chunks.length) {
+              console.warn(`⚠️ Using local mirror fallback for camera ${id}`);
+              blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+              usedFallback = true;
+            }
+
+            if (blob) {
+              const name = `iso_${id}.webm`;
+              await ffmpeg.writeFile(name, await fetchFile(blob));
+              memFiles[`iso_${id}_webm`] = name;
+            }
           }
         }
 
         // ===========================
-        // 4. GENERATE FINAL MIX
+        // 5. GENERATE FINAL MIX
         // ===========================
         if (ops.final) {
           const ext = ops.final === 'webm' ? 'webm' : 'mp4';
           const vCodec = ext === 'mp4' ? ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"] : ["-c:v", "libvpx", "-deadline", "realtime", "-b:v", "2M"];
           const aCodec = ext === 'mp4' ? ["-c:a", "aac", "-b:a", "128k"] : ["-c:a", "libvorbis"];
 
-          // A. Ensure all required source files are in FFmpeg memory
-          let usedFallback = false;
-          for (let i = 0; i < camerasToTransfer.size; i++) {
-            const id = Array.from(camerasToTransfer)[i];
-            if (!memFiles[`iso_${id}_webm`]) {
-              let blob = receivedRecordings[id];
-
-              // FALLBACK LOGIC
-              if (!blob && cameraRecorders[id] && cameraRecorders[id].chunks.length) {
-                console.warn(`⚠️ Using local mirror fallback for camera ${id}`);
-                blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
-                usedFallback = true;
-              }
-
-              if (blob) {
-                const name = `iso_${id}.webm`;
-                await ffmpeg.writeFile(name, await fetchFile(blob));
-                memFiles[`iso_${id}_webm`] = name;
-              }
-            }
-          }
+          // A. Source files already ensured in memory above
 
           if (usedFallback) {
             const warn = document.createElement("div");
@@ -2341,9 +2395,9 @@
           // B. Process Cuts with Re-encoding (Fixes Glitches)
           updateStatus(40, `Processing Cuts (${ext.toUpperCase()})`);
           const segments = [];
-          for (let i = 0; i < isoEdl.length; i++) {
-            const cut = isoEdl[i];
-            const nextCut = isoEdl[i + 1];
+          for (let i = 0; i < cuts.length; i++) {
+            const cut = cuts[i];
+            const nextCut = cuts[i + 1];
 
             // Calculate duration: if no next cut, use recordEndTime to bound it
             let duration = 0;

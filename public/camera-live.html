@@ -523,6 +523,12 @@
           checkAccess();
         }
       });
+
+      socket.on("discovery-request", () => {
+        if (isClosed) return;
+        console.log("📡 Received discovery request. Re-announcing...");
+        checkAccess(); // Re-emit join
+      });
     }
 
     /* ===== DATA CHANNEL ===== */

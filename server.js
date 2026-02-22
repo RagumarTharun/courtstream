@@ -657,6 +657,12 @@ io.on("connection", socket => {
         clientId: socket.data.clientId
       });
 
+      // DISCOVERY IMPROVEMENT: If Director joins, tell others to re-announce
+      if (isDirector) {
+        console.log(`🎬 Director discovery request for room ${room}`);
+        socket.to(room).emit("discovery-request");
+      }
+
       // BINGO: If viewer, notify director immediately after join is consolidated
       if (isViewer) {
         console.log(`📡 Auto-notifying director in ${room} of viewer ${socket.id}`);
