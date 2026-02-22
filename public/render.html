@@ -409,19 +409,33 @@
             // e.g. "iso_session_123_camId.webm"
             const uploadQueue = [];
 
+            console.log("🔍 Required Cameras from EDL:", Array.from(requiredCams));
+            console.log("Files available:", Object.keys(state.videos));
+
             for (const [filename, file] of Object.entries(state.videos)) {
                 let matchedCamId = null;
 
-                // 1. Try to find camId anywhere in the filename
+                // 1. Aggressive Clean Match (Lowercase, Alphanumeric only)
+                const cleanFile = filename.toLowerCase().replace(/[^a-z0-9]/g, '');
+
                 for (const camId of requiredCams) {
-                    if (filename.includes(camId)) {
+                    const cleanCam = camId.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                    // Direct match or partial match (camId in filename)
+                    if (cleanFile.includes(cleanCam) && cleanCam.length > 2) {
                         matchedCamId = camId;
                         break;
                     }
                 }
 
+                // 2. Fallback: If only 1 cam and 1 video, just match them
+                if (!matchedCamId && requiredCams.size === 1 && Object.keys(state.videos).length === 1) {
+                    matchedCamId = Array.from(requiredCams)[0];
+                    console.log(`🎯 Single-camera fallback: matched ${filename} to ${matchedCamId}`);
+                }
+
                 if (!matchedCamId) {
-                    console.warn(`Could not match file ${filename} to any camId in EDL:`, requiredCams);
+                    console.warn(`❌ Unmatched file: ${filename}. Required IDs:`, Array.from(requiredCams));
                     // Update UI to show error for this file
                     const safeId = 'file_' + filename.replace(/[^a-z0-9]/gi, '_');
                     const el = document.getElementById(safeId);

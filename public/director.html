@@ -2321,7 +2321,8 @@
           Object.keys(ops.isos).forEach(id => {
             const blob = receivedRecordings[id];
             if (blob) {
-              downloadBlob(blob, `camera_${peers[id]?.name || id}_raw_${formatDate(Date.now())}.webm`);
+              const safeName = (peers[id]?.name || id).replace(/\s+/g, '_');
+              downloadBlob(blob, `camera_${safeName}_raw_${formatDate(Date.now())}.webm`);
             }
           });
 
