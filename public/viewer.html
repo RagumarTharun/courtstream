@@ -114,16 +114,28 @@
     </div>
   </div>
 
-  <!-- ENTRY / PASSCODE OVERLAYS (Reusing same logic structure) -->
-  style="display:none;position:fixed;inset:0;background:rgba(15,17,21,0.95);z-index:100;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
-  <h3 style="margin-top:0;">Secured Stream</h3>
-  <input type="password" id="passInput" placeholder="Enter Passcode"
-    style="background:var(--bg);border:1px solid var(--border);color:#fff;padding:12px;border-radius:8px;width:100%;max-width:240px;text-align:center;font-size:18px;margin-bottom:16px;">
-  <button id="joinBtn"
-    style="padding:10px 24px;background:var(--blue);border:none;border-radius:8px;font-weight:600;color:white;cursor:pointer;">
-    Join Stream
-  </button>
-  <div id="errorMsg" style="color:var(--red);font-size:12px;margin-top:12px;display:none;">Invalid passcode</div>
+  <!-- ENTRY / PASSCODE OVERLAYS -->
+  <div id="playOverlay"
+    style="position:fixed;inset:0;background:rgba(15,17,21,0.9);z-index:90;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
+    <h2 style="margin-bottom:24px;">Ready to Watch</h2>
+    <button id="playBtn"
+      style="padding:16px 32px;background:var(--blue);border:none;border-radius:12px;font-weight:600;font-size:16px;color:white;cursor:pointer;display:flex;align-items:center;gap:8px;">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="white">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+      Tap to Play
+    </button>
+  </div>
+  <div id="passcodeOverlay"
+    style="display:none;position:fixed;inset:0;background:rgba(15,17,21,0.95);z-index:100;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
+    <h3 style="margin-top:0;">Secured Stream</h3>
+    <input type="password" id="passInput" placeholder="Enter Passcode"
+      style="background:var(--bg);border:1px solid var(--border);color:#fff;padding:12px;border-radius:8px;width:100%;max-width:240px;text-align:center;font-size:18px;margin-bottom:16px;">
+    <button id="joinBtn"
+      style="padding:10px 24px;background:var(--blue);border:none;border-radius:8px;font-weight:600;color:white;cursor:pointer;">
+      Join Stream
+    </button>
+    <div id="errorMsg" style="color:var(--red);font-size:12px;margin-top:12px;display:none;">Invalid passcode</div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -247,8 +259,17 @@
       checkAccess();
     }
 
-    // Auto-init on load
-    initViewer();
+    // Require user interaction for Safari/Mobile Autoplay restrictions
+    document.getElementById("playBtn").addEventListener("click", () => {
+      document.getElementById("playOverlay").style.display = "none";
+
+      // Unmute and play (if track is already there, it plays. If not, the PC is ready anyway)
+      video.muted = false;
+      video.play().catch(() => { });
+
+      initViewer();
+    });
+
   </script>
 </body>
 
