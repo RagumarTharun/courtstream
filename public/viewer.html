@@ -115,24 +115,15 @@
   </div>
 
   <!-- ENTRY / PASSCODE OVERLAYS (Reusing same logic structure) -->
-  <div id="entryOverlay"
-    style="position:fixed;inset:0;background:rgba(15,17,21,0.9);z-index:90;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
-    <button id="entryBtn"
-      style="padding:16px 32px;background:var(--blue);border:none;border-radius:12px;font-weight:600;font-size:16px;color:white;cursor:pointer;">
-      ▶ Watch Stream
-    </button>
-  </div>
-
-  <div id="passcodeOverlay"
-    style="display:none;position:fixed;inset:0;background:rgba(15,17,21,0.95);z-index:100;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
-    <h3 style="margin-top:0;">Secured Stream</h3>
-    <input type="password" id="passInput" placeholder="Enter Passcode"
-      style="background:var(--bg);border:1px solid var(--border);color:#fff;padding:12px;border-radius:8px;width:100%;max-width:240px;text-align:center;font-size:18px;margin-bottom:16px;">
-    <button id="joinBtn"
-      style="padding:10px 24px;background:var(--blue);border:none;border-radius:8px;font-weight:600;color:white;cursor:pointer;">
-      Join Stream
-    </button>
-    <div id="errorMsg" style="color:var(--red);font-size:12px;margin-top:12px;display:none;">Invalid passcode</div>
+  style="display:none;position:fixed;inset:0;background:rgba(15,17,21,0.95);z-index:100;align-items:center;justify-content:center;flex-direction:column;padding:20px;text-align:center;">
+  <h3 style="margin-top:0;">Secured Stream</h3>
+  <input type="password" id="passInput" placeholder="Enter Passcode"
+    style="background:var(--bg);border:1px solid var(--border);color:#fff;padding:12px;border-radius:8px;width:100%;max-width:240px;text-align:center;font-size:18px;margin-bottom:16px;">
+  <button id="joinBtn"
+    style="padding:10px 24px;background:var(--blue);border:none;border-radius:8px;font-weight:600;color:white;cursor:pointer;">
+    Join Stream
+  </button>
+  <div id="errorMsg" style="color:var(--red);font-size:12px;margin-top:12px;display:none;">Invalid passcode</div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -161,15 +152,6 @@
     }
 
     // Access Gates
-    const entryOverlay = document.getElementById("entryOverlay");
-    document.getElementById("entryBtn").onclick = async () => {
-      entryOverlay.style.display = "none";
-      const config = await getTurnConfig();
-      pc = new RTCPeerConnection(config);
-      setupPeerHooks();
-      checkAccess();
-    };
-
     const passOverlay = document.getElementById("passcodeOverlay");
     const passInput = document.getElementById("passInput");
     const errorMsg = document.getElementById("errorMsg");
@@ -216,10 +198,22 @@
 
     let pendingCandidates = [];
 
+    async function initPC() {
+      if (pc) {
+        pc.close();
+      }
+      const config = await getTurnConfig();
+      pc = new RTCPeerConnection(config);
+      setupPeerHooks();
+      pendingCandidates = [];
+    }
+
     socket.on("signal", async ({ from, data }) => {
       if (data.type === "offer") {
         directorId = from;
         try {
+          // If receiving an offer, the director might have refreshed, so reset the PC
+          await initPC();
           await pc.setRemoteDescription(new RTCSessionDescription(data));
           const ans = await pc.createAnswer();
           await pc.setLocalDescription(ans);
@@ -233,7 +227,7 @@
         } catch (e) {
           console.error("Signal Handling Error:", e);
         }
-      } else if (data.candidate) {
+      } else if (data.candidate || data.sdpMid) {
         if (pc.remoteDescription) {
           pc.addIceCandidate(new RTCIceCandidate(data)).catch(console.warn);
         } else {
@@ -247,3 +241,15 @@
       if (!document.fullscreenElement) el.requestFullscreen();
       else document.exitFullscreen();
     }
+
+    async function initViewer() {
+      await initPC();
+      checkAccess();
+    }
+
+    // Auto-init on load
+    initViewer();
+  </script>
+</body>
+
+</html>
