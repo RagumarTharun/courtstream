@@ -214,16 +214,31 @@
       };
     }
 
-    socket.on("signal", ({ from, data }) => {
+    let pendingCandidates = [];
+
+    socket.on("signal", async ({ from, data }) => {
       if (data.type === "offer") {
         directorId = from;
-        pc.setRemoteDescription(new RTCSessionDescription(data));
-        pc.createAnswer().then(ans => {
-          pc.setLocalDescription(ans);
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data));
+          const ans = await pc.createAnswer();
+          await pc.setLocalDescription(ans);
           socket.emit("signal", { to: from, data: ans });
-        });
+
+          // Flush buffered candidates
+          while (pendingCandidates.length > 0) {
+            const cand = pendingCandidates.shift();
+            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(e => console.warn("ICE error:", e));
+          }
+        } catch (e) {
+          console.error("Signal Handling Error:", e);
+        }
       } else if (data.candidate) {
-        pc.addIceCandidate(new RTCIceCandidate(data)).catch(console.warn);
+        if (pc.remoteDescription) {
+          pc.addIceCandidate(new RTCIceCandidate(data)).catch(console.warn);
+        } else {
+          pendingCandidates.push(data);
+        }
       }
     });
 
