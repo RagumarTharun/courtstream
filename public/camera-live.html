@@ -296,6 +296,7 @@
     let facing = "environment";
     let directorId = null;
     let isLive = false;
+    let isClosed = false; // Flag to stop reconnection if director closes camera
     let videoDevices = [];
     let currentDeviceIndex = 0;
     let hasPickedDefault = false;
@@ -459,10 +460,22 @@
         }
         else if (data.type === "refresh") {
           console.log("Director requested refresh. Resetting PC...");
+          if (isClosed) return; // Ignore if explicitly closed
           if (pc) {
             pc.close();
             initWebRTC();
           }
+        }
+        else if (data.type === "close") {
+          console.log("🚫 Connection closed by director. Stopping reconnection.");
+          isClosed = true;
+          if (pc) pc.close();
+          // Visual feedback
+          document.getElementById("streamNameDisplay").innerText = "Closed by Director";
+          document.getElementById("liveBadge").style.display = "none";
+          const v = document.querySelector("video");
+          if (v) v.style.border = "none";
+          alert("Your camera feed was closed by the director.");
         }
         else if (data.type === "discard-recording") {
           handleDiscardRequest();
@@ -504,6 +517,7 @@
       });
 
       socket.on("peer-joined", ({ id, role }) => {
+        if (isClosed) return; // Stop re-joining if director previously closed this camera
         if (role === "director") {
           console.log("🎬 Director joined! Refreshing connection...");
           checkAccess();

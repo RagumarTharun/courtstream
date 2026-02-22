@@ -690,12 +690,25 @@
       </p>
 
       <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
-        <!-- Option 1: Quality (ISO) -->
-        <button class="ctrl-btn" onclick="showQualityOptions()"
+        <!-- Option 1: Render Now -->
+        <button class="ctrl-btn" onclick="handleChoice('render_now')"
           style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px;">
           <div style="text-align:left;">
-            <div style="font-weight:600;">Quality Feed (ISO)</div>
-            <div style="font-size:11px; color:var(--muted);">Process & Download from Server</div>
+            <div style="font-weight:600;">Render Now</div>
+            <div style="font-size:11px; color:var(--muted);">Stitch high-quality Program feed now</div>
+          </div>
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor"
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" />
+          </svg>
+        </button>
+
+        <!-- Option 2: Download Raw & Render Later -->
+        <button class="ctrl-btn" onclick="handleChoice('raw_later')"
+          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px;">
+          <div style="text-align:left;">
+            <div style="font-weight:600;">Download Raw & Render Later</div>
+            <div style="font-size:11px; color:var(--muted);">Fastest file retrieval for later editing</div>
           </div>
           <svg viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor"
@@ -703,28 +716,15 @@
           </svg>
         </button>
 
-        <!-- Option 2: Instant (Local) -->
-        <button class="ctrl-btn" onclick="confirmInstantSave()"
+        <!-- Option 3: Instant Feed (Local) -->
+        <button class="ctrl-btn" onclick="handleChoice('instant')"
           style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px;">
           <div style="text-align:left;">
             <div style="font-weight:600;">Instant Feed</div>
-            <div style="font-size:11px; color:var(--muted);">Download Direct from Browser</div>
+            <div style="font-size:11px; color:var(--muted);">Save low-quality mirror from browser</div>
           </div>
           <svg viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor" d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z" />
-          </svg>
-        </button>
-
-        <!-- Option 3: Both -->
-        <button class="ctrl-btn" onclick="confirmBothSave()"
-          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px;">
-          <div style="text-align:left;">
-            <div style="font-weight:600;">Both</div>
-            <div style="font-size:11px; color:var(--muted);">Download Local & Process Server</div>
-          </div>
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor"
-              d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z" />
           </svg>
         </button>
       </div>
@@ -976,6 +976,10 @@
     function removePeer(id) {
       const p = peers[id];
       if (!p) return;
+
+      // Send explicit CLOSE signal so camera stops reconnecting
+      console.log(`📡 Sending CLOSE signal to camera ${id}`);
+      socket.emit("control", { to: id, data: { type: "close" } });
 
       if (p.pc) p.pc.close();
       if (p.slot) p.slot.remove();
@@ -1618,6 +1622,11 @@
       document.getElementById("stopModal").style.display = "flex";
     }
 
+    function handleChoice(choice) {
+      closeStopModal();
+      stopAndFinalize(choice);
+    }
+
     async function handleQualitySave(mode) {
       document.getElementById("qualitySubModal").style.display = "none";
       await stopAndFinalize(mode); // 'all' or 'program'
@@ -1634,16 +1643,12 @@
     }
 
     async function stopAndFinalize(mode) {
-      console.log("Finalizing Recording (Selection Mode)...");
-
-      // 1. UI FEEDBACK - Skipped to prevent flicker
-      // const dash = document.getElementById("transferModal");
-      // if (dash) dash.style.display = "flex";
+      console.log(`Finalizing Recording (Mode: ${mode})...`);
 
       try {
         console.log("🛑 Stopping session...");
 
-        // 2. STOP RECORDING STATE (Local)
+        // 1. STOP RECORDING STATE (Local)
         recordingState = "idle";
         recordEndTime = Date.now();
         clearInterval(recordTimerInt);
@@ -1653,36 +1658,27 @@
         // Update Icons
         document.querySelector(".rec-icon").style.display = "block";
         document.querySelector(".stop-icon").style.display = "none";
-        document.getElementById("recordBar").style.display = "none";
-        document.getElementById("recordTimer").innerText = "00:00:00";
+        if (document.getElementById("recordBar")) document.getElementById("recordBar").style.display = "none";
+        if (document.getElementById("recordTimer")) document.getElementById("recordTimer").innerText = "00:00:00";
 
-        // 3. STOP LOCAL RECORDER INSTANCES
+        // 2. STOP LOCAL RECORDER INSTANCES
         const stopPromises = [];
         if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
         Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
 
         await Promise.all(stopPromises);
 
-        // 4. SHOW DASHBOARD
+        // 3. SHOW DASHBOARD
         const dash = document.getElementById("transferModal");
         if (dash) dash.style.display = "flex";
 
-        // Populate Instant List with local program
-        const list = document.getElementById("readyList");
-        if (list) {
-          list.innerHTML = "";
-          if (programChunks.length) {
-            addToInstantList("Director Program (Local)", "SAVED");
-          }
-        }
-
-        // 5. SIGNAL SAVE TO CAMERAS (Triggers P2P)
+        // 4. SIGNAL SAVE TO CAMERAS (Triggers P2P Hold)
         Object.keys(peers).forEach(id => {
           socket.emit("control", { to: id, data: { type: "stop-iso", save: "hold" } });
         });
 
-        console.log("⏳ Stop signals sent. Showing Selection Modal...");
-        showDownloadSelectionModal();
+        // 5. SHOW DOWNLOAD SELECTION & APPLY CHOICE
+        showDownloadSelectionModal(mode);
 
       } catch (e) {
         console.error("CRITICAL ERROR in stopAndFinalize:", e);
@@ -1691,7 +1687,7 @@
     }
 
 
-    function showDownloadSelectionModal() {
+    function showDownloadSelectionModal(mode = 'all') {
       // Show Transfer Modal as container for selection
       document.getElementById("transferModal").style.display = "flex";
 
@@ -1716,7 +1712,7 @@
                     
                     <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
                         <label style="display:flex; align-items:center; cursor:pointer; font-weight:600;">
-                            <input type="checkbox" id="sel_final_mix" checked style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
+                            <input type="checkbox" id="sel_final_mix" ${mode === 'render_now' ? 'checked' : ''} style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
                             Final Mix (Stitched Program)
                         </label>
                         <div style="margin-top:8px; margin-left:30px; display:flex; gap:15px; font-size:13px; color:#cbd5e1;">
@@ -1727,7 +1723,7 @@
 
                     <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
                         <label style="display:flex; align-items:center; cursor:pointer;">
-                            <input type="checkbox" id="sel_program" style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
+                            <input type="checkbox" id="sel_program" ${mode === 'instant' ? 'checked' : ''} style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
                             Director Program (Local Mirror)
                         </label>
                          <div style="margin-top:8px; margin-left:30px; display:flex; gap:15px; font-size:13px; color:#cbd5e1;">
@@ -1745,7 +1741,7 @@
                             <span style="color:white; font-weight:500;">${name}</span>
                             <div style="display:flex; gap:8px;">
                                 <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
-                                    <input type="checkbox" id="sel_iso_${id}" style="accent-color:#3b82f6;"> ISO Source
+                                    <input type="checkbox" id="sel_iso_${id}" ${mode === 'raw_later' ? 'checked' : ''} style="accent-color:#3b82f6;"> ISO Source
                                 </label>
                                 <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
                                     <input type="checkbox" id="sel_mirror_${id}" style="accent-color:#3b82f6;"> Mirror
