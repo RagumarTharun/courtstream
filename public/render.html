@@ -125,8 +125,27 @@
             color: var(--green);
         }
 
+        .status.warning {
+            color: #f59e0b;
+        }
+
         .status.error {
             color: #ef4444;
+        }
+
+        .cam-selector {
+            background: #1e293b;
+            border: 1px solid var(--border);
+            color: white;
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-left: 10px;
+            outline: none;
+        }
+
+        .cam-selector:focus {
+            border-color: var(--blue);
         }
 
         .action-bar {
@@ -134,6 +153,7 @@
             padding-top: 20px;
             border-top: 1px solid var(--border);
             display: flex;
+            gap: 12px;
             justify-content: flex-end;
         }
 
@@ -244,7 +264,8 @@
         let files = [];
         let state = {
             edl: null,
-            videos: {} // filename -> File
+            videos: {}, // filename -> File
+            mappings: {} // filename -> camId
         };
 
         dropZone.onclick = () => fileInput.click();
@@ -355,34 +376,122 @@
             div.id = 'file_' + file.name.replace(/[^a-z0-9]/gi, '_');
 
             let typeLabel = explicitType === 'edl' ? '📋 EDL' : '🎥 Video';
-            // Fallback inference if explicitType not provided (legacy calls)
             if (!explicitType) {
                 typeLabel = file.name.endsWith('.json') ? '📋 EDL' : '🎥 Video';
             }
 
+            let extraHtml = '';
+            if (explicitType === 'video' || (!explicitType && !file.name.endsWith('.json'))) {
+                extraHtml = `
+                    <select class="cam-selector" onchange="manualMap('${file.name}', this.value)" style="display:none">
+                        <option value="">Select Cam...</option>
+                    </select>
+                `;
+            }
+
             div.innerHTML = `
-        <div class="file-info">
-          <span class="file-name">${typeLabel}: ${file.name}</span>
-          <span class="file-meta">${(file.size / 1024 / 1024).toFixed(2)} MB</span>
-        </div>
-        <div class="status">Ready</div>
-      `;
+                <div class="file-info" style="flex:1;">
+                  <span class="file-name">${typeLabel}: ${file.name}</span>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                     <span class="file-meta">${(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                     ${extraHtml}
+                  </div>
+                </div>
+                <div class="status">Ready</div>
+            `;
             fileList.appendChild(div);
         }
 
+        function manualMap(filename, camId) {
+            console.log(`Manual Mapping: ${filename} -> ${camId}`);
+            state.mappings[filename] = camId;
+            checkReady();
+        }
+
         function checkReady() {
-            // Basic check: Needs EDL + at least 1 video
             const hasEdl = !!state.edl;
             const hasVideo = Object.keys(state.videos).length > 0;
 
-            if (hasEdl && hasVideo) {
-                renderBtn.classList.add('active');
-                renderBtn.disabled = false;
-                renderBtn.innerText = `Process & Render ${Object.keys(state.videos).length} Clips`;
+            if (hasEdl) {
+                const requiredCams = new Set(state.edl.map(cut => cut.camId));
+                const mappedCams = new Set();
+
+                // Update Selectors
+                document.querySelectorAll('.cam-selector').forEach(sel => {
+                    const currentVal = sel.value;
+                    const filename = Array.from(Object.entries(state.videos)).find(([fn, f]) =>
+                        'file_' + fn.replace(/[^a-z0-9]/gi, '_') === sel.closest('.file-item').id
+                    )?.[0];
+
+                    if (sel.options.length <= 1) { // Only populate once
+                        requiredCams.forEach(camId => {
+                            const opt = document.createElement('option');
+                            opt.value = opt.innerText = camId;
+                            sel.appendChild(opt);
+                        });
+                    }
+                });
+
+                // Auto-Match
+                for (const [filename, file] of Object.entries(state.videos)) {
+                    const safeId = 'file_' + filename.replace(/[^a-z0-9]/gi, '_');
+                    const el = document.getElementById(safeId);
+                    if (!el) continue;
+
+                    const statusEl = el.querySelector('.status');
+                    const selector = el.querySelector('.cam-selector');
+
+                    let matchedCamId = state.mappings[filename];
+
+                    if (!matchedCamId) {
+                        // Attempt Auto-Match
+                        const cleanFile = filename.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        for (const camId of requiredCams) {
+                            const cleanCam = camId.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+                            if (cleanFile.includes(cleanCam) && cleanCam.length > 2) {
+                                matchedCamId = camId;
+                                break;
+                            }
+                        }
+
+                        // Single cam fallback
+                        if (!matchedCamId && requiredCams.size === 1) {
+                            matchedCamId = Array.from(requiredCams)[0];
+                        }
+
+                        if (matchedCamId) {
+                            state.mappings[filename] = matchedCamId;
+                            if (selector) selector.value = matchedCamId;
+                        }
+                    }
+
+                    if (matchedCamId) {
+                        statusEl.innerText = `Matched: ${matchedCamId}`;
+                        statusEl.className = 'status done';
+                        if (selector) selector.style.display = 'none';
+                        mappedCams.add(matchedCamId);
+                    } else {
+                        statusEl.innerText = "Select Camera";
+                        statusEl.className = 'status warning';
+                        if (selector) selector.style.display = 'block';
+                    }
+                }
+
+                const allMatched = Array.from(requiredCams).every(id => mappedCams.has(id));
+
+                if (allMatched) {
+                    renderBtn.classList.add('active');
+                    renderBtn.disabled = false;
+                    renderBtn.innerText = "Start Render Job";
+                } else {
+                    renderBtn.classList.remove('active');
+                    renderBtn.disabled = true;
+                    renderBtn.innerText = `Waiting for ${requiredCams.size - mappedCams.size} Cameras...`;
+                }
             } else {
                 renderBtn.classList.remove('active');
                 renderBtn.disabled = true;
-                renderBtn.innerText = "Waiting for Files...";
+                renderBtn.innerText = "Waiting for EDL...";
             }
         }
 
@@ -409,41 +518,11 @@
             // e.g. "iso_session_123_camId.webm"
             const uploadQueue = [];
 
-            console.log("🔍 Required Cameras from EDL:", Array.from(requiredCams));
-            console.log("Files available:", Object.keys(state.videos));
-
             for (const [filename, file] of Object.entries(state.videos)) {
-                let matchedCamId = null;
-
-                // 1. Aggressive Clean Match (Lowercase, Alphanumeric only)
-                const cleanFile = filename.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-                for (const camId of requiredCams) {
-                    const cleanCam = camId.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-
-                    // Direct match or partial match (camId in filename)
-                    if (cleanFile.includes(cleanCam) && cleanCam.length > 2) {
-                        matchedCamId = camId;
-                        break;
-                    }
-                }
-
-                // 2. Fallback: If only 1 cam and 1 video, just match them
-                if (!matchedCamId && requiredCams.size === 1 && Object.keys(state.videos).length === 1) {
-                    matchedCamId = Array.from(requiredCams)[0];
-                    console.log(`🎯 Single-camera fallback: matched ${filename} to ${matchedCamId}`);
-                }
+                const matchedCamId = state.mappings[filename];
 
                 if (!matchedCamId) {
-                    console.warn(`❌ Unmatched file: ${filename}. Required IDs:`, Array.from(requiredCams));
-                    // Update UI to show error for this file
-                    const safeId = 'file_' + filename.replace(/[^a-z0-9]/gi, '_');
-                    const el = document.getElementById(safeId);
-                    if (el) {
-                        const statusEl = el.querySelector('.status');
-                        statusEl.innerText = "No Match";
-                        statusEl.classList.add('error');
-                    }
+                    console.warn(`❌ Skipping file with no mapping: ${filename}`);
                     continue;
                 }
 
