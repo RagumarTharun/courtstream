@@ -2293,7 +2293,7 @@
         // ===========================
         if (autoMode === 'raw_later' || autoMode === 'render_now' || ops.final) {
           try {
-            const cutData = JSON.stringify(cuts, null, 2);
+            const cutData = JSON.stringify(isoEdl, null, 2);
             downloadBlob(new Blob([cutData], { type: 'application/json' }), `session_cuts_${formatDate(Date.now())}.json`);
           } catch (e) { console.error("EDL Download failed:", e); }
         }
@@ -2395,9 +2395,9 @@
           // B. Process Cuts with Re-encoding (Fixes Glitches)
           updateStatus(40, `Processing Cuts (${ext.toUpperCase()})`);
           const segments = [];
-          for (let i = 0; i < cuts.length; i++) {
-            const cut = cuts[i];
-            const nextCut = cuts[i + 1];
+          for (let i = 0; i < isoEdl.length; i++) {
+            const cut = isoEdl[i];
+            const nextCut = isoEdl[i + 1];
 
             // Calculate duration: if no next cut, use recordEndTime to bound it
             let duration = 0;
