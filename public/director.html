@@ -1357,9 +1357,10 @@
 
       // Update EDL if recording ISO
       if (recordingState === "recording") {
+        const shortId = peers[id].clientId ? peers[id].clientId.replace('cam_', '').substring(0, 4) : id.substring(0, 4);
         isoEdl.push({
           timestamp: Date.now() - recordStartTime,
-          camId: id
+          camId: shortId
         });
       }
 
@@ -1561,12 +1562,16 @@
 
       // Log initial camera or First available if none selected
       if (activeCameraId) {
-        isoEdl.push({ timestamp: 0, camId: activeCameraId });
+        const p = peers[activeCameraId];
+        const shortId = p?.clientId ? p.clientId.replace('cam_', '').substring(0, 4) : activeCameraId.substring(0, 4);
+        isoEdl.push({ timestamp: 0, camId: shortId });
       } else if (hasCameras) {
         // Auto-select first camera for EDL reference
         const firstCam = Object.keys(peers)[0];
         setLiveCamera(firstCam); // Fix: use unified state setter
-        isoEdl.push({ timestamp: 0, camId: firstCam });
+        const p = peers[firstCam];
+        const shortId = p?.clientId ? p.clientId.replace('cam_', '').substring(0, 4) : firstCam.substring(0, 4);
+        isoEdl.push({ timestamp: 0, camId: shortId });
       }
 
       socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });

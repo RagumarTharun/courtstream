@@ -214,7 +214,9 @@
             <!-- Files appear here -->
         </div>
 
-        <div class="action-bar">
+        <div class="action-bar" style="justify-content:space-between;">
+            <button id="clearBtn" class="dash-btn" style="border-color:#334155; color:#94a3b8; font-size:12px;">Clear
+                All</button>
             <button id="renderBtn" class="btn">Start Render</button>
         </div>
     </div>
@@ -226,6 +228,18 @@
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
         const renderBtn = document.getElementById('renderBtn');
+        const clearBtn = document.getElementById('clearBtn');
+
+        clearBtn.onclick = () => {
+            if (confirm("Clear all loaded files?")) {
+                state.edl = null;
+                state.videos = {};
+                files = [];
+                fileList.innerHTML = "";
+                renderBtn.classList.remove('active');
+                renderBtn.innerText = "Start Render";
+            }
+        };
 
         let files = [];
         let state = {
@@ -363,7 +377,12 @@
 
             if (hasEdl && hasVideo) {
                 renderBtn.classList.add('active');
-                renderBtn.innerText = `Render ${Object.keys(state.videos).length} Clips`;
+                renderBtn.disabled = false;
+                renderBtn.innerText = `Process & Render ${Object.keys(state.videos).length} Clips`;
+            } else {
+                renderBtn.classList.remove('active');
+                renderBtn.disabled = true;
+                renderBtn.innerText = "Waiting for Files...";
             }
         }
 
@@ -391,31 +410,26 @@
             const uploadQueue = [];
 
             for (const [filename, file] of Object.entries(state.videos)) {
-                // Try to find camId in filename
                 let matchedCamId = null;
 
-                // 1. Exact match attempts (common patterns)
-                // "iso_cam_user.webm" -> "user"
-                const match = filename.match(/iso_cam_(.+?)\./);
-                if (match && requiredCams.has(match[1])) {
-                    matchedCamId = match[1];
-                }
-
-                // 2. Fallback: Check if filename contains the camId string
-                if (!matchedCamId) {
-                    for (const camId of requiredCams) {
-                        if (filename.includes(camId)) {
-                            matchedCamId = camId;
-                            break;
-                        }
+                // 1. Try to find camId anywhere in the filename
+                for (const camId of requiredCams) {
+                    if (filename.includes(camId)) {
+                        matchedCamId = camId;
+                        break;
                     }
                 }
 
                 if (!matchedCamId) {
                     console.warn(`Could not match file ${filename} to any camId in EDL:`, requiredCams);
-                    // We will upload it anyway, but render might fail if ID is missing.
-                    // Actually, let's try to map it using "unknown" or ask server to be smart?
-                    // For now, skip to avoid breaking server.
+                    // Update UI to show error for this file
+                    const safeId = 'file_' + filename.replace(/[^a-z0-9]/gi, '_');
+                    const el = document.getElementById(safeId);
+                    if (el) {
+                        const statusEl = el.querySelector('.status');
+                        statusEl.innerText = "No Match";
+                        statusEl.classList.add('error');
+                    }
                     continue;
                 }
 
@@ -428,9 +442,13 @@
             }
 
             // 5. Trigger Render
-            socket.emit("start-render-job", { // We might need a socket event or just HTTP POST
-                // Actually existing endpoint is HTTP POST /api/render-iso
-            });
+            if (uploadQueue.length === 0) {
+                alert("No video files could be matched to the cameras in your EDL. Please ensure filenames contain the camera ID (e.g., '9ndg').");
+                renderBtn.classList.add('active');
+                renderBtn.disabled = false;
+                renderBtn.innerText = "Retry Render";
+                return;
+            }
 
             try {
                 const res = await fetch('/api/render-iso', {
