@@ -370,11 +370,12 @@ app.post("/api/render-iso", async (req, res) => {
       const inputPath = uploads[camId];
 
       if (!inputPath) {
-        console.warn(`⚠️ Skipped Clip ${i}: Missing file for Cam ${camId}`);
-        // Log what we DO have for debugging
-        console.log("Available Cam IDs in this session:", Object.keys(uploads));
+        console.warn(`⚠️ Skipped Clip ${i}: No file for Cam '${camId}'`);
+        console.log(`Debug Mapping - Session: ${sessionId}, Expected CamId: '${camId}', Available:`, Object.keys(uploads));
         continue;
       }
+
+      console.log(`🎬 Clip ${i}: Using Cam '${camId}' [${inputPath}]`);
 
       broadcastProgress(Math.round((i / edl.length) * 80), `Processing clip ${i + 1}/${edl.length}`);
 
@@ -388,11 +389,19 @@ app.post("/api/render-iso", async (req, res) => {
         if (duration) cmd.setDuration(duration);
 
         cmd
+          .videoFilters([
+            "scale=1280:720:force_original_aspect_ratio=decrease",
+            "pad=1280:720:(ow-iw)/2:(oh-ih)/2",
+            "setsar=1",
+            "format=yuv420p"
+          ])
           .outputOptions([
             "-c:v libx264",
             "-preset ultrafast",
             "-crf 23",
+            "-r 30",
             "-c:a aac",
+            "-ar 44100",
             "-force_key_frames expr:gte(t,n_forced*2)" // Force keyframes for smoother concat
           ])
           .on("start", (cmdLine) => {
