@@ -619,7 +619,16 @@
 
         // Socket Progress for Render Phase
         socket.on("render-progress", ({ progress, status }) => {
-            renderBtn.innerText = `Rendering: ${status} (${progress}%)`;
+            if (progress < 0) {
+                renderBtn.innerText = "Error: " + status;
+                renderBtn.classList.add('active');
+                renderBtn.disabled = false;
+                renderBtn.style.background = "#ef4444";
+                console.error("Render Progress Error:", status);
+            } else {
+                renderBtn.innerText = `Rendering: ${status} (${progress}%)`;
+                renderBtn.style.background = ""; // Reset if it was red
+            }
         });
 
     </script>

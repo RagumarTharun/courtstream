@@ -460,8 +460,14 @@ app.post("/api/render-iso", async (req, res) => {
       // Convert if doesn't exist
       if (!fs.existsSync(mp4Path)) {
         console.log(`🔄 Converting Source ${camId} to MP4...`);
-        broadcastProgress(90 + Math.floor((i / uniqueCamIds.length) * 9), `Converting Camera ${camId}...`);
-        await new Promise((resolve, reject) => {
+        broadcastProgress(90 + Math.floor((i / uniqueCamIds.length) * 9), `Converting Camera ${camId}... (H-Quality)`);
+
+        await new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            console.warn(`⏳ Timeout converting ${camId}, falling back to WebM`);
+            resolve();
+          }, 60000); // 60s max per file for high-quality conversion
+
           ffmpeg(inputPath)
             .outputOptions([
               "-c:v libx264",
@@ -471,10 +477,12 @@ app.post("/api/render-iso", async (req, res) => {
             ])
             .save(mp4Path)
             .on("end", () => {
+              clearTimeout(timeout);
               console.log(`✅ Converted ${camId} to MP4`);
               resolve();
             })
             .on("error", (err) => {
+              clearTimeout(timeout);
               console.error(`❌ Failed to convert ${camId}:`, err.message);
               // Fallback to original if conversion fails
               resolve();
