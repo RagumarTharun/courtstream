@@ -306,10 +306,10 @@
     const pendingCandidates = []; // Buffer signals until remote description is set
 
     // Persistent identity for discovery stability
-    let clientId = sessionStorage.getItem("courtstream_client_id");
+    let clientId = localStorage.getItem("courtstream_client_id");
     if (!clientId) {
       clientId = "cam_" + Math.random().toString(36).substring(2, 9);
-      sessionStorage.setItem("courtstream_client_id", clientId);
+      localStorage.setItem("courtstream_client_id", clientId);
     }
 
     /* ===== WEBRTC ===== */

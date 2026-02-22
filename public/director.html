@@ -942,11 +942,13 @@
 
       // Deduplication by clientId
       if (clientId) {
-        const oldId = Object.keys(peers).find(pid => peers[pid].clientId === clientId);
-        if (oldId && oldId !== id) {
-          console.log("♻️ Duplicate camera detected on join, replacing:", clientId);
-          removePeer(oldId);
-        }
+        // Find and remove EVERY old entry with this clientId
+        Object.keys(peers).forEach(pid => {
+          if (peers[pid].clientId === clientId && pid !== id) {
+            console.log("♻️ Duplicate camera detected on join, replacing:", clientId);
+            removePeer(pid);
+          }
+        });
       }
 
       if (peers[id]) return;
@@ -1239,12 +1241,14 @@
       pc.addTransceiver("video", { direction: "recvonly" });
       pc.addTransceiver("audio", { direction: "recvonly" });
 
-      peers[id] = { pc, stream: null, slot: null, name: "Camera " + id.substring(0, 4), clientId };
+      const defaultName = clientId ? `Camera ${clientId.replace('cam_', '').substring(0, 4)}` : `Camera ${id.substring(0, 4)}`;
+      peers[id] = { pc, stream: null, slot: null, name: defaultName, clientId };
 
       const slot = document.createElement("div");
       slot.className = "camera-slot";
       slot.draggable = true;
       slot.dataset.peerId = id;
+      if (clientId) slot.dataset.clientId = clientId;
 
       // Drag events
       slot.addEventListener('dragstart', handleDragStart);
@@ -1255,8 +1259,7 @@
 
       const nameInput = document.createElement("input");
       nameInput.className = "camera-name";
-      cameraCount += 1;
-      nameInput.value = peers[id].name || `Camera ${cameraCount} `;
+      nameInput.value = peers[id].name;
 
       const actions = document.createElement("div");
       actions.className = "camera-actions";
