@@ -1607,8 +1607,8 @@
 
     async function stopRecordingRequest() {
       if (recordingState === "idle") return;
-      // Skip modal, go straight to finalize
-      await stopAndFinalize('all');
+      // Show choice modal before finalization
+      document.getElementById("stopModal").style.display = "flex";
     }
 
     function closeStopModal() {
@@ -2052,7 +2052,7 @@
 
     // Alias for compatibility
     async function stopRecording() {
-      return stopAndFinalize('all');
+      return stopRecordingRequest();
     }
 
     /* ===== SIGNAL ===== */
