@@ -346,6 +346,8 @@
       font-weight: 500;
       max-width: 0;
       opacity: 0;
+      overflow: hidden;
+      display: inline-block;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
@@ -933,6 +935,8 @@
     const peers = {};      // camera socketId -> { pc, stream, slot, name }
     const viewers = {};    // viewer socketId -> { pc, sender }
     const rotations = {}; // socketId -> rotation degrees
+    const zooms = {};     // socketId -> scale factor (1, 1.5, 2)
+    const flips = {};     // socketId -> boolean (flipHorizontal)
     let activeCameraId = null; // Fix: Declare missing state variable
     let currentLiveId = null;
     const pendingViewers = new Set();
