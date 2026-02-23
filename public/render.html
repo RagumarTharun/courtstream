@@ -599,15 +599,18 @@
                 for (let i = 0; i < state.edl.length; i++) {
                     const cut = state.edl[i];
                     const nextCut = state.edl[i + 1];
-                    let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : 30; // Guess 30s for the last cut if unknown end time
-                    if (duration < 0.1) continue;
+                    let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : null;
+                    if (duration !== null && duration < 0.1) continue;
 
                     let inputFile = memFiles[cut.camId];
-                    if (!inputFile) continue;
+                    if (!inputFile) {
+                        console.error(`Missing staged memory file for Camera ID: ${cut.camId}`, memFiles);
+                        continue;
+                    }
 
                     const segName = `seg_${i}.mp4`;
                     const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
-                    if (duration) args.push("-t", String(duration));
+                    if (duration !== null) args.push("-t", String(duration));
                     args.push(
                         "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p",
                         "-r", "30",
@@ -644,7 +647,7 @@
 
             } catch (e) {
                 console.error("Client Rendering Error:", e);
-                alert("Render Failed: " + e.message);
+                alert("Render Failed: " + (e.message || JSON.stringify(e) || "Unknown WASM Crash"));
                 renderBtn.innerText = "Retry";
                 renderBtn.classList.add('active');
                 renderBtn.disabled = false;
