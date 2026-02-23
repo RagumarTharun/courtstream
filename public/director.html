@@ -1222,6 +1222,22 @@
         row.querySelector(".progress-fill").style.background = "#10b981";
         row.querySelector(".pct").innerText = "Ready";
         row.querySelector(".pct").style.color = "#10b981";
+
+        // Add immediate download option while others might still transfer
+        if (receivedRecordings[id] && !document.getElementById(`dl_btn_${id}`)) {
+          const dlBtn = document.createElement("a");
+          dlBtn.id = `dl_btn_${id}`;
+          dlBtn.innerText = "Download";
+          dlBtn.href = URL.createObjectURL(receivedRecordings[id]);
+          const camName = peers[id] ? peers[id].name : `Camera_${id.substring(0, 4)}`;
+          dlBtn.download = `${sanitizeName(camName)}_raw.webm`;
+          dlBtn.style.cssText = "background:#10b981; color:white; border:none; border-radius:4px; padding:2px 8px; font-size:10px; cursor:pointer; text-decoration:none; margin-right:6px;";
+
+          const pctSpan = row.querySelector(".pct");
+          if (pctSpan && pctSpan.parentNode) {
+            pctSpan.parentNode.insertBefore(dlBtn, pctSpan);
+          }
+        }
       }
     }
 
@@ -1299,6 +1315,23 @@
 
       const actions = document.createElement("div");
       actions.className = "camera-actions";
+
+      const rotateBtn = document.createElement("button");
+      rotateBtn.className = "mini-btn";
+      rotateBtn.style.color = "var(--blue)";
+      rotateBtn.innerText = "Rotate";
+      rotateBtn.onclick = (e) => {
+        e.stopPropagation();
+        rotations[id] = ((rotations[id] || 0) + 90) % 360;
+
+        // Update video preview visually in the director view
+        const v = slot.querySelector("video");
+        if (v) v.style.transform = `rotate(${rotations[id]}deg)`;
+
+        // Inform the camera
+        socket.emit("control", { to: id, data: { type: "set-rotation", rotation: rotations[id] } });
+      };
+      actions.appendChild(rotateBtn);
 
       const stopBtn = document.createElement("button");
       stopBtn.className = "mini-btn";
@@ -1494,10 +1527,16 @@
             const vh = videoEl.videoHeight;
 
             if (vw > 0 && vh > 0) {
-              const scale = Math.min(w / vw, h / vh);
+              const rot = rotations[currentLiveId] || 0;
+              const isVertical = rot === 90 || rot === -90 || rot === 270 || rot === -270;
+
+              // If rotated 90 or 270, the "width" of the video becomes its height in the container's context.
+              const effectVw = isVertical ? vh : vw;
+              const effectVh = isVertical ? vw : vh;
+
+              const scale = Math.min(w / effectVw, h / effectVh);
               const dw = vw * scale;
               const dh = vh * scale;
-              const rot = rotations[currentLiveId] || 0;
 
               programCtx.save();
               programCtx.translate(w / 2, h / 2);

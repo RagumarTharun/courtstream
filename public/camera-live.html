@@ -418,6 +418,8 @@
       }
     }
 
+    let assignedRotation = 0;
+
     async function initWebRTC() {
       const config = await getTurnConfig();
       pc = new RTCPeerConnection(config);
@@ -480,6 +482,10 @@
         }
         else if (data.type === "discard-recording") {
           handleDiscardRequest();
+        }
+        else if (data.type === "set-rotation") {
+          assignedRotation = data.rotation || 0;
+          console.log("🔄 Director assigned rotation:", assignedRotation);
         }
       });
 
@@ -847,6 +853,7 @@
       formData.append("video", blob, `cam_${socket.id}.webm`);
       formData.append("sessionId", currentIsoSessionId || "unknown");
       formData.append("camId", socket.id);
+      formData.append("rotation", assignedRotation);
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/upload-iso", true);
@@ -868,6 +875,23 @@
             socket.emit("iso-upload-complete", { room: streamId, filename: data.filename });
             liveBadge.textContent = "DONE";
             liveBadge.style.background = "#10b981"; // Green
+
+            // Local Backup Download
+            try {
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.style.display = 'none';
+              a.href = url;
+              a.download = `backup_cam_${socket.id}_${Date.now()}.webm`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              a.remove();
+              console.log("💾 Triggered local backup download");
+            } catch (err) {
+              console.error("Failed to trigger local backup download", err);
+            }
+
             setTimeout(() => {
               liveBadge.style.display = "none";
               overlay.style.display = "none";

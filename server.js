@@ -286,12 +286,15 @@ app.get("/api/streams", (req, res) => {
 app.post("/api/upload-iso", upload.single("video"), (req, res) => {
   if (!req.file) return res.status(400).send("No file uploaded");
 
-  const { sessionId, camId } = req.body; // Sent by client via FormData
+  const { sessionId, camId, rotation } = req.body; // Sent by client via FormData
 
   if (sessionId && camId) {
     if (!sessionUploads[sessionId]) sessionUploads[sessionId] = {};
-    sessionUploads[sessionId][camId] = req.file.path;
-    console.log(`💾 ISO Upload Logged: Session ${sessionId} | Cam ${camId} -> ${req.file.filename}`);
+    sessionUploads[sessionId][camId] = {
+      path: req.file.path,
+      rotation: parseInt(rotation) || 0
+    };
+    console.log(`💾 ISO Upload Logged: Session ${sessionId} | Cam ${camId} -> ${req.file.filename} (Rot: ${rotation || 0})`);
   }
 
   res.json({
@@ -367,7 +370,8 @@ app.post("/api/render-iso", async (req, res) => {
       // Start time relative to recording start (ms -> s)
       const startTime = cut.timestamp / 1000;
       const camId = cut.camId;
-      const inputPath = uploads[camId];
+      const uploadData = uploads[camId];
+      const inputPath = uploadData?.path || uploadData;
 
       if (!inputPath) {
         console.warn(`⚠️ Skipped Clip ${i}: No file for Cam '${camId}'`);
@@ -388,13 +392,20 @@ app.post("/api/render-iso", async (req, res) => {
         let cmd = ffmpeg(inputPath).setStartTime(startTime);
         if (duration) cmd.setDuration(duration);
 
+        let vfOptions = [
+          "scale=1280:720:force_original_aspect_ratio=decrease",
+          "pad=1280:720:(ow-iw)/2:(oh-ih)/2",
+          "setsar=1",
+          "format=yuv420p"
+        ];
+
+        const rot = uploadData?.rotation || 0;
+        if (rot === 90) vfOptions.unshift("transpose=1");
+        else if (rot === 270 || rot === -90) vfOptions.unshift("transpose=2");
+        else if (rot === 180 || rot === -180) vfOptions.unshift("transpose=2,transpose=2");
+
         cmd
-          .videoFilters([
-            "scale=1280:720:force_original_aspect_ratio=decrease",
-            "pad=1280:720:(ow-iw)/2:(oh-ih)/2",
-            "setsar=1",
-            "format=yuv420p"
-          ])
+          .videoFilters(vfOptions)
           .outputOptions([
             "-c:v libx264",
             "-preset ultrafast",
@@ -451,7 +462,9 @@ app.post("/api/render-iso", async (req, res) => {
 
     for (let i = 0; i < uniqueCamIds.length; i++) {
       const camId = uniqueCamIds[i];
-      const inputPath = uploads[camId];
+      const uploadData = uploads[camId];
+      const inputPath = uploadData?.path || uploadData;
+      const rot = uploadData?.rotation || 0;
 
       // Skip if already MP4 (unlikely given current upload logic, but good for safety)
       if (inputPath.endsWith(".mp4")) {
@@ -477,13 +490,19 @@ app.post("/api/render-iso", async (req, res) => {
             resolve();
           }, 60000); // 60s max per file for high-quality conversion
 
+          let ffmpegOpts = [
+            "-c:v libx264",
+            "-preset ultrafast",
+            "-crf 23",
+            "-c:a aac"
+          ];
+
+          if (rot === 90) ffmpegOpts.push("-vf", "transpose=1");
+          else if (rot === 270 || rot === -90) ffmpegOpts.push("-vf", "transpose=2");
+          else if (rot === 180 || rot === -180) ffmpegOpts.push("-vf", "transpose=2,transpose=2");
+
           ffmpeg(inputPath)
-            .outputOptions([
-              "-c:v libx264",
-              "-preset ultrafast",
-              "-crf 23",
-              "-c:a aac"
-            ])
+            .outputOptions(ffmpegOpts)
             .save(mp4Path)
             .on("end", () => {
               clearTimeout(timeout);
