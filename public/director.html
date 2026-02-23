@@ -207,6 +207,26 @@
       border-color: var(--red);
     }
 
+    /* Top right icon-btn overrides */
+    .main-controls .icon-btn {
+      height: 40px;
+      border-radius: 20px;
+      padding: 0 12px;
+    }
+
+    .main-controls .icon-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .main-controls .icon-btn span {
+      font-size: 13px;
+    }
+
+    .main-controls .icon-btn:hover {
+      padding: 0 16px;
+    }
+
     /* RENDER SPINNER */
     .spinner {
       width: 24px;
@@ -359,7 +379,7 @@
     }
 
     .icon-btn:hover span {
-      max-width: 60px;
+      max-width: 100px;
       /* Adjust based on text length */
       opacity: 1;
     }
@@ -666,27 +686,22 @@
 
 
         <!-- RECORD -->
-        <button id="recordBtn" class="ctrl-btn" title="Record" onclick="toggleRecord()">
+        <button id="recordBtn" class="icon-btn" title="Record" onclick="toggleRecord()">
           <svg viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="8" fill="white" class="rec-icon" />
             <rect x="6" y="6" width="12" height="12" fill="white" class="stop-icon" style="display:none" />
           </svg>
+          <span id="recordBtnText">Record</span>
         </button>
 
-        <!-- PLAYBACK -->
-        <button id="playbackBtn" class="ctrl-btn" title="Playback Editor" onclick="goToPlayback()">
-          <svg viewBox="0 0 24 24">
-            <path fill="white"
-              d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
-          </svg>
-        </button>
 
         <!-- QR CODE -->
-        <button id="qrBtn" class="ctrl-btn" title="Camera QR Code" onclick="openQr()">
+        <button id="qrBtn" class="icon-btn" title="Camera QR Code" onclick="openQr()">
           <svg viewBox="0 0 24 24">
             <path fill="white"
               d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm0-2h2v2h-2v-2zm-6 4h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2z" />
           </svg>
+          <span>QR Code</span>
         </button>
       </div>
 
@@ -1766,6 +1781,7 @@
       recordBtn.classList.add("active");
       recIcon.style.display = "none";
       stopIcon.style.display = "block";
+      document.getElementById("recordBtnText").innerText = "Stop";
       recordBar.style.display = "flex";
       recordStatus.textContent = "REC";
       recordStartTime = Date.now();
@@ -1876,7 +1892,8 @@
         recordEndTime = Date.now();
         clearInterval(recordTimerInt);
         const recBtn = document.getElementById("recordBtn");
-        if (recBtn) recBtn.classList.remove("recording", "active");
+        if (recBtn) recBtn.classList.remove("active");
+        if (document.getElementById("recordBtnText")) document.getElementById("recordBtnText").innerText = "Record";
 
         // Update Icons
         document.querySelector(".rec-icon").style.display = "block";
