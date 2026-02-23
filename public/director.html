@@ -1474,7 +1474,10 @@
         v.muted = true;
         v.playsInline = true;
         v.srcObject = stream;
-        v.style.transform = `rotate(${rotations[id] || 0}deg)`;
+        const rot = rotations[id] || 0;
+        const zoom = zooms[id] || 1;
+        const flip = flips[id] ? -1 : 1;
+        v.style.transform = `scale(${zoom}) scaleX(${flip}) rotate(${rot}deg)`;
 
         v.onloadedmetadata = () => {
           console.log("🎬 Video metadata loaded for:", id);
@@ -1606,6 +1609,30 @@
       // ALWAYS use programStream (canvas) for viewers for maximum stability.
       // This ensures viewers don't experience disconnects when cameras swap.
       return programStream.getVideoTracks()[0];
+    }
+
+    /* ===== CAMERA TRANSFORM LOGIC ===== */
+    function updateCameraTransform(id, slot) {
+      const rot = rotations[id] || 0;
+      const zoom = zooms[id] || 1;
+      const flip = flips[id] ? -1 : 1;
+
+      // Update local preview
+      const v = slot.querySelector("video");
+      if (v) {
+        v.style.transform = `scale(${zoom}) scaleX(${flip}) rotate(${rot}deg)`;
+      }
+
+      // Sync state to Camera App
+      socket.emit("control", {
+        to: id,
+        data: {
+          type: "set-transform",
+          rotation: rot,
+          zoom: zoom,
+          flipHorizontal: flips[id] || false
+        }
+      });
     }
 
     /* ===== PROGRAM CANVAS DRAW ===== */
