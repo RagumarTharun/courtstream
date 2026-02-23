@@ -286,15 +286,17 @@ app.get("/api/streams", (req, res) => {
 app.post("/api/upload-iso", upload.single("video"), (req, res) => {
   if (!req.file) return res.status(400).send("No file uploaded");
 
-  const { sessionId, camId, rotation } = req.body; // Sent by client via FormData
+  const { sessionId, camId, rotation, zoom, flipHorizontal } = req.body; // Sent by client via FormData
 
   if (sessionId && camId) {
     if (!sessionUploads[sessionId]) sessionUploads[sessionId] = {};
     sessionUploads[sessionId][camId] = {
       path: req.file.path,
-      rotation: parseInt(rotation) || 0
+      rotation: parseInt(rotation) || 0,
+      zoom: parseFloat(zoom) || 1,
+      flipHorizontal: flipHorizontal === 'true'
     };
-    console.log(`💾 ISO Upload Logged: Session ${sessionId} | Cam ${camId} -> ${req.file.filename} (Rot: ${rotation || 0})`);
+    console.log(`💾 ISO Upload Logged: Session ${sessionId} | Cam ${camId} -> ${req.file.filename} (Rot: ${rotation || 0}, Zoom: ${zoom || 1}, Flip: ${flipHorizontal === 'true'})`);
   }
 
   res.json({
@@ -392,17 +394,25 @@ app.post("/api/render-iso", async (req, res) => {
         let cmd = ffmpeg(inputPath).setStartTime(startTime);
         if (duration) cmd.setDuration(duration);
 
-        let vfOptions = [
+        let vfOptions = [];
+
+        const rot = uploadData?.rotation || 0;
+        const zoom = uploadData?.zoom || 1;
+        const flip = uploadData?.flipHorizontal || false;
+
+        if (rot === 90) vfOptions.push("transpose=1");
+        else if (rot === 270 || rot === -90) vfOptions.push("transpose=2");
+        else if (rot === 180 || rot === -180) vfOptions.push("transpose=2,transpose=2");
+
+        if (flip) vfOptions.push("hflip");
+        if (zoom > 1) vfOptions.push(`crop=iw/${zoom}:ih/${zoom}`);
+
+        vfOptions.push(
           "scale=1280:720:force_original_aspect_ratio=decrease",
           "pad=1280:720:(ow-iw)/2:(oh-ih)/2",
           "setsar=1",
           "format=yuv420p"
-        ];
-
-        const rot = uploadData?.rotation || 0;
-        if (rot === 90) vfOptions.unshift("transpose=1");
-        else if (rot === 270 || rot === -90) vfOptions.unshift("transpose=2");
-        else if (rot === 180 || rot === -180) vfOptions.unshift("transpose=2,transpose=2");
+        );
 
         cmd
           .videoFilters(vfOptions)
@@ -497,9 +507,19 @@ app.post("/api/render-iso", async (req, res) => {
             "-c:a aac"
           ];
 
-          if (rot === 90) ffmpegOpts.push("-vf", "transpose=1");
-          else if (rot === 270 || rot === -90) ffmpegOpts.push("-vf", "transpose=2");
-          else if (rot === 180 || rot === -180) ffmpegOpts.push("-vf", "transpose=2,transpose=2");
+          let vfFilters = [];
+          if (rot === 90) vfFilters.push("transpose=1");
+          else if (rot === 270 || rot === -90) vfFilters.push("transpose=2");
+          else if (rot === 180 || rot === -180) vfFilters.push("transpose=2,transpose=2");
+
+          const zoom = uploadData?.zoom || 1;
+          const flip = uploadData?.flipHorizontal || false;
+          if (flip) vfFilters.push("hflip");
+          if (zoom > 1) vfFilters.push(`crop=iw/${zoom}:ih/${zoom}`);
+
+          if (vfFilters.length > 0) {
+            ffmpegOpts.push("-vf", vfFilters.join(","));
+          }
 
           ffmpeg(inputPath)
             .outputOptions(ffmpegOpts)

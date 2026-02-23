@@ -419,6 +419,8 @@
     }
 
     let assignedRotation = 0;
+    let assignedZoom = 1;
+    let assignedFlip = false;
 
     async function initWebRTC() {
       const config = await getTurnConfig();
@@ -483,9 +485,16 @@
         else if (data.type === "discard-recording") {
           handleDiscardRequest();
         }
-        else if (data.type === "set-rotation") {
+        else if (data.type === "set-transform") {
           assignedRotation = data.rotation || 0;
-          console.log("🔄 Director assigned rotation:", assignedRotation);
+          assignedZoom = data.zoom || 1;
+          assignedFlip = data.flipHorizontal || false;
+          console.log("🔄 Director assigned transform:", { rotation: assignedRotation, zoom: assignedZoom, flip: assignedFlip });
+
+          const v = document.querySelector("video");
+          if (v) {
+            v.style.transform = `scale(${assignedZoom}) scaleX(${assignedFlip ? -1 : 1}) rotate(${assignedRotation}deg)`;
+          }
         }
       });
 
@@ -854,6 +863,8 @@
       formData.append("sessionId", currentIsoSessionId || "unknown");
       formData.append("camId", socket.id);
       formData.append("rotation", assignedRotation);
+      formData.append("zoom", assignedZoom);
+      formData.append("flipHorizontal", assignedFlip);
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/upload-iso", true);
