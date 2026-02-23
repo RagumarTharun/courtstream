@@ -520,20 +520,16 @@
                 }
             });
 
-            const isSharedArrayBufferSupported = typeof SharedArrayBuffer === "function";
-
-            if (isSharedArrayBufferSupported) {
+            // Load with local files
+            try {
                 await ffmpeg.load({
                     coreURL: '/lib/ffmpeg/ffmpeg-core.js',
                     wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
-                    workerLoadURL: '/lib/ffmpeg/814.ffmpeg.js'
+                    workerLoadURL: '/lib/ffmpeg/814.ffmpeg.js' // Explicitly load the worker chunk from valid origin
                 });
-            } else {
-                console.warn("SharedArrayBuffer is not supported. FFmpeg will run entirely in a single thread and may take longer.");
-                await ffmpeg.load({
-                    coreURL: '/lib/ffmpeg/ffmpeg-core.js',
-                    wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
-                });
+            } catch (e) {
+                alert("FFmpeg Init Failed: " + (e.message || JSON.stringify(e) || "Core WASM timeout"));
+                throw e;
             }
 
             ffmpegRef = ffmpeg;
