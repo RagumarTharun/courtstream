@@ -606,17 +606,16 @@
                     if (!inputFile) continue;
 
                     const segName = `seg_${i}.mp4`;
-                    const args = [
-                        "-ss", String(cut.timestamp / 1000),
-                        "-t", String(duration),
-                        "-i", inputFile,
+                    const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
+                    if (duration) args.push("-t", String(duration));
+                    args.push(
                         "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p",
                         "-r", "30",
+                        "-ar", "44100",
                         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                         "-c:a", "aac", "-b:a", "128k",
-                        "-threads", "4", "-strict", "-2",
                         segName
-                    ];
+                    );
 
                     renderBtn.innerText = `Processing Segment ${i + 1}/${state.edl.length}`;
                     await ffmpeg.exec(args);
