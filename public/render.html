@@ -512,6 +512,7 @@
             const ffmpeg = new FFmpeg();
 
             ffmpeg.on("log", ({ message }) => {
+                console.log("FFmpeg Log:", message);
                 const timeMatch = message.match(/time=\s*(\d+):(\d+):(\d+\.\d+)/);
                 if (timeMatch) {
                     // Extracting progress roughly
@@ -519,11 +520,21 @@
                 }
             });
 
-            await ffmpeg.load({
-                coreURL: '/lib/ffmpeg/ffmpeg-core.js',
-                wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
-                workerLoadURL: '/lib/ffmpeg/814.ffmpeg.js'
-            });
+            const isSharedArrayBufferSupported = typeof SharedArrayBuffer === "function";
+
+            if (isSharedArrayBufferSupported) {
+                await ffmpeg.load({
+                    coreURL: '/lib/ffmpeg/ffmpeg-core.js',
+                    wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
+                    workerLoadURL: '/lib/ffmpeg/814.ffmpeg.js'
+                });
+            } else {
+                console.warn("SharedArrayBuffer is not supported. FFmpeg will run entirely in a single thread and may take longer.");
+                await ffmpeg.load({
+                    coreURL: '/lib/ffmpeg/ffmpeg-core.js',
+                    wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
+                });
+            }
 
             ffmpegRef = ffmpeg;
             fetchFileRef = fetchFile;
@@ -564,9 +575,12 @@
                     const matchedCamId = state.mappings[filename];
                     if (!matchedCamId) continue;
 
-                    const safeName = `iso_${matchedCamId}.webm`;
+                    const extMatch = file.name.match(/\.([a-zA-Z0-9]+)$/);
+                    const ext = extMatch ? extMatch[1] : 'webm';
+                    const safeName = `iso_${matchedCamId}.${ext}`;
+
                     await ffmpeg.writeFile(safeName, await fetchFile(file));
-                    memFiles[`iso_${matchedCamId}_webm`] = safeName;
+                    memFiles[matchedCamId] = safeName;
 
                     filesLoaded++;
                     renderBtn.innerText = `Loading Video Files... (${filesLoaded}/${requiredCams.size})`;
@@ -588,7 +602,7 @@
                     let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : 30; // Guess 30s for the last cut if unknown end time
                     if (duration < 0.1) continue;
 
-                    let inputFile = memFiles[`iso_${cut.camId}_webm`];
+                    let inputFile = memFiles[cut.camId];
                     if (!inputFile) continue;
 
                     const segName = `seg_${i}.mp4`;
@@ -600,6 +614,7 @@
                         "-r", "30",
                         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                         "-c:a", "aac", "-b:a", "128k",
+                        "-threads", "4", "-strict", "-2",
                         segName
                     ];
 
