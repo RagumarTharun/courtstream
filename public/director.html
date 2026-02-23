@@ -1275,9 +1275,10 @@
         row.className = "file-item";
         row.style.display = "block";
 
+        const displayName = peers[id]?.name || `Camera ${id.substring(0, 4)}`;
         row.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span class="name" style="font-weight: 500;">Camera ${id.substring(0, 4)}</span>
+                    <span class="name" style="font-weight: 500;">${displayName}</span>
                     <span class="pct" style="color: #94a3b8; font-variant-numeric: tabular-nums; font-size: 12px;">0%</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
@@ -1318,8 +1319,8 @@
           dlBtn.id = `dl_btn_${id}`;
           dlBtn.className = "icon-btn success";
           dlBtn.href = URL.createObjectURL(receivedRecordings[id]);
-          const camName = peers[id] ? peers[id].name : `Camera_${id.substring(0, 4)}`;
-          dlBtn.download = `${sanitizeName(camName)}_raw.webm`;
+          const displayName = peers[id]?.name || `Camera_${id.substring(0, 4)}`;
+          dlBtn.download = `${sanitizeName(displayName)}_raw.webm`;
           dlBtn.title = "Download Local File";
           dlBtn.style.textDecoration = "none";
 
@@ -1907,6 +1908,27 @@
         Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
 
         await Promise.all(stopPromises);
+
+        // ------------- LOCAL INSTANT FEEDS TO TRANSFER UI ------------- //
+        if (programChunks.length > 0) {
+          const blob = new Blob(programChunks, { type: "video/webm" });
+          receivedRecordings["program"] = blob;
+          peers["program"] = { name: "Director Program (Local)" };
+          updateTransferUI("program", 100, true);
+        }
+
+        Object.keys(cameraRecorders).forEach(id => {
+          const rec = cameraRecorders[id];
+          if (rec && rec.chunks.length > 0) {
+            const blob = new Blob(rec.chunks, { type: "video/webm" });
+            const instantId = "instant_" + id;
+            receivedRecordings[instantId] = blob;
+            const camName = peers[id] ? peers[id].name : `Camera ${id.substring(0, 4)}`;
+            peers[instantId] = { name: `${camName} (Instant Feed)` };
+            updateTransferUI(instantId, 100, true);
+          }
+        });
+        // ------------------------------------------------------------- //
 
         // 3. SHOW DASHBOARD
         const dash = document.getElementById("transferModal");
