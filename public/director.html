@@ -1404,7 +1404,9 @@
       zoomBtn.onclick = (e) => {
         e.stopPropagation();
         const currentZoom = zooms[id] || 1;
-        zooms[id] = currentZoom === 1 ? 1.5 : currentZoom === 1.5 ? 2 : 1;
+        const zoomLevels = [1, 1.5, 2, 2.5, 3, 4, 5];
+        const nextIdx = (zoomLevels.indexOf(currentZoom) + 1) % zoomLevels.length;
+        zooms[id] = zoomLevels[nextIdx];
         updateCameraTransform(id, slot);
       };
       actions.appendChild(zoomBtn);
