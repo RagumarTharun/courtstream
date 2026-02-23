@@ -2366,6 +2366,26 @@
       const list = document.getElementById("readyList");
       const url = URL.createObjectURL(blob);
 
+      let category = "Other Downloads";
+      if (filename.endsWith('.json')) category = "Session Data (JSON)";
+      else if (filename.includes('_raw_quality')) category = "High-Quality Raw (ISO)";
+      else if (filename.includes('_instant')) category = "Instant Feeds (Fast)";
+      else if (filename.includes('final_mix')) category = "Final Rendered Mix";
+
+      let catDiv = document.getElementById("cat_" + category.replace(/[^a-zA-Z]/g, ''));
+      if (!catDiv) {
+        catDiv = document.createElement("div");
+        catDiv.id = "cat_" + category.replace(/[^a-zA-Z]/g, '');
+        catDiv.style.marginBottom = "14px";
+        catDiv.innerHTML = `
+              <div style="font-size:11px; font-weight:700; color:#cbd5e1; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid #334155;">
+                  ${category}
+              </div>
+              <div class="cat-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+          `;
+        list.appendChild(catDiv);
+      }
+
       const div = document.createElement("div");
       div.className = "file-item ready-download-item";
       div.style.background = "rgba(16, 185, 129, 0.05)";
@@ -2382,7 +2402,8 @@
             </a>
         </div>
       `;
-      list.prepend(div); // Newest at top
+
+      catDiv.querySelector(".cat-list").prepend(div);
 
       // Update badge
       const badge = document.getElementById("renderStatusBadge");
@@ -2553,7 +2574,10 @@
             if (blob) {
               const safeCamName = sanitizeName(peers[id]?.name || id);
               const safeStreamName = sanitizeName(streamName || streamId);
-              downloadBlob(blob, `${safeStreamName}_${safeCamName}_raw_quality.webm`);
+              let suffix = "_raw_quality";
+              if (id.startsWith('instant_')) suffix = "_instant_feed";
+              else if (id === 'program') suffix = "_local_program";
+              downloadBlob(blob, `${safeStreamName}_${safeCamName}${suffix}.webm`);
             }
           });
           if (ops.program === 'webm' && programChunks.length) {
@@ -2649,8 +2673,10 @@
             if (!memFiles[`iso_${id}_webm`] && receivedRecordings[id]) await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
             await ffmpeg.exec(["-i", `iso_${id}.webm`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", `iso_${id}.mp4`]);
             const safeCamName = sanitizeName(peers[id]?.name || id);
-            const safeStreamName = sanitizeName(streamName || streamId);
-            downloadBlob(new Blob([(await ffmpeg.readFile(`iso_${id}.mp4`)).buffer], { type: 'video/mp4' }), `${safeStreamName}_${safeCamName}_raw_quality.mp4`);
+            let suffix = "_raw_quality";
+            if (id.startsWith('instant_')) suffix = "_instant_feed";
+            else if (id === 'program') suffix = "_local_program";
+            downloadBlob(new Blob([(await ffmpeg.readFile(`iso_${id}.mp4`)).buffer], { type: 'video/mp4' }), `${safeStreamName}_${safeCamName}${suffix}.mp4`);
           }
         }
 

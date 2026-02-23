@@ -243,6 +243,8 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
+    <script src="/lib/ffmpeg/ffmpeg.js"></script>
+    <script src="/lib/ffmpeg/ffmpeg-util.js"></script>
     <script>
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
@@ -496,140 +498,144 @@
         }
 
         /* ===== UPLOAD & RENDER LOGIC ===== */
-        const socket = io();
+        let ffmpegInstance = null;
+        let ffmpegRef = null;
+        let fetchFileRef = null;
+
+        async function ensureFFmpeg() {
+            if (ffmpegInstance) return { ffmpeg: ffmpegRef, fetchFile: fetchFileRef };
+
+            console.log("Loading FFmpeg.wasm v0.12...");
+            const { FFmpeg } = window.FFmpegWASM;
+            const { fetchFile } = window.FFmpegUtil;
+
+            const ffmpeg = new FFmpeg();
+
+            ffmpeg.on("log", ({ message }) => {
+                const timeMatch = message.match(/time=\s*(\d+):(\d+):(\d+\.\d+)/);
+                if (timeMatch) {
+                    // Extracting progress roughly
+                    renderBtn.innerText = `Processing Audio/Video...`;
+                }
+            });
+
+            await ffmpeg.load({
+                coreURL: '/lib/ffmpeg/ffmpeg-core.js',
+                wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
+                workerLoadURL: '/lib/ffmpeg/814.ffmpeg.js'
+            });
+
+            ffmpegRef = ffmpeg;
+            fetchFileRef = fetchFile;
+            ffmpegInstance = true;
+            return { ffmpeg, fetchFile };
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+        }
 
         renderBtn.onclick = async () => {
             if (!state.edl) return;
 
             renderBtn.classList.remove('active');
             renderBtn.disabled = true;
-            renderBtn.innerText = "Processing...";
-
-            // 1. Generate Session ID from EDL or new one
-            // We'll trust the user to upload matching files. 
-            // We'll create a new Session ID for THIS render job to avoid collisions.
-            const renderSessionId = "render_job_" + Date.now();
-
-            // 2. Identify required cameras from EDL
-            const requiredCams = new Set(state.edl.map(cut => cut.camId));
-
-            // 3. Map Files to CamIDs
-            // Logic: User must have files named somewhat predictably OR we try to match by camId in filename
-            // e.g. "iso_session_123_camId.webm"
-            const uploadQueue = [];
-
-            for (const [filename, file] of Object.entries(state.videos)) {
-                const matchedCamId = state.mappings[filename];
-
-                if (!matchedCamId) {
-                    console.warn(`❌ Skipping file with no mapping: ${filename}`);
-                    continue;
-                }
-
-                uploadQueue.push({ file, camId: matchedCamId });
-            }
-
-            // 4. Upload Files
-            for (const item of uploadQueue) {
-                await uploadFile(item.file, renderSessionId, item.camId);
-            }
-
-            // 5. Trigger Render
-            if (uploadQueue.length === 0) {
-                alert("No video files could be matched to the cameras in your EDL. Please ensure filenames contain the camera ID (e.g., '9ndg').");
-                renderBtn.classList.add('active');
-                renderBtn.disabled = false;
-                renderBtn.innerText = "Retry Render";
-                return;
-            }
+            renderBtn.innerText = "Initializing Engine...";
 
             try {
-                const res = await fetch('/api/render-iso', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sessionId: renderSessionId,
-                        edl: state.edl,
-                        room: socket.id // Send socket ID for progress updates
-                    })
-                });
+                const { ffmpeg, fetchFile } = await ensureFFmpeg();
 
-                const result = await res.json();
-                if (result.success) {
-                    alert("Render Complete! Downloading...");
-                    const a = document.createElement('a');
-                    a.href = result.url; // Relative path from server
-                    a.download = `final_render.mp4`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    renderBtn.innerText = "Done";
+                // 1. Identify required cameras from EDL
+                const requiredCams = new Set(state.edl.map(cut => cut.camId));
+
+                // 2. Map Files to CamIDs and upload to WASM memory
+                const memFiles = {};
+                renderBtn.innerText = "Loading Video Files...";
+                let filesLoaded = 0;
+
+                for (const [filename, file] of Object.entries(state.videos)) {
+                    const matchedCamId = state.mappings[filename];
+                    if (!matchedCamId) continue;
+
+                    const safeName = `iso_${matchedCamId}.webm`;
+                    await ffmpeg.writeFile(safeName, await fetchFile(file));
+                    memFiles[`iso_${matchedCamId}_webm`] = safeName;
+
+                    filesLoaded++;
+                    renderBtn.innerText = `Loading Video Files... (${filesLoaded}/${requiredCams.size})`;
+                }
+
+                if (filesLoaded === 0) {
+                    alert("No video files could be matched to the cameras in your EDL.");
+                    renderBtn.classList.add('active');
+                    renderBtn.disabled = false;
+                    renderBtn.innerText = "Retry Render";
+                    return;
+                }
+
+                // 3. Process Segments
+                const segments = [];
+                for (let i = 0; i < state.edl.length; i++) {
+                    const cut = state.edl[i];
+                    const nextCut = state.edl[i + 1];
+                    let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : 30; // Guess 30s for the last cut if unknown end time
+                    if (duration < 0.1) continue;
+
+                    let inputFile = memFiles[`iso_${cut.camId}_webm`];
+                    if (!inputFile) continue;
+
+                    const segName = `seg_${i}.mp4`;
+                    const args = [
+                        "-ss", String(cut.timestamp / 1000),
+                        "-t", String(duration),
+                        "-i", inputFile,
+                        "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p",
+                        "-r", "30",
+                        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                        "-c:a", "aac", "-b:a", "128k",
+                        segName
+                    ];
+
+                    renderBtn.innerText = `Processing Segment ${i + 1}/${state.edl.length}`;
+                    await ffmpeg.exec(args);
+                    segments.push(segName);
+                }
+
+                // 4. Stitch Concat
+                if (segments.length > 0) {
+                    renderBtn.innerText = "Stitching Final Video...";
+                    await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\\n"));
+                    const finalName = `final_render_${Date.now()}.mp4`;
+                    await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", finalName]);
+
+                    renderBtn.innerText = "Downloading...";
+                    downloadBlob(new Blob([(await ffmpeg.readFile(finalName)).buffer], { type: "video/mp4" }), finalName);
+
+                    renderBtn.innerText = "Done!";
+                    renderBtn.classList.add('active');
+                    renderBtn.disabled = false;
                 } else {
-                    alert("Render Failed: " + result.error);
+                    alert("No valid segments could be rendered. Ensure the EDL timings are correct.");
                     renderBtn.innerText = "Retry";
                     renderBtn.classList.add('active');
                     renderBtn.disabled = false;
                 }
 
             } catch (e) {
-                console.error(e);
-                alert("Render Error");
-            }
-        };
-
-        async function uploadFile(file, sessionId, camId) {
-            return new Promise((resolve, reject) => {
-                const safeId = 'file_' + file.name.replace(/[^a-z0-9]/gi, '_');
-                const el = document.getElementById(safeId);
-                const statusEl = el.querySelector('.status');
-
-                statusEl.innerText = "Uploading...";
-
-                const formData = new FormData();
-                formData.append("video", file);
-                formData.append("sessionId", sessionId);
-                formData.append("camId", camId);
-
-                const xhr = new XMLHttpRequest();
-                xhr.open("POST", "/api/upload-iso", true);
-
-                xhr.upload.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                        const pct = Math.round((e.loaded / e.total) * 100);
-                        statusEl.innerText = `Uploading ${pct}%`;
-                    }
-                };
-
-                xhr.onload = () => {
-                    if (xhr.status === 200) {
-                        statusEl.innerText = "Uploaded";
-                        statusEl.classList.add('done');
-                        resolve();
-                    } else {
-                        statusEl.innerText = "Error";
-                        statusEl.classList.add('error');
-                        reject();
-                    }
-                };
-
-                xhr.onerror = reject;
-                xhr.send(formData);
-            });
-        }
-
-        // Socket Progress for Render Phase
-        socket.on("render-progress", ({ progress, status }) => {
-            if (progress < 0) {
-                renderBtn.innerText = "Error: " + status;
+                console.error("Client Rendering Error:", e);
+                alert("Render Failed: " + e.message);
+                renderBtn.innerText = "Retry";
                 renderBtn.classList.add('active');
                 renderBtn.disabled = false;
-                renderBtn.style.background = "#ef4444";
-                console.error("Render Progress Error:", status);
-            } else {
-                renderBtn.innerText = `Rendering: ${status} (${progress}%)`;
-                renderBtn.style.background = ""; // Reset if it was red
             }
-        });
+        };
 
     </script>
 </body>
