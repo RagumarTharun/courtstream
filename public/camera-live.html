@@ -303,6 +303,22 @@
     let resolveCameraReady;
     const cameraReady = new Promise(r => { resolveCameraReady = r; });
 
+    let wakeLock = null;
+
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log('✅ Screen Wake Lock is active');
+          wakeLock.addEventListener('release', () => {
+            console.log('🔓 Screen Wake Lock was released');
+          });
+        }
+      } catch (err) {
+        console.error(`❌ Wake Lock Error: ${err.name}, ${err.message}`);
+      }
+    }
+
     const pendingCandidates = []; // Buffer signals until remote description is set
 
     // Persistent identity for discovery stability
@@ -416,6 +432,7 @@
         resolveCameraReady();
         resolveCameraReady = null;
       }
+      requestWakeLock();
     }
 
     let assignedRotation = 0;
@@ -611,6 +628,13 @@
     }
     window.addEventListener("orientationchange", applyOrientation);
     setInterval(applyOrientation, 2000);
+
+    /* ===== WAKE LOCK RE-ACQUISITION ===== */
+    document.addEventListener('visibilitychange', async () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        await requestWakeLock();
+      }
+    });
 
     /* ===== ACCESS CHECK ===== */
     async function checkAccess() {
