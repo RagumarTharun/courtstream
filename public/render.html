@@ -480,16 +480,24 @@
                     }
                 }
 
-                const allMatched = Array.from(requiredCams).every(id => mappedCams.has(id));
+                const missingCount = requiredCams.size - mappedCams.size;
+                const canRender = mappedCams.size > 0;
 
-                if (allMatched) {
+                if (canRender) {
                     renderBtn.classList.add('active');
                     renderBtn.disabled = false;
-                    renderBtn.innerText = "Start Render Job";
+                    if (missingCount > 0) {
+                        renderBtn.innerText = `Render (Missing ${missingCount} Cameras)`;
+                        renderBtn.style.background = "var(--blue)"; // Use secondary color to indicate partial
+                    } else {
+                        renderBtn.innerText = "Start Render Job";
+                        renderBtn.style.background = ""; // Reset to default active (green)
+                    }
                 } else {
                     renderBtn.classList.remove('active');
                     renderBtn.disabled = true;
-                    renderBtn.innerText = `Waiting for ${requiredCams.size - mappedCams.size} Cameras...`;
+                    renderBtn.style.background = "";
+                    renderBtn.innerText = `Waiting for ${requiredCams.size} Cameras...`;
                 }
             } else {
                 renderBtn.classList.remove('active');
