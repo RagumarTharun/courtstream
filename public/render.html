@@ -567,6 +567,14 @@
                 renderBtn.innerText = "Loading Video Files...";
                 let filesLoaded = 0;
 
+                // Cleanup any existing files from previous failed runs
+                try {
+                    const existingFiles = await ffmpeg.listDir('.');
+                    for (const f of existingFiles) {
+                        if (!f.isDir) await ffmpeg.deleteFile(f.name);
+                    }
+                } catch (ce) { console.warn("Cleanup error", ce); }
+
                 for (const [filename, file] of Object.entries(state.videos)) {
                     const matchedCamId = state.mappings[filename];
                     if (!matchedCamId) continue;
@@ -617,16 +625,38 @@
                     );
 
                     renderBtn.innerText = `Processing Segment ${i + 1}/${state.edl.length}`;
-                    await ffmpeg.exec(args);
-                    segments.push(segName);
+                    console.log(`Executing segment ${i}:`, args);
+                    const result = await ffmpeg.exec(args);
+                    if (result !== 0) {
+                        throw new Error(`FFmpeg segment process failed for clip ${i} (Exit Code: ${result})`);
+                    }
+
+                    // Verify file was actually created
+                    try {
+                        const stats = await ffmpeg.readFile(segName);
+                        if (stats.length > 0) {
+                            segments.push(segName);
+                        } else {
+                            console.warn(`Segment ${i} produced empty file`);
+                        }
+                    } catch (fe) {
+                        console.error(`Segment ${i} file not found after exec`, fe);
+                    }
                 }
 
                 // 4. Stitch Concat
                 if (segments.length > 0) {
                     renderBtn.innerText = "Stitching Final Video...";
-                    await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\\n"));
+                    const listContent = segments.map(s => `file '${s}'`).join("\n");
+                    console.log("Stitching List:", listContent);
+                    await ffmpeg.writeFile("list.txt", listContent);
                     const finalName = `final_render_${Date.now()}.mp4`;
-                    await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", finalName]);
+                    const concatArgs = ["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", finalName];
+                    console.log("Executing concat:", concatArgs);
+                    const concatResult = await ffmpeg.exec(concatArgs);
+                    if (concatResult !== 0) {
+                        throw new Error(`FFmpeg concat failed (Exit Code: ${concatResult})`);
+                    }
 
                     renderBtn.innerText = "Downloading...";
                     downloadBlob(new Blob([(await ffmpeg.readFile(finalName)).buffer], { type: "video/mp4" }), finalName);
