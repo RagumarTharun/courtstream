@@ -1939,7 +1939,37 @@
           socket.emit("control", { to: id, data: { type: "stop-iso", save: "hold" } });
         });
 
-        // 5. SHOW DOWNLOAD SELECTION & APPLY CHOICE
+        // 5. WAIT FOR TRANSFERS BEFORE SHOWING OPTIONS
+        const renderPanel = document.getElementById("renderPhase");
+        if (renderPanel) {
+          renderPanel.innerHTML = `
+              <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 12px; padding: 30px; text-align: center;">
+                  <div class="loader" style="margin: 0 auto 15px auto;"></div>
+                  <h3 style="color:white; margin:0;">Waiting for High-Quality Source Files...</h3>
+                  <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Receiving original recordings from cameras to ensure best quality.</p>
+              </div>
+          `;
+          renderPanel.style.display = "block";
+        }
+
+        const camerasToTransfer = new Set(Object.keys(peers).filter(id => peers[id].stream));
+        console.log("⏳ stopAndFinalize: Waiting for transfers from:", Array.from(camerasToTransfer));
+
+        // Show transfer UI and status
+        const tStatusBadge = document.getElementById("transferStatusBadge");
+        if (tStatusBadge) {
+          tStatusBadge.innerText = "TRANSFERRING";
+          tStatusBadge.className = "status-badge processing";
+        }
+
+        await waitForTransfers(camerasToTransfer);
+
+        if (tStatusBadge) {
+          tStatusBadge.innerText = "SYNC COMPLETE";
+          tStatusBadge.className = "status-badge success";
+        }
+
+        // 6. SHOW DOWNLOAD SELECTION & APPLY CHOICE
         showDownloadSelectionModal(mode);
 
         // AUTO-EXECUTE only for Raw Later and Instant

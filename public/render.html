@@ -415,7 +415,8 @@
             const hasVideo = Object.keys(state.videos).length > 0;
 
             if (hasEdl) {
-                const requiredCams = new Set(state.edl.map(cut => cut.camId));
+                const jsonCams = state.edl.map(cut => cut.camId);
+                const requiredCams = new Set(jsonCams.filter(id => id && id !== 'program' && id !== 'director'));
                 const mappedCams = new Set();
 
                 // Update Selectors
