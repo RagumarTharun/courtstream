@@ -207,11 +207,6 @@
 </head>
 
 <body>
-  <div id="networkWarningBanner"
-    style="display: none; background: #ea580c; color: white; padding: 8px 16px; text-align: center; font-size: 14px; font-weight: 500; z-index: 1000; position: fixed; top: 0; left: 0; right: 0;">
-    ⚠️ Suboptimal Network Connection. Transfer speeds may be slow.
-  </div>
-
   <div class="page">
 
     <div class="header">
@@ -500,14 +495,8 @@
 
         pc.onicecandidate = e => {
           if (e.candidate) {
-            // Detect if relay/TURN is being used
-            if (e.candidate.candidate && e.candidate.candidate.includes("typ relay")) {
-              console.warn("⚠️ Network Mismatch/Suboptimal Connection detected. Using TURN relay.");
-              const warningBanner = document.getElementById("networkWarningBanner");
-              if (warningBanner) warningBanner.style.display = "block";
-            }
             if (directorId) {
-              socket.emit("signal", { to: directorId, data: { candidate: e.candidate } });
+              socket.emit("signal", { to: directorId, data: e.candidate });
             }
           }
         };
