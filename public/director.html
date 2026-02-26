@@ -937,6 +937,53 @@
       document.getElementById("streamBadge").innerText =
         label + " • LIVE";
     }
+    // ===== RECORD CUT (EDL) =====
+    function recordCut(camId, sourceButton = null) {
+      if (!isRecording) return;
+
+      const timeOffset = Date.now() - recordStartTime;
+      const cam = activePeers.find(p => p.id === camId);
+
+      let camName = "Auto Program";
+      let zoom = 1;
+      let rotation = 0;
+      let flip = false;
+
+      if (cam) {
+        camName = cam.name;
+        // Extract current remote view settings
+        const videoEl = document.getElementById("video_" + camId);
+        if (videoEl) {
+          const t = videoEl.style.transform || "";
+          const zoomMatch = t.match(/scale\(([^)]+)\)/);
+          if (zoomMatch) zoom = parseFloat(zoomMatch[1]);
+
+          const rotMatch = t.match(/rotate\(([^d]+)deg\)/);
+          if (rotMatch) rotation = parseInt(rotMatch[1]);
+
+          const flipMatch = t.match(/scaleX\(([^)]+)\)/);
+          if (flipMatch) flip = parseInt(flipMatch[1]) === -1;
+        }
+      }
+
+      const cut = {
+        time: timeOffset,
+        camId: camId,
+        camName: camName,
+        zoom: zoom,
+        rotation: rotation,
+        flipHorizontal: flip
+      };
+
+      currentSessionData.cuts.push(cut);
+      console.log(`🎬 CUT [${formatTime(timeOffset)}] -> ${camName} (z:${zoom}, r:${rotation}, f:${flip})`);
+
+      // UI update
+      if (sourceButton) {
+        document.querySelectorAll(".cam-btn").forEach(b => b.classList.remove("active"));
+        sourceButton.classList.add("active");
+      }
+    }
     updateStreamBadge();
 
     /* ===== SOCKET / STATE ===== */
@@ -1273,6 +1320,41 @@
       }
     }
 
+    const cancelledTransfers = new Set();
+
+    function retryTransfer(id) {
+      console.log(`🔄 Requesting transfer retry for camera ${id}`);
+      socket.emit("control", { to: id, data: { type: "retry-transfer" } });
+
+      const row = document.getElementById(`xfer_${id}`);
+      if (row) {
+        row.querySelector(".pct").innerText = "Retrying...";
+        row.querySelector(".pct").style.color = "var(--blue)";
+      }
+    }
+
+    function cancelTransfer(id) {
+      console.log(`⏭️ Skipping transfer for camera ${id}`);
+      cancelledTransfers.add(id);
+
+      const row = document.getElementById(`xfer_${id}`);
+      if (row) {
+        row.querySelector(".pct").innerText = "Skipped";
+        row.querySelector(".pct").style.color = "var(--red)";
+        const fill = row.querySelector(".progress-fill");
+        if (fill) {
+          fill.style.width = "100%";
+          fill.style.background = "var(--red)";
+        }
+
+        // Hide buttons
+        const retryBtn = document.getElementById(`retry_${id}`);
+        const cancelBtn = document.getElementById(`cancel_${id}`);
+        if (retryBtn) retryBtn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "none";
+      }
+    }
+
     const camSegments = {}; // Track segments per camera
 
     function updateTransferUI(id, percent, done = false, segmentData = null) {
@@ -1304,9 +1386,9 @@
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                             <span>Retry</span>
                         </button>
-                        <button id="cancel_${id}" class="icon-btn danger" style="display:none;" onclick="cancelTransfer('${id}')" title="Stop & Skip">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                            <span>Stop</span>
+                        <button id="cancel_${id}" class="icon-btn danger" style="display:none;" onclick="cancelTransfer('${id}')" title="Skip">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                            <span>Skip</span>
                         </button>
                     </div>
                 </div>
@@ -1327,9 +1409,6 @@
       }
 
       if (done) {
-        // Clear camSegments set for this camera if done
-        delete camSegments[id];
-
         const retryBtn = document.getElementById(`retry_${id}`);
         const cancelBtn = document.getElementById(`cancel_${id}`);
         if (retryBtn) retryBtn.style.display = "none";
@@ -1382,27 +1461,8 @@
       socket.emit("control", { to: id, data: { type: "request-transfer" } });
     }
 
-    const cancelledTransfers = new Set();
-    function cancelTransfer(id) {
-      console.warn(`🛑 Cancelling transfer and using fallback for: ${id}`);
-      cancelledTransfers.add(id);
-      const row = document.getElementById(`xfer_${id}`);
-      if (row) {
-        row.querySelector(".pct").innerText = "Skipped (Fallback)";
-        row.querySelector(".pct").style.color = "var(--orange)";
-        const retryBtn = document.getElementById(`retry_${id}`);
-        const cancelBtn = document.getElementById(`cancel_${id}`);
-        if (retryBtn) retryBtn.style.display = "inline-block";
-        if (cancelBtn) cancelBtn.style.display = "none";
-      }
-    }
-
     async function checkTransfersComplete() {
       const activePeers = Object.keys(peers).filter(pid => peers[pid].stream);
-      // For incremental segments, we check if there are no pending segments reported by cameras
-      // However, for simplicity, we'll wait for the "stop-iso" command to finish and then check if the uploader is idle
-      // A more robust way is to wait until all segments reported have status 'completed'
-
       const missing = activePeers.filter(pid => !receivedRecordings[pid]);
       const allReceived = missing.length === 0;
 
@@ -1585,10 +1645,7 @@
         const shortId = peers[id].clientId ? peers[id].clientId.replace('cam_', '').substring(0, 4) : id.substring(0, 4);
         isoEdl.push({
           timestamp: Date.now() - recordStartTime,
-          camId: shortId,
-          zoom: zooms[id] || 1,
-          rotation: rotations[id] || 0,
-          flipHorizontal: flips[id] || false
+          camId: shortId
         });
       }
 
@@ -1688,18 +1745,6 @@
           flipHorizontal: flips[id] || false
         }
       });
-
-      // Update EDL mid-shot if recording
-      if (recordingState === "recording" && activeCameraId === id) {
-        const shortId = peers[id].clientId ? peers[id].clientId.replace('cam_', '').substring(0, 4) : id.substring(0, 4);
-        isoEdl.push({
-          timestamp: Date.now() - recordStartTime,
-          camId: shortId,
-          zoom: zoom,
-          rotation: rot,
-          flipHorizontal: flips[id] || false
-        });
-      }
     }
 
     /* ===== PROGRAM CANVAS DRAW ===== */
@@ -1767,15 +1812,8 @@
     /* ===== RECORDING UI ===== */
     // ISO STATE
     let isoSessionId = null;
-    let isoEdl = []; // [{ timestamp, camId, zoom, rotation, flipHorizontal }]
-
-    window.addEventListener('beforeunload', (e) => {
-      if (recordingState === 'recording') {
-        e.preventDefault();
-        e.returnValue = '';
-        return '';
-      }
-    });
+    let isoEdl = []; // [{ timestamp, camId }]
+    /* uploadedCameras removed - moved to downloads.html */
 
     const recordBar = document.getElementById("recordBar");
     const recordTimer = document.getElementById("recordTimer");
@@ -2032,6 +2070,7 @@
         // Render Now shows the selection screen first
         if (mode === 'raw_later' || mode === 'instant') {
           console.log("⚡ Auto-triggering process based on choice:", mode);
+          // Small delay to ensure UI updates before heavy processing
           setTimeout(() => processSelectedDownloads(mode), 500);
         }
 
@@ -2780,33 +2819,56 @@
     function waitForTransfers(requiredSet) {
       return new Promise(resolve => {
         const start = Date.now();
-        const timeout = 120000; // 2 min timeout for final sync
-
-        console.log("🕒 Starting final segment sync check...");
-
+        const timeout = 60000; // Increase to 60s for high-quality files
         const check = setInterval(() => {
-          // Check if any camera still has segments in 'camSegments' (which tracks segment numbers being uploaded)
-          // Actually, camSegments is a Set of segment indexes we RECEIVED.
-          // We need a way to know if a camera HAS MORE.
-          // Let's rely on the camSegments count being stable for a few seconds OR a "final-flush-done" signal.
-
-          const missing = Array.from(requiredSet).filter(id => {
-            // For the new incremental system, we don't have a single 'receivedRecordings[id]' blob
-            // unless it's a legacy transfer. For segments, 'receivedRecordings' isn't set yet.
-            // We'll consider a camera "Done" if it hasn't sent a new segment in 10s AND we have at least 1.
-            // A better way: Cameras send a 'final-sync-complete' event.
-            return !receivedRecordings[id] && !cancelledTransfers.has(id);
-          });
-
+          // Check if any required cameras are missing AND NOT cancelled
+          const missing = Array.from(requiredSet).filter(id => !receivedRecordings[id] && !cancelledTransfers.has(id));
           const elapsed = Date.now() - start;
 
           if (missing.length === 0 || elapsed > timeout) {
             clearInterval(check);
+            if (missing.length > 0) {
+              console.warn("⚠️ waitForTransfers timed out or finished with missing:", missing);
+              missing.forEach(id => {
+                // If it's missing and we haven't manually cancelled it
+                if (!receivedRecordings[id] && !cancelledTransfers.has(id)) {
+                  const retryBtn = document.getElementById(`retry_${id}`);
+                  const cancelBtn = document.getElementById(`cancel_${id}`);
+                  if (retryBtn) retryBtn.style.display = "inline-flex";
+                  if (cancelBtn) cancelBtn.style.display = "inline-flex";
+                  const row = document.getElementById(`xfer_${id}`);
+                  if (row) {
+                    row.querySelector(".pct").innerText = "Waiting...";
+                    row.querySelector(".pct").style.color = "#ea580c"; // Orange warning
+                  }
+                }
+              });
+            }
             resolve();
+          } else {
+            // After 5s, show "Skip/Fallback" buttons so user can proceed if they want
+            if (elapsed > 5000) {
+              missing.forEach(id => {
+                const cancelBtn = document.getElementById(`cancel_${id}`);
+                const retryBtn = document.getElementById(`retry_${id}`);
+                if (cancelBtn) cancelBtn.style.display = "inline-flex";
+                if (retryBtn) retryBtn.style.display = "inline-flex";
+              });
+            }
           }
-        }, 1000);
+        }, 500);
       });
     }
+
+    // Safety Warning
+    window.addEventListener("beforeunload", (e) => {
+      const transferModal = document.getElementById("transferModal");
+      if (isRecording || (transferModal && transferModal.style.display === "flex")) {
+        e.preventDefault();
+        e.returnValue = "You have an active recording or transfer in progress. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    });
 
   </script>
   <script src="feedback.js"></script>

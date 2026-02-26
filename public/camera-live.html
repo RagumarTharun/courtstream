@@ -207,6 +207,10 @@
 </head>
 
 <body>
+  <div id="networkWarningBanner"
+    style="display: none; background: #ea580c; color: white; padding: 8px 16px; text-align: center; font-size: 14px; font-weight: 500; z-index: 1000; position: fixed; top: 0; left: 0; right: 0;">
+    ⚠️ Suboptimal Network Connection. Transfer speeds may be slow.
+  </div>
 
   <div class="page">
 
@@ -222,24 +226,8 @@
     </div>
 
     <div class="controls">
-      <!-- SWITCH CAMERA -->
-      <button id="switchCameraBtn" class="ctrl" onclick="toggleCamera()" title="Switch Camera">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M7 2a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z" />
-          <path d="M17 2a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z" />
-          <path d="M2 9a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2z" />
-          <path d="M15 9h-3a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h3" />
-          <path d="M22 9a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2z" />
-          <path d="M11 15v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-1" />
-          <path d="M21 15v1a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-1" />
-          <path d="M7 21a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2z" />
-          <path d="M17 21a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2z" />
-        </svg>
-      </button>
-
       <!-- MIC -->
-      <button id="micBtn" class="ctrl" onclick="toggleMic()" title="Toggle Mic">
+      <button id="micBtn" class="ctrl" onclick="toggleMic()">
         <svg viewBox="0 0 24 24">
           <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z" />
           <path d="M19 11a7 7 0 01-14 0" />
@@ -250,6 +238,17 @@
       <button id="camBtn" class="ctrl" onclick="toggleCam()">
         <svg viewBox="0 0 24 24">
           <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z" />
+        </svg>
+      </button>
+
+      <!-- SWITCH FRONT/BACK -->
+      <button id="switchCamBtn" class="ctrl" onclick="switchCameraDirection()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M21 16v-1a4 4 0 0 0-4-4H8" />
+          <polyline points="11 8 8 11 11 14" />
+          <path d="M3 8v1a4 4 0 0 0 4 4h9" />
+          <polyline points="13 16 16 13 13 10" />
         </svg>
       </button>
 
@@ -275,855 +274,906 @@
       </button>
     </div>
 
-  </div>
+    <!-- Passcode Overlay -->
+    <div id="passcodeOverlay">
+      <h3 style="margin-top:0;">Secured Stream</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">This stream requires a passcode for cameras to
+        join.</p>
+      <input type="password" id="passInput" placeholder="Enter Passcode">
+      <button id="joinBtnPasscode">Join Stream</button>
+      <div id="errorMsg" style="color:#ef4444;font-size:12px;margin-top:12px;display:none;">Invalid passcode. Please try
+        again.</div>
+    </div>
 
-  <!-- Passcode Overlay -->
-  <div id="passcodeOverlay">
-    <h3 style="margin-top:0;">Secured Stream</h3>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">This stream requires a passcode for cameras to
-      join.</p>
-    <input type="password" id="passInput" placeholder="Enter Passcode">
-    <button id="joinBtn">Join Stream</button>
-    <div id="errorMsg" style="color:#ef4444;font-size:12px;margin-top:12px;display:none;">Invalid passcode. Please
-      try again.</div>
-  </div>
+    <!-- Join Screen Overlay -->
+    <div id="joinOverlay">
+      <h3 style="margin-top:0;">Secured Stream</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">This stream requires a passcode for cameras to
+        join.</p>
+      <input type="password" id="passInput" placeholder="Enter Passcode">
+      <button id="joinBtn">Join Stream</button>
+      <div id="errorMsg" style="color:#ef4444;font-size:12px;margin-top:12px;display:none;">Invalid passcode. Please
+        try again.</div>
+    </div>
 
-  <!-- Network Mismatch Banner -->
-  <div id="networkMismatchBanner">
-    Network Mismatch Detected. Please refresh.
-  </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="feedback.js"></script>
+    <script src="modal.js"></script>
+    <script>
+      /* ===== STATE ===== */
+      const streamId = new URLSearchParams(location.search).get("stream");
+      const streamName = new URLSearchParams(location.search).get("name");
+      const video = document.getElementById("video");
+      const micBtn = document.getElementById("micBtn");
+      const camBtn = document.getElementById("camBtn");
+      const streamTitle = document.getElementById("streamTitle"); // Note: removed from HTML but variable might be used? (Updated HTML uses streamNameDisplay)
+      const liveBadge = document.getElementById("liveBadge");
+      const overlay = document.getElementById("passcodeOverlay");
+      const passInput = document.getElementById("passInput");
+      const joinBtn = document.getElementById("joinBtn");
+      const errorMsg = document.getElementById("errorMsg");
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="feedback.js"></script>
-  <script src="modal.js"></script>
-  <script>
-    /* ===== STATE ===== */
-    const streamId = new URLSearchParams(location.search).get("stream");
-    const streamName = new URLSearchParams(location.search).get("name");
-    const video = document.getElementById("video");
-    const micBtn = document.getElementById("micBtn");
-    const camBtn = document.getElementById("camBtn");
-    const streamTitle = document.getElementById("streamTitle"); // Note: removed from HTML but variable might be used? (Updated HTML uses streamNameDisplay)
-    const liveBadge = document.getElementById("liveBadge");
-    const overlay = document.getElementById("passcodeOverlay");
-    const passInput = document.getElementById("passInput");
-    const joinBtn = document.getElementById("joinBtn");
-    const errorMsg = document.getElementById("errorMsg");
-    const networkMismatchBanner = document.getElementById("networkMismatchBanner");
+      let mediaStream;
+      let videoSender;
+      let micOn = true;
+      let camOn = true;
+      let facing = "environment";
+      let directorId = null;
+      let isLive = false;
+      let isClosed = false; // Flag to stop reconnection if director closes camera
+      let videoDevices = [];
+      let currentDeviceIndex = 0;
+      let hasPickedDefault = false;
+      let resolveCameraReady;
+      const cameraReady = new Promise(r => { resolveCameraReady = r; });
 
-    let mediaStream;
-    let videoSender;
-    let micOn = true;
-    let camOn = true;
-    let facing = "environment";
-    let directorId = null;
-    let isLive = false;
-    let isClosed = false; // Flag to stop reconnection if director closes camera
-    let videoDevices = [];
-    let currentDeviceIndex = 0;
-    let hasPickedDefault = false;
-    let resolveCameraReady;
-    const cameraReady = new Promise(r => { resolveCameraReady = r; });
+      let wakeLock = null;
 
-    let wakeLock = null;
+      async function requestWakeLock() {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log('✅ Screen Wake Lock is active');
+            wakeLock.addEventListener('release', () => {
+              console.log('🔓 Screen Wake Lock was released');
+            });
+          }
+        } catch (err) {
+          console.error(`❌ Wake Lock Error: ${err.name}, ${err.message}`);
+        }
+      }
 
-    async function requestWakeLock() {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-          console.log('✅ Screen Wake Lock is active');
-          wakeLock.addEventListener('release', () => {
-            console.log('🔓 Screen Wake Lock was released');
+      const pendingCandidates = []; // Buffer signals until remote description is set
+
+      // Persistent identity for discovery stability
+      let clientId = localStorage.getItem("courtstream_client_id");
+      if (!clientId) {
+        clientId = "cam_" + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem("courtstream_client_id", clientId);
+      }
+
+      /* ===== WEBRTC ===== */
+      let turnConfig = null;
+      async function getTurnConfig() {
+        if (turnConfig) return turnConfig;
+        try {
+          const res = await fetch("/api/turn-credentials");
+          turnConfig = await res.json();
+          return turnConfig;
+        } catch (e) {
+          console.error("Failed to fetch TURN config:", e);
+          return { iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] };
+        }
+      }
+
+      const socket = io();
+      /* ===== CAMERA ===== */
+      async function loadVideoDevices() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        videoDevices = devices.filter(d => d.kind === "videoinput");
+        if (!videoDevices.length) return;
+
+        const currentId = mediaStream && mediaStream.getVideoTracks()[0]
+          ? mediaStream.getVideoTracks()[0].getSettings().deviceId
+          : null;
+
+        if (currentId) {
+          const idx = videoDevices.findIndex(d => d.deviceId === currentId);
+          if (idx >= 0) currentDeviceIndex = idx;
+        }
+      }
+
+      function pickDefaultBackCamera() {
+        if (!videoDevices.length) return;
+
+        const backIndex = videoDevices.findIndex(d => {
+          const label = (d.label || "").toLowerCase();
+          return label.includes("back") || label.includes("rear") || label.includes("environment");
+        });
+
+        if (backIndex >= 0) {
+          currentDeviceIndex = backIndex;
+          facing = "environment";
+        }
+      }
+
+      async function getStreamWithFallback() {
+        const constraintsByPriority = [];
+
+        if (videoDevices.length) {
+          constraintsByPriority.push({
+            video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } },
+            audio: true
           });
         }
-      } catch (err) {
-        console.error(`❌ Wake Lock Error: ${err.name}, ${err.message}`);
+
+        constraintsByPriority.push({
+          video: { facingMode: { exact: facing } },
+          audio: true
+        });
+
+        let lastError;
+        for (const constraints of constraintsByPriority) {
+          try {
+            return await navigator.mediaDevices.getUserMedia(constraints);
+          } catch (err) {
+            lastError = err;
+          }
+        }
+        throw lastError;
       }
-    }
 
-    const pendingCandidates = []; // Buffer signals until remote description is set
+      async function startCamera(isSwitching = false) {
+        if (!isSwitching) {
+          await loadVideoDevices();
+          if (!hasPickedDefault) {
+            pickDefaultBackCamera();
+            hasPickedDefault = true;
+          }
+        }
 
-    // Persistent identity for discovery stability
-    let clientId = localStorage.getItem("courtstream_client_id");
-    if (!clientId) {
-      clientId = "cam_" + Math.random().toString(36).substring(2, 9);
-      localStorage.setItem("courtstream_client_id", clientId);
-    }
+        const stream = await getStreamWithFallback();
 
-    /* ===== WEBRTC ===== */
-    let turnConfig = null;
-    async function getTurnConfig() {
-      if (turnConfig) return turnConfig;
-      try {
-        const res = await fetch("/api/turn-credentials");
-        turnConfig = await res.json();
-        return turnConfig;
-      } catch (e) {
-        console.error("Failed to fetch TURN config:", e);
-        return { iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] };
-      }
-    }
-
-    const socket = io();
-
-    // Warn user before leaving page if stream is active
-    window.addEventListener('beforeunload', function (e) {
-      if (isLive) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    });
-
-    /* ===== CAMERA ===== */
-    // Initial constraints for camera
-    const constraints = {
-      video: {
-        facingMode: "environment" // Start with back camera
-      },
-      audio: true
-    };
-
-    async function toggleCamera() {
-      const currentMode = constraints.video.facingMode;
-      const newMode = currentMode === "user" ? "environment" : "user";
-      console.log(`🔄 Switching camera to ${newMode}...`);
-
-      constraints.video.facingMode = newMode;
-      await startCamera();
-
-      const btn = document.getElementById("switchCameraBtn");
-      btn.style.background = "#3b82f6";
-      setTimeout(() => btn.style.background = "", 300);
-    }
-
-    async function startCamera() {
-      console.log("📸 Starting Camera with constraints:", constraints);
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-        if (mediaStream) {
+        if (mediaStream && isSwitching) {
           mediaStream.getTracks().forEach(track => track.stop());
         }
 
         video.srcObject = stream;
 
-        // If WebRTC is active, replace the track
-        if (pc && videoSender) {
-          const videoTrack = stream.getVideoTracks()[0];
-          await videoSender.replaceTrack(videoTrack);
-          console.log("✅ WebRTC Track Replaced");
+        if (pc) {
+          if (!mediaStream || !isSwitching) {
+            // Initial or no existing stream -> Add tracks
+            stream.getTracks().forEach(t => {
+              const sender = pc.addTrack(t, stream);
+              if (t.kind === "video") videoSender = sender;
+            });
+          } else {
+            // Switch -> Replace video track
+            const newVideoTrack = stream.getVideoTracks()[0];
+            if (videoSender) {
+              await videoSender.replaceTrack(newVideoTrack);
+            } else {
+              const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+              if (sender) await sender.replaceTrack(newVideoTrack);
+            }
+            // Re-apply states
+            if (!micOn) toggleMic();
+            if (!camOn) toggleCam();
+          }
         }
 
         mediaStream = stream;
 
-        if (resolveCameraReady) {
+        if (resolveCameraReady && !isSwitching) {
           resolveCameraReady();
           resolveCameraReady = null;
         }
         requestWakeLock();
-
-      } catch (err) {
-        console.error("Camera Error:", err);
-        alert("Could not access camera: " + err.message);
       }
-    }
 
-    let assignedRotation = 0;
-    let assignedZoom = 1;
-    let assignedFlip = false;
+      async function switchCameraDirection() {
+        if (!mediaStream) return;
+        const btn = document.getElementById("switchCamBtn");
+        btn.style.opacity = "0.5";
+        btn.disabled = true;
 
-    async function initWebRTC() {
-      const config = await getTurnConfig();
-      pc = new RTCPeerConnection(config);
-      setupDataChannel();
+        // Toggle facing mode string
+        facing = facing === "environment" ? "user" : "environment";
 
-      checkAccess();
-      await startCamera();
+        await startCamera(true);
 
-      pc.onicecandidate = e => {
-        if (e.candidate) {
-          if (directorId) {
-            socket.emit("signal", { to: directorId, data: e.candidate });
-          }
-        }
-      };
+        btn.style.opacity = "1";
+        btn.disabled = false;
+      }
 
-      socket.on("control", ({ from, data }) => {
-        console.log("Control:", data);
-        if (!data) return;
+      let assignedRotation = 0;
+      let assignedZoom = 1;
+      let assignedFlip = false;
 
-        if (data.type === "live") {
-          const isLive = data.on;
-          document.getElementById("liveBadge").style.display = isLive ? "inline-block" : "none";
+      async function initWebRTC() {
+        const config = await getTurnConfig();
+        pc = new RTCPeerConnection(config);
+        setupDataChannel();
 
-          // Show the name of the stream (which is the camera name set by director)
-          if (data.name) {
-            document.getElementById("streamNameDisplay").innerText = data.name;
-          }
+        checkAccess();
+        startCamera(); // Ensure camera starts after PC is initialized to add tracks
 
-          // Optional: Visual feedback on the video border
-          const v = document.querySelector("video");
-          if (v) v.style.border = isLive ? "2px solid #ef4444" : "none";
-        }
-        else if (data.type === "stop-iso") {
-          console.log("🛑 Received stop-iso via Control channel");
-          handleStopIso(data);
-        }
-        else if (data.type === "request-transfer") {
-          handleTransferRequest();
-        }
-        else if (data.type === "refresh") {
-          console.log("Director requested refresh. Resetting PC...");
-          if (isClosed) return; // Ignore if explicitly closed
-          if (pc) {
-            pc.close();
-            initWebRTC();
-          }
-        }
-        else if (data.type === "close") {
-          console.log("🚫 Connection closed by director. Stopping reconnection.");
-          isClosed = true;
-          if (pc) pc.close();
-          // Visual feedback
-          document.getElementById("streamNameDisplay").innerText = "Closed by Director";
-          document.getElementById("liveBadge").style.display = "none";
-          const v = document.querySelector("video");
-          if (v) v.style.border = "none";
-          alert("Your camera feed was closed by the director.");
-          location.href = "index.html"; // Prompted Redirect
-        }
-        else if (data.type === "discard-recording") {
-          handleDiscardRequest();
-        }
-        else if (data.type === "set-transform") {
-          assignedRotation = data.rotation || 0;
-          assignedZoom = data.zoom || 1;
-          assignedFlip = data.flipHorizontal || false;
-          console.log("🔄 Director assigned transform:", { rotation: assignedRotation, zoom: assignedZoom, flip: assignedFlip });
-
-          const v = document.querySelector("video");
-          if (v) {
-            v.style.transform = `scale(${assignedZoom}) scaleX(${assignedFlip ? -1 : 1}) rotate(${assignedRotation}deg)`;
-          }
-        }
-      });
-
-      socket.on("signal", async ({ from, data }) => {
-        // ... (signal handling remains same, not touching this block in replacement)
-        if (!data) return;
-
-        if (data.type === "offer") {
-          console.log("📡 Camera: Received offer from director", from);
-          directorId = from;
-          await cameraReady;
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data));
-            const ans = await pc.createAnswer();
-            await pc.setLocalDescription(ans);
-            socket.emit("signal", { to: from, data: pc.localDescription });
-
-            // Flush buffered candidates
-            while (pendingCandidates.length > 0) {
-              const cand = pendingCandidates.shift();
-              await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(e => console.warn("ICE error:", e));
+        pc.onicecandidate = e => {
+          if (e.candidate) {
+            // Detect if relay/TURN is being used
+            if (e.candidate.candidate && e.candidate.candidate.includes("typ relay")) {
+              console.warn("⚠️ Network Mismatch/Suboptimal Connection detected. Using TURN relay.");
+              const warningBanner = document.getElementById("networkWarningBanner");
+              if (warningBanner) warningBanner.style.display = "block";
             }
-          } catch (e) {
-            console.error("Signaling error:", e);
+            if (directorId) {
+              socket.emit("signal", { to: directorId, data: { candidate: e.candidate } });
+            }
           }
-          return;
-        }
+        };
 
-        if (data.candidate) {
-          if (pc.remoteDescription) {
-            await pc.addIceCandidate(data).catch(e => console.warn("ICE error:", e));
+        socket.on("control", ({ from, data }) => {
+          console.log("Control:", data);
+          if (!data) return;
+
+          if (data.type === "live") {
+            const isLive = data.on;
+            document.getElementById("liveBadge").style.display = isLive ? "inline-block" : "none";
+
+            // Show the name of the stream (which is the camera name set by director)
+            if (data.name) {
+              document.getElementById("streamNameDisplay").innerText = data.name;
+            }
+
+            // Optional: Visual feedback on the video border
+            const v = document.querySelector("video");
+            if (v) v.style.border = isLive ? "2px solid #ef4444" : "none";
+          }
+          else if (data.type === "stop-iso") {
+            console.log("🛑 Received stop-iso via Control channel");
+            handleStopIso(data);
+          }
+          else if (data.type === "request-transfer") {
+            handleTransferRequest();
+          }
+          else if (data.type === "refresh") {
+            console.log("Director requested refresh. Resetting PC...");
+            if (isClosed) return; // Ignore if explicitly closed
+            if (pc) {
+              pc.close();
+              initWebRTC();
+            }
+          }
+          else if (data.type === "close") {
+            console.log("🚫 Connection closed by director. Stopping reconnection.");
+            isClosed = true;
+            if (pc) pc.close();
+            // Visual feedback
+            document.getElementById("streamNameDisplay").innerText = "Closed by Director";
+            document.getElementById("liveBadge").style.display = "none";
+            const v = document.querySelector("video");
+            if (v) v.style.border = "none";
+            alert("Your camera feed was closed by the director.");
+            location.href = "index.html"; // Prompted Redirect
+          }
+          else if (data.type === "discard-recording") {
+            handleDiscardRequest();
+          }
+          else if (data.type === "set-transform") {
+            assignedRotation = data.rotation || 0;
+            assignedZoom = data.zoom || 1;
+            assignedFlip = data.flipHorizontal || false;
+            console.log("🔄 Director assigned transform:", { rotation: assignedRotation, zoom: assignedZoom, flip: assignedFlip });
+
+            const v = document.querySelector("video");
+            if (v) {
+              v.style.transform = `scale(${assignedZoom}) scaleX(${assignedFlip ? -1 : 1}) rotate(${assignedRotation}deg)`;
+            }
+          }
+        });
+
+        socket.on("signal", async ({ from, data }) => {
+          // ... (signal handling remains same, not touching this block in replacement)
+          if (!data) return;
+
+          if (data.type === "offer") {
+            console.log("📡 Camera: Received offer from director", from);
+            directorId = from;
+            await cameraReady;
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(data));
+              const ans = await pc.createAnswer();
+              await pc.setLocalDescription(ans);
+              socket.emit("signal", { to: from, data: pc.localDescription });
+
+              // Flush buffered candidates
+              while (pendingCandidates.length > 0) {
+                const cand = pendingCandidates.shift();
+                await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(e => console.warn("ICE error:", e));
+              }
+            } catch (e) {
+              console.error("Signaling error:", e);
+            }
+            return;
+          }
+
+          if (data.candidate) {
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(data).catch(e => console.warn("ICE error:", e));
+            } else {
+              pendingCandidates.push(data);
+            }
+          }
+        });
+
+        socket.on("peer-joined", ({ id, role }) => {
+          if (isClosed) return; // Stop re-joining if director previously closed this camera
+          if (role === "director") {
+            console.log("🎬 Director joined! Refreshing connection...");
+            checkAccess();
+          }
+        });
+
+        socket.on("discovery-request", () => {
+          if (isClosed) return;
+          console.log("📡 Received discovery request. Re-announcing...");
+          checkAccess(); // Re-emit join
+        });
+      }
+
+      /* ===== DATA CHANNEL ===== */
+      let dataChannel = null;
+      function setupDataChannel() {
+        if (!pc) return;
+        // Director creates the channel usually (offerer), but we can creating it here too if negotiated
+        // However, director sends OFFER. So Director should create Data Channel.
+        // We just need to handle ondatachannel.
+
+        pc.ondatachannel = (event) => {
+          console.log("📡 Data Channel Received:", event.channel.label);
+          dataChannel = event.channel;
+          dataChannel.onopen = () => console.log("✅ Data Channel Open");
+          dataChannel.onmessage = handleMessage;
+        };
+      }
+
+      function handleMessage(event) {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "ack") {
+          // handle flow control if needed
+        }
+      }
+      initWebRTC();
+
+
+      /* ===== ACTIONS ===== */
+      function toggleMic() {
+        micOn = !micOn;
+        if (mediaStream) {
+          mediaStream.getAudioTracks().forEach(t => (t.enabled = micOn));
+        }
+        micBtn.classList.toggle("off", !micOn);
+      }
+
+      function toggleCam() {
+        camOn = !camOn;
+        if (mediaStream) {
+          mediaStream.getVideoTracks().forEach(t => (t.enabled = camOn));
+        }
+        camBtn.classList.toggle("off", !camOn);
+      }
+
+      async function leave() {
+        if (await confirm("Stop Streaming?\n\nThis will end your session and take you back to the home page.", "destructive")) {
+          location.href = 'index.html';
+        }
+      }
+
+      /* ===== ORIENTATION ===== */
+      const rotations = {};
+      function applyOrientation() {
+        const orient = window.orientation;
+        let rot = 0;
+        if (orient === 90) rot = -90;
+        if (orient === -90) rot = 90;
+        if (orient === 180) rot = 180;
+
+        rotations[socket.id] = rot;
+        socket.emit("camera-rotate", { room: streamId, rotation: rot });
+
+        video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot}deg)`;
+      }
+      window.addEventListener("orientationchange", applyOrientation);
+      setInterval(applyOrientation, 2000);
+
+      /* ===== WAKE LOCK RE-ACQUISITION ===== */
+      document.addEventListener('visibilitychange', async () => {
+        if (wakeLock !== null && document.visibilityState === 'visible') {
+          await requestWakeLock();
+        }
+      });
+
+      /* ===== ACCESS CHECK ===== */
+      async function checkAccess() {
+        try {
+          const res = await fetch("/api/streams");
+          const all = await res.json();
+          const stream = all.find(s => s.id === streamId);
+
+          if (stream && stream.camera_access === "protected") {
+            console.log("🔒 Camera: Protected stream detected");
+            overlay.style.display = "flex";
+            joinBtn.onclick = () => {
+              const pass = passInput.value.trim();
+              if (!pass) return;
+              socket.emit("join", { room: streamId, role: "camera", password: pass, clientId });
+            };
           } else {
-            pendingCandidates.push(data);
+            console.log("🔓 Camera: Public stream detected");
+            overlay.style.display = "none";
+            socket.emit("join", { room: streamId, role: "camera", clientId });
           }
-        }
-      });
-
-      socket.on("peer-joined", ({ id, role }) => {
-        if (isClosed) return; // Stop re-joining if director previously closed this camera
-        if (role === "director") {
-          console.log("🎬 Director joined! Refreshing connection...");
-          checkAccess();
-        }
-      });
-
-      socket.on("discovery-request", () => {
-        if (isClosed) return;
-        console.log("📡 Received discovery request. Re-announcing...");
-        checkAccess(); // Re-emit join
-      });
-    }
-
-    /* ===== DATA CHANNEL ===== */
-    let dataChannel = null;
-    function setupDataChannel() {
-      if (!pc) return;
-      // Director creates the channel usually (offerer), but we can creating it here too if negotiated
-      // However, director sends OFFER. So Director should create Data Channel.
-      // We just need to handle ondatachannel.
-
-      pc.ondatachannel = (event) => {
-        console.log("📡 Data Channel Received:", event.channel.label);
-        dataChannel = event.channel;
-        dataChannel.onopen = () => console.log("✅ Data Channel Open");
-        dataChannel.onmessage = handleMessage;
-      };
-    }
-
-    function handleMessage(event) {
-      const msg = JSON.parse(event.data);
-      if (msg.type === "ack") {
-        // handle flow control if needed
-      }
-    }
-    initWebRTC();
-
-
-    /* ===== ACTIONS ===== */
-    function toggleMic() {
-      micOn = !micOn;
-      if (mediaStream) {
-        mediaStream.getAudioTracks().forEach(t => (t.enabled = micOn));
-      }
-      micBtn.classList.toggle("off", !micOn);
-    }
-
-    function toggleCam() {
-      camOn = !camOn;
-      if (mediaStream) {
-        mediaStream.getVideoTracks().forEach(t => (t.enabled = camOn));
-      }
-      camBtn.classList.toggle("off", !camOn);
-    }
-
-    async function leave() {
-      if (await confirm("Stop Streaming?\n\nThis will end your session and take you back to the home page.", "destructive")) {
-        location.href = 'index.html';
-      }
-    }
-
-    /* ===== ORIENTATION ===== */
-    const rotations = {};
-    function applyOrientation() {
-      const orient = window.orientation;
-      let rot = 0;
-      if (orient === 90) rot = -90;
-      if (orient === -90) rot = 90;
-      if (orient === 180) rot = 180;
-
-      rotations[socket.id] = rot;
-      socket.emit("camera-rotate", { room: streamId, rotation: rot });
-
-      video.style.transform = isLive ? `scale(1.05) rotate(${rot}deg)` : `rotate(${rot}deg)`;
-    }
-    window.addEventListener("orientationchange", applyOrientation);
-    setInterval(applyOrientation, 2000);
-
-    /* ===== WAKE LOCK RE-ACQUISITION ===== */
-    document.addEventListener('visibilitychange', async () => {
-      if (wakeLock !== null && document.visibilityState === 'visible') {
-        await requestWakeLock();
-      }
-    });
-
-    /* ===== ACCESS CHECK ===== */
-    async function checkAccess() {
-      try {
-        const res = await fetch("/api/streams");
-        const all = await res.json();
-        const stream = all.find(s => s.id === streamId);
-
-        if (stream && stream.camera_access === "protected") {
-          console.log("🔒 Camera: Protected stream detected");
-          overlay.style.display = "flex";
-          joinBtn.onclick = () => {
-            const pass = passInput.value.trim();
-            if (!pass) return;
-            socket.emit("join", { room: streamId, role: "camera", password: pass, clientId });
-          };
-        } else {
-          console.log("🔓 Camera: Public stream detected");
+        } catch (e) {
+          console.warn("Check access failed, defaulting to public join", e);
           overlay.style.display = "none";
           socket.emit("join", { room: streamId, role: "camera", clientId });
         }
-      } catch (e) {
-        console.warn("Check access failed, defaulting to public join", e);
+      }
+
+      socket.on("join-error", (msg) => {
+        overlay.style.display = "flex";
+        errorMsg.style.display = "block";
+        passInput.value = "";
+        passInput.focus();
+      });
+
+      socket.on("join-success", () => {
         overlay.style.display = "none";
-        socket.emit("join", { room: streamId, role: "camera", clientId });
-      }
-    }
+      });
 
-    socket.on("join-error", (msg) => {
-      overlay.style.display = "flex";
-      errorMsg.style.display = "block";
-      passInput.value = "";
-      passInput.focus();
-    });
+      /* ===== PERSISTENT SEGMENT STORAGE (IndexedDB) ===== */
+      class SegmentDB {
+        constructor() {
+          this.dbName = "CourtStreamClips";
+          this.dbVersion = 1;
+          this.db = null;
+        }
 
-    socket.on("join-success", () => {
-      overlay.style.display = "none";
-    });
-
-    /* ===== PERSISTENT SEGMENT STORAGE (IndexedDB) ===== */
-    class SegmentDB {
-      constructor() {
-        this.dbName = "CourtStreamClips";
-        this.dbVersion = 1;
-        this.db = null;
-      }
-
-      async init() {
-        return new Promise((resolve, reject) => {
-          const request = indexedDB.open(this.dbName, this.dbVersion);
-          request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains("segments")) {
-              const store = db.createObjectStore("segments", { keyPath: "id", autoIncrement: true });
-              store.createIndex("status", "status", { unique: false });
-              store.createIndex("sessionId", "sessionId", { unique: false });
-            }
-          };
-          request.onsuccess = (e) => {
-            this.db = e.target.result;
-            resolve();
-          };
-          request.onerror = (e) => reject(e.target.error);
-        });
-      }
-
-      async saveSegment(segment) {
-        return new Promise((resolve, reject) => {
-          const tx = this.db.transaction("segments", "readwrite");
-          const store = tx.objectStore("segments");
-          const request = store.add({
-            ...segment,
-            status: "pending", // pending, uploading, completed, failed
-            retryCount: 0,
-            createdAt: Date.now()
+        async init() {
+          return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, this.dbVersion);
+            request.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains("segments")) {
+                const store = db.createObjectStore("segments", { keyPath: "id", autoIncrement: true });
+                store.createIndex("status", "status", { unique: false });
+                store.createIndex("sessionId", "sessionId", { unique: false });
+              }
+            };
+            request.onsuccess = (e) => {
+              this.db = e.target.result;
+              resolve();
+            };
+            request.onerror = (e) => reject(e.target.error);
           });
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = (e) => reject(e.target.error);
-        });
-      }
+        }
 
-      async getPendingSegments() {
-        return new Promise((resolve, reject) => {
-          const tx = this.db.transaction("segments", "readonly");
+        async saveSegment(segment) {
+          return new Promise((resolve, reject) => {
+            const tx = this.db.transaction("segments", "readwrite");
+            const store = tx.objectStore("segments");
+            const request = store.add({
+              ...segment,
+              status: "pending", // pending, uploading, completed, failed
+              retryCount: 0,
+              createdAt: Date.now()
+            });
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = (e) => reject(e.target.error);
+          });
+        }
+
+        async getPendingSegments() {
+          return new Promise((resolve, reject) => {
+            const tx = this.db.transaction("segments", "readonly");
+            const store = tx.objectStore("segments");
+            const index = store.index("status");
+            const request = index.getAll("pending");
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = (e) => reject(e.target.error);
+          });
+        }
+
+        async updateSegmentStatus(id, status, error = null) {
+          return new Promise((resolve, reject) => {
+            const tx = this.db.transaction("segments", "readwrite");
+            const store = tx.objectStore("segments");
+            const getReq = store.get(id);
+            getReq.onsuccess = () => {
+              const data = getReq.result;
+              data.status = status;
+              if (error) data.lastError = error;
+              if (status === "failed") data.retryCount++;
+              store.put(data).onsuccess = () => resolve();
+            };
+          });
+        }
+
+        async clearCompleted() {
+          const tx = this.db.transaction("segments", "readwrite");
           const store = tx.objectStore("segments");
           const index = store.index("status");
-          const request = index.getAll("pending");
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = (e) => reject(e.target.error);
-        });
-      }
-
-      async updateSegmentStatus(id, status, error = null) {
-        return new Promise((resolve, reject) => {
-          const tx = this.db.transaction("segments", "readwrite");
-          const store = tx.objectStore("segments");
-          const getReq = store.get(id);
-          getReq.onsuccess = () => {
-            const data = getReq.result;
-            data.status = status;
-            if (error) data.lastError = error;
-            if (status === "failed") data.retryCount++;
-            store.put(data).onsuccess = () => resolve();
+          const request = index.openCursor(IDBKeyRange.only("completed"));
+          request.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              cursor.delete();
+              cursor.continue();
+            }
           };
+        }
+      }
+
+      const segmentDB = new SegmentDB();
+      segmentDB.init().then(() => {
+        console.log("💾 IndexedDB Initialized");
+        startUploadManager();
+      });
+
+      /* ===== ISO RECORDING (SEGMENTED) ===== */
+      let isoRecorder = null;
+      let currentIsoSessionId = null;
+      let segmentCounter = 0;
+
+      socket.on("start-iso", async ({ sessionId }) => {
+        console.log("🎥 Starting Segmented ISO Recording for Session:", sessionId);
+        currentIsoSessionId = sessionId;
+        segmentCounter = 0;
+        if (!mediaStream) return;
+
+        try {
+          const options = { mimeType: "video/webm;codecs=vp9,opus", videoBitsPerSecond: 2500000 };
+          if (!MediaRecorder.isTypeSupported(options.mimeType)) delete options.mimeType;
+
+          isoRecorder = new MediaRecorder(mediaStream, options);
+          isoRecorder.ondataavailable = async (e) => {
+            if (e.data && e.data.size > 1000) { // Essential check for valid blobs
+              const segId = segmentCounter++;
+              console.log(`💾 Saving Segment ${segId} (${(e.data.size / 1024).toFixed(1)} KB)`);
+              await segmentDB.saveSegment({
+                sessionId: currentIsoSessionId,
+                segmentIndex: segId,
+                blob: e.data,
+                camId: socket.id,
+                timestamp: Date.now()
+              });
+              // Trigger manager immediately
+              processUploadQueue();
+            }
+          };
+
+          // RECORD IN 60s SEGMENTS
+          isoRecorder.start(60000);
+
+          liveBadge.textContent = "REC";
+          liveBadge.style.background = "#b91c1c";
+          liveBadge.style.display = "inline-block";
+
+        } catch (e) {
+          console.error("Failed to start segmented ISO recorder:", e);
+        }
+      });
+
+      let isUploaderActive = false;
+      function startUploadManager() {
+        setInterval(processUploadQueue, 5000); // Check every 5s
+        setInterval(() => segmentDB.clearCompleted(), 60000); // Cleanup every minute
+      }
+
+      async function processUploadQueue() {
+        if (isUploaderActive) return;
+        isUploaderActive = true;
+
+        try {
+          const pending = await segmentDB.getPendingSegments();
+          if (pending.length === 0) {
+            isUploaderActive = false;
+            return;
+          }
+
+          console.log(`🚀 Found ${pending.length} unsent segments. Starting background upload...`);
+
+          for (const seg of pending) {
+            try {
+              await segmentDB.updateSegmentStatus(seg.id, "uploading");
+              await uploadSegmentXHR(seg);
+              await segmentDB.updateSegmentStatus(seg.id, "completed");
+
+              // Notify Director
+              socket.emit("iso-segment-uploaded", {
+                room: streamId,
+                sessionId: seg.sessionId,
+                segmentIndex: seg.segmentIndex,
+                camId: seg.camId
+              });
+
+              console.log(`✅ Segment ${seg.segmentIndex} uploaded successfully`);
+            } catch (err) {
+              console.error(`❌ Segment ${seg.segmentIndex} upload failed:`, err);
+              await segmentDB.updateSegmentStatus(seg.id, "pending", err.message); // Back to pending for retry
+              break; // Stop queue on error (wait for next heartbeat)
+            }
+          }
+        } catch (e) {
+          console.error("Upload Manager Error:", e);
+        } finally {
+          isUploaderActive = false;
+        }
+      }
+
+      async function uploadSegmentXHR(seg) {
+        return new Promise((resolve, reject) => {
+          const formData = new FormData();
+          formData.append("video", seg.blob, `seg_${seg.segmentIndex}.webm`);
+          formData.append("sessionId", seg.sessionId);
+          formData.append("camId", seg.camId);
+          formData.append("segmentIndex", seg.segmentIndex);
+          formData.append("isSegment", "true");
+
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", "/api/upload-iso", true);
+
+          xhr.onload = () => {
+            if (xhr.status === 200) resolve(JSON.parse(xhr.responseText));
+            else reject(new Error(`Server returned ${xhr.status}`));
+          };
+          xhr.onerror = () => reject(new Error("Network Error"));
+          xhr.send(formData);
         });
       }
 
-      async clearCompleted() {
-        const tx = this.db.transaction("segments", "readwrite");
-        const store = tx.objectStore("segments");
-        const index = store.index("status");
-        const request = index.openCursor(IDBKeyRange.only("completed"));
-        request.onsuccess = (e) => {
-          const cursor = e.target.result;
-          if (cursor) {
-            cursor.delete();
-            cursor.continue();
-          }
-        };
-      }
-    }
+      socket.on("stop-iso", (options) => {
+        console.log("🛑 Stopping ISO Recording. Options:", options);
+        if (isoRecorder) {
+          isoRecorder.stop();
+          liveBadge.textContent = "STOPPED";
+          setTimeout(() => liveBadge.style.display = "none", 3000);
+        }
+      });
 
-    const segmentDB = new SegmentDB();
-    segmentDB.init().then(() => {
-      console.log("💾 IndexedDB Initialized");
-      startUploadManager();
-    });
-
-    /* ===== ISO RECORDING (SEGMENTED) ===== */
-    let isoRecorder = null;
-    let currentIsoSessionId = null;
-    let segmentCounter = 0;
-
-    socket.on("start-iso", async ({ sessionId }) => {
-      console.log("🎥 Starting Segmented ISO Recording for Session:", sessionId);
-      currentIsoSessionId = sessionId;
-      segmentCounter = 0;
-      if (!mediaStream) return;
-
-      try {
-        const options = { mimeType: "video/webm;codecs=vp9,opus", videoBitsPerSecond: 2500000 };
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) delete options.mimeType;
-
-        isoRecorder = new MediaRecorder(mediaStream, options);
-        isoRecorder.ondataavailable = async (e) => {
-          if (e.data && e.data.size > 1000) { // Essential check for valid blobs
-            const segId = segmentCounter++;
-            console.log(`💾 Saving Segment ${segId} (${(e.data.size / 1024).toFixed(1)} KB)`);
-            await segmentDB.saveSegment({
-              sessionId: currentIsoSessionId,
-              segmentIndex: segId,
-              blob: e.data,
-              camId: socket.id,
-              timestamp: Date.now()
-            });
-            // Trigger manager immediately
-            processUploadQueue();
-          }
-        };
-
-        // RECORD IN 60s SEGMENTS
-        isoRecorder.start(60000);
-
-        liveBadge.textContent = "REC";
-        liveBadge.style.background = "#b91c1c";
-        liveBadge.style.display = "inline-block";
-
-      } catch (e) {
-        console.error("Failed to start segmented ISO recorder:", e);
-      }
-    });
-
-    let isUploaderActive = false;
-    function startUploadManager() {
-      setInterval(processUploadQueue, 5000); // Check every 5s
-      setInterval(() => segmentDB.clearCompleted(), 60000); // Cleanup every minute
-    }
-
-    async function processUploadQueue() {
-      if (isUploaderActive) return;
-      isUploaderActive = true;
-
-      try {
-        const pending = await segmentDB.getPendingSegments();
-        if (pending.length === 0) {
-          isUploaderActive = false;
+      // New Handlers for Delayed Workflow
+      function handleTransferRequest() {
+        console.log("📨 Received Transfer Request from Director");
+        if (!heldIsoBlob) {
+          console.warn("⚠️ No held recording to transfer!");
           return;
         }
 
-        console.log(`🚀 Found ${pending.length} unsent segments. Starting background upload...`);
-
-        for (const seg of pending) {
-          try {
-            await segmentDB.updateSegmentStatus(seg.id, "uploading");
-            await uploadSegmentXHR(seg);
-            await segmentDB.updateSegmentStatus(seg.id, "completed");
-
-            // Notify Director
-            socket.emit("iso-segment-uploaded", {
-              room: streamId,
-              sessionId: seg.sessionId,
-              segmentIndex: seg.segmentIndex,
-              camId: seg.camId
-            });
-
-            console.log(`✅ Segment ${seg.segmentIndex} uploaded successfully`);
-          } catch (err) {
-            console.error(`❌ Segment ${seg.segmentIndex} upload failed:`, err);
-            await segmentDB.updateSegmentStatus(seg.id, "pending", err.message); // Back to pending for retry
-            break; // Stop queue on error (wait for next heartbeat)
-          }
+        if (dataChannel && dataChannel.readyState === "open") {
+          liveBadge.innerHTML = "SENDING";
+          liveBadge.style.background = "#b91c1c";
+          transferRecording(heldIsoBlob);
+          // Verify if we want to clear it? Maybe keep until confirmed? 
+          // Let's keep it until discard or new session clears it.
+        } else {
+          alert("Director disconnected. Cannot transfer.");
         }
-      } catch (e) {
-        console.error("Upload Manager Error:", e);
-      } finally {
-        isUploaderActive = false;
       }
-    }
 
-    async function uploadSegmentXHR(seg) {
-      return new Promise((resolve, reject) => {
+      function handleDiscardRequest() {
+        console.log("🗑️ Discard Request. Clearing held blob.");
+        heldIsoBlob = null;
+        liveBadge.textContent = "CLEARED";
+        setTimeout(() => liveBadge.style.display = "none", 2000);
+      }
+
+      let isTransferring = false;
+      async function transferRecording(blob) {
+        if (isTransferring) return;
+        isTransferring = true;
+
+        const CHUNK_SIZE = 16 * 1024; // 16KB safe chunk size
+        const totalSize = blob.size;
+        const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
+
+        const overlay = document.getElementById("uploadProgressOverlay");
+        const fill = document.getElementById("uploadProgressFill");
+        const statusText = document.getElementById("uploadStatusText");
+        const retryBtn = document.getElementById("retryUploadBtn");
+
+        overlay.style.display = "flex";
+        retryBtn.style.display = "none";
+        statusText.innerText = "Transferring to Director...";
+        statusText.style.color = "#94a3b8";
+
+        try {
+          // metadata
+          dataChannel.send(JSON.stringify({
+            type: "meta",
+            size: totalSize,
+            mime: blob.type,
+            name: `camera_${socket.id}.webm`
+          }));
+
+          const buffer = await blob.arrayBuffer();
+          const updateProgress = (p) => {
+            fill.style.width = p + "%";
+          };
+
+          for (let i = 0; i < totalChunks; i++) {
+            if (!dataChannel || dataChannel.readyState !== "open") {
+              throw new Error("Connection closed during transfer");
+            }
+
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, totalSize);
+            const chunk = buffer.slice(start, end);
+
+            while (dataChannel.bufferedAmount > 256 * 1024) {
+              await new Promise(r => setTimeout(r, 10));
+              if (!dataChannel || dataChannel.readyState !== "open") throw new Error("Connection lost");
+            }
+
+            dataChannel.send(chunk);
+
+            if (i % 20 === 0) {
+              updateProgress(Math.floor((i / totalChunks) * 100));
+            }
+          }
+
+          updateProgress(100);
+          dataChannel.send(JSON.stringify({ type: "end" }));
+          console.log("✅ Transfer Complete");
+          statusText.innerText = "Transfer Complete!";
+          statusText.style.color = "#10b981";
+
+          setTimeout(() => {
+            overlay.style.display = "none";
+            liveBadge.style.display = "none";
+            isTransferring = false;
+          }, 1500);
+
+        } catch (e) {
+          console.error("Transfer Error:", e);
+          statusText.innerText = "Transfer Failed: " + e.message;
+          statusText.style.color = "#ef4444";
+          retryBtn.style.display = "block";
+          isTransferring = false;
+        }
+      }
+
+      function retryTransfer() {
+        if (heldIsoBlob) {
+          transferRecording(heldIsoBlob);
+        } else {
+          alert("No data found to retry. Recording might have been discarded.");
+          document.getElementById("uploadProgressOverlay").style.display = "none";
+        }
+      }
+
+      async function uploadIso(blob) {
+        console.log("📤 Uploading ISO file using XHR...", blob.size);
+        const overlay = document.getElementById("uploadProgressOverlay");
+        const fill = document.getElementById("uploadProgressFill");
+
+        overlay.style.display = "flex";
+        fill.style.width = "0%";
+
+        liveBadge.textContent = "UPLOADING";
+        liveBadge.style.background = "#f59e0b"; // Orange
+        liveBadge.style.display = "inline-block";
+
         const formData = new FormData();
-        formData.append("video", seg.blob, `seg_${seg.segmentIndex}.webm`);
-        formData.append("sessionId", seg.sessionId);
-        formData.append("camId", seg.camId);
-        formData.append("segmentIndex", seg.segmentIndex);
-        formData.append("isSegment", "true");
+        formData.append("video", blob, `cam_${socket.id}.webm`);
+        formData.append("sessionId", currentIsoSessionId || "unknown");
+        formData.append("camId", socket.id);
+        formData.append("rotation", assignedRotation);
+        formData.append("zoom", assignedZoom);
+        formData.append("flipHorizontal", assignedFlip);
 
         const xhr = new XMLHttpRequest();
         xhr.open("POST", "/api/upload-iso", true);
 
+        // Track progress
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
+            fill.style.width = percent + "%";
+            socket.emit("iso-upload-progress", { room: streamId, progress: percent });
+          }
+        };
+
         xhr.onload = () => {
-          if (xhr.status === 200) resolve(JSON.parse(xhr.responseText));
-          else reject(new Error(`Server returned ${xhr.status}`));
-        };
-        xhr.onerror = () => reject(new Error("Network Error"));
-        xhr.send(formData);
-      });
-    }
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status === 200 && data.success) {
+              console.log("✅ Upload complete:", data.filename);
+              socket.emit("iso-upload-complete", { room: streamId, filename: data.filename });
+              liveBadge.textContent = "DONE";
+              liveBadge.style.background = "#10b981"; // Green
 
-    socket.on("stop-iso", (options) => {
-      console.log("🛑 Stopping ISO Recording. Options:", options);
-      if (isoRecorder) {
-        isoRecorder.stop();
-        liveBadge.textContent = "STOPPED";
-        setTimeout(() => liveBadge.style.display = "none", 3000);
-      }
-    });
+              // Local Backup Download
+              try {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `backup_cam_${socket.id}_${Date.now()}.webm`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                console.log("💾 Triggered local backup download");
+              } catch (err) {
+                console.error("Failed to trigger local backup download", err);
+              }
 
-    // New Handlers for Delayed Workflow
-    function handleTransferRequest() {
-      console.log("📨 Received Transfer Request from Director");
-      if (!heldIsoBlob) {
-        console.warn("⚠️ No held recording to transfer!");
-        return;
-      }
-
-      if (dataChannel && dataChannel.readyState === "open") {
-        liveBadge.innerHTML = "SENDING";
-        liveBadge.style.background = "#b91c1c";
-        transferRecording(heldIsoBlob);
-        // Verify if we want to clear it? Maybe keep until confirmed? 
-        // Let's keep it until discard or new session clears it.
-      } else {
-        alert("Director disconnected. Cannot transfer.");
-      }
-    }
-
-    function handleDiscardRequest() {
-      console.log("🗑️ Discard Request. Clearing held blob.");
-      heldIsoBlob = null;
-      liveBadge.textContent = "CLEARED";
-      setTimeout(() => liveBadge.style.display = "none", 2000);
-    }
-
-    let isTransferring = false;
-    async function transferRecording(blob) {
-      if (isTransferring) return;
-      isTransferring = true;
-
-      const CHUNK_SIZE = 16 * 1024; // 16KB safe chunk size
-      const totalSize = blob.size;
-      const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
-
-      const overlay = document.getElementById("uploadProgressOverlay");
-      const fill = document.getElementById("uploadProgressFill");
-      const statusText = document.getElementById("uploadStatusText");
-      const retryBtn = document.getElementById("retryUploadBtn");
-
-      overlay.style.display = "flex";
-      retryBtn.style.display = "none";
-      statusText.innerText = "Transferring to Director...";
-      statusText.style.color = "#94a3b8";
-
-      try {
-        // metadata
-        dataChannel.send(JSON.stringify({
-          type: "meta",
-          size: totalSize,
-          mime: blob.type,
-          name: `camera_${socket.id}.webm`
-        }));
-
-        const buffer = await blob.arrayBuffer();
-        const updateProgress = (p) => {
-          fill.style.width = p + "%";
-        };
-
-        for (let i = 0; i < totalChunks; i++) {
-          if (!dataChannel || dataChannel.readyState !== "open") {
-            throw new Error("Connection closed during transfer");
-          }
-
-          const start = i * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, totalSize);
-          const chunk = buffer.slice(start, end);
-
-          while (dataChannel.bufferedAmount > 256 * 1024) {
-            await new Promise(r => setTimeout(r, 10));
-            if (!dataChannel || dataChannel.readyState !== "open") throw new Error("Connection lost");
-          }
-
-          dataChannel.send(chunk);
-
-          if (i % 20 === 0) {
-            updateProgress(Math.floor((i / totalChunks) * 100));
-          }
-        }
-
-        updateProgress(100);
-        dataChannel.send(JSON.stringify({ type: "end" }));
-        console.log("✅ Transfer Complete");
-        statusText.innerText = "Transfer Complete!";
-        statusText.style.color = "#10b981";
-
-        setTimeout(() => {
-          overlay.style.display = "none";
-          liveBadge.style.display = "none";
-          isTransferring = false;
-        }, 1500);
-
-      } catch (e) {
-        console.error("Transfer Error:", e);
-        statusText.innerText = "Transfer Failed: " + e.message;
-        statusText.style.color = "#ef4444";
-        retryBtn.style.display = "block";
-        isTransferring = false;
-      }
-    }
-
-    function retryTransfer() {
-      if (heldIsoBlob) {
-        transferRecording(heldIsoBlob);
-      } else {
-        alert("No data found to retry. Recording might have been discarded.");
-        document.getElementById("uploadProgressOverlay").style.display = "none";
-      }
-    }
-
-    async function uploadIso(blob) {
-      console.log("📤 Uploading ISO file using XHR...", blob.size);
-      const overlay = document.getElementById("uploadProgressOverlay");
-      const fill = document.getElementById("uploadProgressFill");
-
-      overlay.style.display = "flex";
-      fill.style.width = "0%";
-
-      liveBadge.textContent = "UPLOADING";
-      liveBadge.style.background = "#f59e0b"; // Orange
-      liveBadge.style.display = "inline-block";
-
-      const formData = new FormData();
-      formData.append("video", blob, `cam_${socket.id}.webm`);
-      formData.append("sessionId", currentIsoSessionId || "unknown");
-      formData.append("camId", socket.id);
-      formData.append("rotation", assignedRotation);
-      formData.append("zoom", assignedZoom);
-      formData.append("flipHorizontal", assignedFlip);
-
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/upload-iso", true);
-
-      // Track progress
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
-          fill.style.width = percent + "%";
-          socket.emit("iso-upload-progress", { room: streamId, progress: percent });
-        }
-      };
-
-      xhr.onload = () => {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (xhr.status === 200 && data.success) {
-            console.log("✅ Upload complete:", data.filename);
-            socket.emit("iso-upload-complete", { room: streamId, filename: data.filename });
-            liveBadge.textContent = "DONE";
-            liveBadge.style.background = "#10b981"; // Green
-
-            // Local Backup Download
-            try {
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.style.display = 'none';
-              a.href = url;
-              a.download = `backup_cam_${socket.id}_${Date.now()}.webm`;
-              document.body.appendChild(a);
-              a.click();
-              window.URL.revokeObjectURL(url);
-              a.remove();
-              console.log("💾 Triggered local backup download");
-            } catch (err) {
-              console.error("Failed to trigger local backup download", err);
+              setTimeout(() => {
+                liveBadge.style.display = "none";
+                overlay.style.display = "none";
+              }, 3000);
+            } else {
+              throw new Error(data.error || "Server rejected upload");
             }
-
-            setTimeout(() => {
-              liveBadge.style.display = "none";
-              overlay.style.display = "none";
-            }, 3000);
-          } else {
-            throw new Error(data.error || "Server rejected upload");
+          } catch (e) {
+            console.error("Upload process error:", e);
+            liveBadge.textContent = "ERROR";
+            overlay.style.display = "none";
           }
-        } catch (e) {
-          console.error("Upload process error:", e);
+        };
+
+        xhr.onerror = () => {
+          console.error("Network error during upload");
           liveBadge.textContent = "ERROR";
           overlay.style.display = "none";
+        };
+
+        xhr.send(formData);
+      }
+
+      /* ===== RENDER PROGRESS ===== */
+      socket.on("render-progress", ({ progress, status }) => {
+        const bar = document.getElementById("renderProgressPanel");
+        const fill = document.getElementById("renderProgressFill");
+        const text = document.getElementById("renderStatusText");
+
+        if (progress < 0) {
+          text.innerText = "Error: " + status;
+          fill.style.background = "#ef4444";
+          setTimeout(() => { bar.style.display = "none"; }, 5000);
+          return;
         }
-      };
 
-      xhr.onerror = () => {
-        console.error("Network error during upload");
-        liveBadge.textContent = "ERROR";
-        overlay.style.display = "none";
-      };
+        bar.style.display = "flex";
+        fill.style.width = progress + "%";
+        fill.style.background = "#3b82f6";
+        text.innerText = status + " (" + progress + "%)";
 
-      xhr.send(formData);
-    }
+        if (progress >= 100) {
+          setTimeout(() => { bar.style.display = "none"; }, 3000);
+        }
+      });
 
-    /* ===== UX SAFEGUARDS & ALERTS ===== */
-    window.addEventListener('beforeunload', (e) => {
-      if (isoRecorder && isoRecorder.state === 'recording') {
-        e.preventDefault();
-        e.returnValue = ''; // Shows standard browser exit prompt
-        return '';
-      }
-    });
+      // Safety Warning
+      window.addEventListener("beforeunload", (e) => {
+        // If we have an active stream or upload in progress
+        if (mediaStream || isUploaderActive || document.getElementById("uploadProgressOverlay").style.display === "flex") {
+          e.preventDefault();
+          e.returnValue = "You have an active connection or transfer. Are you sure you want to leave?";
+          return e.returnValue;
+        }
+      });
 
-    socket.on("network-warning", ({ message }) => {
-      console.warn("🌐 Network Warning:", message);
-      const alertDiv = document.createElement("div");
-      alertDiv.style.cssText = `
-        position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
-        background: #f59e0b; color: white; padding: 12px 24px; border-radius: 8px;
-        font-size: 14px; font-weight: 600; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        display: flex; align-items: center; gap: 10px; transition: all 0.5s ease;
-      `;
-      alertDiv.innerHTML = `
-        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        <span>Different Network than Director</span>
-        <button onclick="this.parentElement.remove()" style="background:none; border:none; color:white; cursor:pointer; font-size:18px;">×</button>
-      `;
-      document.body.appendChild(alertDiv);
-      setTimeout(() => alertDiv.style.opacity = '0.5', 10000);
-    });
-    socket.on("render-progress", ({ progress, status }) => {
-      const bar = document.getElementById("renderProgressPanel");
-      const fill = document.getElementById("renderProgressFill");
-      const text = document.getElementById("renderStatusText");
+    </script>
 
-      if (progress < 0) {
-        text.innerText = "Error: " + status;
-        fill.style.background = "#ef4444";
-        setTimeout(() => { bar.style.display = "none"; }, 5000);
-        return;
-      }
-
-      bar.style.display = "flex";
-      fill.style.width = progress + "%";
-      fill.style.background = "#3b82f6";
-      text.innerText = status + " (" + progress + "%)";
-
-      if (progress >= 100) {
-        setTimeout(() => { bar.style.display = "none"; }, 3000);
-      }
-    });
-  </script>
-
-  <div id="renderProgressPanel"
-    style="display:none; position:fixed; bottom:100px; left:20px; right:20px; background:rgba(0,0,0,0.8); padding:16px; border-radius:12px; border:1px solid var(--border); z-index:200; flex-direction:column; gap:8px;">
-    <div style="font-size:12px; font-weight:600; color:#94a3b8;" id="renderStatusText">Rendering Video...</div>
-    <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden;">
-      <div id="renderProgressFill" style="width:0%; height:100%; background:#3b82f6; transition: width 0.3s ease;">
+    <div id="renderProgressPanel"
+      style="display:none; position:fixed; bottom:100px; left:20px; right:20px; background:rgba(0,0,0,0.8); padding:16px; border-radius:12px; border:1px solid var(--border); z-index:200; flex-direction:column; gap:8px;">
+      <div style="font-size:12px; font-weight:600; color:#94a3b8;" id="renderStatusText">Rendering Video...</div>
+      <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden;">
+        <div id="renderProgressFill" style="width:0%; height:100%; background:#3b82f6; transition: width 0.3s ease;">
+        </div>
       </div>
     </div>
-  </div>
 </body>
 
 </html>

@@ -443,35 +443,47 @@ app.post("/api/render-iso", async (req, res) => {
         let cmd = ffmpeg(inputPath).setStartTime(startTime);
         if (duration) cmd.setDuration(duration);
 
-        const rot = cut.rotation ?? uploadData?.rotation ?? 0;
-        const zoom = cut.zoom ?? uploadData?.zoom ?? 1;
-        const flip = cut.flipHorizontal ?? uploadData?.flipHorizontal ?? false;
+        let vfOptions = [];
+
+        // 1. Prioritize cut-specific metadata (Dynamic Zoom/Rotation from Director)
+        // 2. Fallback to general camera metadata
+        const rot = cut.rotation !== undefined ? cut.rotation : (uploadData?.rotation || 0);
+        const zoom = cut.zoom !== undefined ? cut.zoom : (uploadData?.zoom || 1);
+        const flip = cut.flipHorizontal !== undefined ? cut.flipHorizontal : (uploadData?.flipHorizontal || false);
 
         if (rot === 90) vfOptions.push("transpose=1");
+        else if (rot === 180) vfOptions.push("transpose=1,transpose=1");
         else if (rot === 270 || rot === -90) vfOptions.push("transpose=2");
-        else if (rot === 180 || rot === -180) vfOptions.push("transpose=2,transpose=2");
 
         if (flip) vfOptions.push("hflip");
-        if (zoom > 1) vfOptions.push(`crop=iw/${zoom}:ih/${zoom}`);
 
-        vfOptions.push(
-          "scale=1280:720:force_original_aspect_ratio=decrease",
-          "pad=1280:720:(ow-iw)/2:(oh-ih)/2",
-          "setsar=1",
-          "format=yuv420p"
-        );
+        if (zoom > 1) {
+          const w = 1920;
+          const h = 1080;
+          const cropW = w / zoom;
+          const cropH = h / zoom;
+          // Center crop
+          const cropX = (w - cropW) / 2;
+          const cropY = (h - cropH) / 2;
+          vfOptions.push(`crop=${cropW}:${cropH}:${cropX}:${cropY}`);
+          vfOptions.push(`scale=1920:1080`); // Always scale back up to base resolution
+        } else {
+          // Ensure base resolution for consistency
+          vfOptions.push(`scale=1920:1080`);
+        }
 
-        cmd
-          .videoFilters(vfOptions)
-          .outputOptions([
-            "-c:v libx264",
-            "-preset ultrafast",
-            "-crf 23",
-            "-r 30",
-            "-c:a aac",
-            "-ar 44100",
-            "-force_key_frames expr:gte(t,n_forced*2)" // Force keyframes for smoother concat
-          ])
+        if (vfOptions.length > 0) {
+          cmd.videoFilters(vfOptions);
+        }
+
+        cmd.outputOptions([
+          "-c:v libx264",
+          "-preset veryfast",
+          "-crf 23",
+          "-c:a aac",
+          "-b:a 192k",
+          "-pix_fmt yuv420p"
+        ])
           .on("start", (cmdLine) => {
             console.log(`🎬 FFmpeg Started Clip ${i}: ${cmdLine}`);
           })
@@ -728,31 +740,9 @@ io.on("connection", socket => {
 
       socket.join(room);
       socket.room = room;
-      socket.data.role = role;
-      socket.data.clientId = payload.clientId || null;
-      socket.data.ip = socket.handshake.address; // Track public IP
+      socket.data.role = role; // Official Socket.IO way to store metadata
+      socket.data.clientId = payload.clientId || null; // Persistent client ID
       socket.emit("join-success");
-
-      // NETWORK MISMATCH DETECTION
-      if (role === "camera") {
-        const clients = io.sockets.adapter.rooms.get(room);
-        if (clients) {
-          for (const cid of clients) {
-            const s = io.sockets.sockets.get(cid);
-            if (s && s.data.role === "director") {
-              if (s.data.ip !== socket.data.ip) {
-                console.log(`⚠️ Network Mismatch: Camera ${socket.id} is on different IP than Director`);
-                socket.emit("network-warning", {
-                  message: "You are on a different network than the Director. Performance may be affected.",
-                  directorIp: s.data.ip,
-                  cameraIp: socket.data.ip
-                });
-              }
-              break;
-            }
-          }
-        }
-      }
 
       console.log(`👤 ${socket.id} joined room ${room} as ${role} (Client: ${socket.data.clientId})`);
 
