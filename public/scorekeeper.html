@@ -1189,11 +1189,21 @@
             const rB = document.getElementById("rosterB");
             rA.innerHTML = ''; rB.innerHTML = '';
 
-            state.teamA.roster.forEach(p => rA.appendChild(createPlayerRow('A', p)));
-            state.teamB.roster.forEach(p => rB.appendChild(createPlayerRow('B', p)));
+            let winningTeam = null;
+            let maxPts = 0;
+            if (state.teamA.score > state.teamB.score) {
+                winningTeam = 'A';
+                maxPts = Math.max(...state.teamA.roster.map(p => p.pts));
+            } else if (state.teamB.score > state.teamA.score) {
+                winningTeam = 'B';
+                maxPts = Math.max(...state.teamB.roster.map(p => p.pts));
+            }
+
+            state.teamA.roster.forEach(p => rA.appendChild(createPlayerRow('A', p, winningTeam === 'A' && maxPts > 0 && p.pts === maxPts)));
+            state.teamB.roster.forEach(p => rB.appendChild(createPlayerRow('B', p, winningTeam === 'B' && maxPts > 0 && p.pts === maxPts)));
         }
 
-        function createPlayerRow(team, player) {
+        function createPlayerRow(team, player, isMotm = false) {
             const div = document.createElement("div");
             div.className = `player-row team${team}`;
             div.onclick = () => openActionModal(team, player);
@@ -1219,8 +1229,11 @@
 
             const statsDiv = document.createElement("div");
             statsDiv.style.textAlign = "right";
+
+            let motmHtml = isMotm ? `<span style="background:var(--amber); color:#0f172a; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:800; margin-right:6px; letter-spacing:0.5px; vertical-align:middle; display:inline-block;">MOTM 🏆</span>` : '';
+
             statsDiv.innerHTML = `
-              <div style="font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px;">${player.pts} pts</div>
+              <div style="font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px;">${motmHtml}${player.pts} pts</div>
               <div class="fouls">${foulHtml}</div>
             `;
             div.appendChild(statsDiv);
