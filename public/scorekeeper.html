@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Basketball Scorekeeper – CourtStream</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='2'><circle cx='12' cy='12' r='10'/><path d='M9.5 8l6 4-6 4V8z' fill='white' stroke='none'/></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Inter:wght@400;600;800&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #161922;
+            --border: #262b3d;
+            --text: #e6e6eb;
+            --muted: #9aa0b4;
+            --blue: #3b82f6;
+            --red: #ef4444;
+            --green: #22c55e;
+            --amber: #f59e0b;
+            --teamA: var(--red);
+            --teamB: var(--blue);
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', system-ui, sans-serif;
+            overflow: hidden;
+            /* Prevent pull-to-refresh on mobile */
+            overscroll-behavior-y: none;
+        }
+
+        /* FULL SCREEN APP CONTAINER */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            max-width: 450px;
+            /* Max width for testing on desktop, fills mobile */
+            margin: 0 auto;
+            background: var(--bg);
+            position: relative;
+        }
+
+        /* HEADER / BACK NAVIGATION */
+        .header {
+            height: 50px;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        /* SCOREBOARD (TOP SECTION) */
+        .scoreboard {
+            display: flex;
+            justify-content: space-between;
+            padding: 16px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .team-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+        }
+
+        .team-name {
+            font-size: 16px;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            color: var(--muted);
+            cursor: pointer;
+            /* Can edit name later */
+        }
+
+        .team-score {
+            font-size: 56px;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .teamA-score {
+            color: var(--teamA);
+        }
+
+        .teamB-score {
+            color: var(--teamB);
+        }
+
+        .timeout-btn {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text);
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: background 0.2s;
+        }
+
+        .timeout-btn.used {
+            opacity: 0.5;
+            text-decoration: line-through;
+        }
+
+        /* PERIOD / MATCH CONTROLS */
+        .match-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 8px;
+            background: #000;
+            flex-shrink: 0;
+            font-weight: 600;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+            gap: 16px;
+        }
+
+        /* ROSTERS (MIDDLE SECTION) */
+        .rosters-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .roster {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            /* specific styling for smooth scroll on iOS */
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .roster::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .roster::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        .player-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            background: var(--panel);
+            border-radius: 12px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: transform 0.1s, border-color 0.2s;
+            user-select: none;
+        }
+
+        .player-row:active {
+            transform: scale(0.97);
+        }
+
+        .player-row.teamA:active {
+            border-color: var(--teamA);
+        }
+
+        .player-row.teamB:active {
+            border-color: var(--teamB);
+        }
+
+        .jersey {
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .fouls {
+            font-size: 12px;
+            color: var(--red);
+            font-weight: 600;
+            display: flex;
+            gap: 2px;
+        }
+
+        .foul-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--border);
+        }
+
+        .foul-dot.active {
+            background: var(--red);
+        }
+
+        /* BOTTOM ACTIONS */
+        .bottom-bar {
+            padding: 16px;
+            background: var(--panel);
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+            flex-shrink: 0;
+            /* PB for mobile home indicator */
+            padding-bottom: env(safe-area-inset-bottom, 16px);
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 800;
+            color: white;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-livesheet {
+            background: var(--border);
+        }
+
+        .btn-endgame {
+            background: var(--red);
+        }
+
+        /* ACTION POPUP (MODAL) */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            display: flex;
+            align-items: flex-end;
+            /* Pop up from bottom */
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .action-sheet {
+            background: var(--panel);
+            width: 100%;
+            max-width: 450px;
+            border-radius: 24px 24px 0 0;
+            padding: 24px;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            /* Add bottom padding for iOS home indicator */
+            padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+        }
+
+        .modal-overlay.active .action-sheet {
+            transform: translateY(0);
+        }
+
+        .sheet-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .sheet-title {
+            font-size: 20px;
+            font-weight: 800;
+            margin: 0 0 4px;
+        }
+
+        .sheet-subtitle {
+            color: var(--muted);
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .score-btn {
+            background: var(--border);
+            border: 2px solid transparent;
+            color: white;
+            padding: 20px;
+            border-radius: 16px;
+            font-size: 24px;
+            font-weight: 800;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .score-btn small {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .score-btn.pt1:active {
+            border-color: var(--green);
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        .score-btn.pt2:active {
+            border-color: var(--blue);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .score-btn.pt3:active {
+            border-color: var(--amber);
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        .score-btn.foul {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            border: 2px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .score-btn.foul:active {
+            border-color: var(--red);
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        .cancel-btn {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* LIVE SHEET MODAL (FULL SCREEN) */
+        .livesheet-modal {
+            position: fixed;
+            inset: 0;
+            background: #f8fafc;
+            /* light paper background */
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            color: #0f172a;
+        }
+
+        .livesheet-header {
+            background: #1e293b;
+            color: white;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: max(16px, env(safe-area-inset-top));
+        }
+
+        .livesheet-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .sheet-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: repeating-linear-gradient(#f8fafc, #f8fafc 39px, #e2e8f0 40px);
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .running-score {
+            display: grid;
+            grid-template-columns: 1fr 60px 1fr;
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .rs-col {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Handwritten effect for score inputs */
+        .ink {
+            font-family: 'Caveat', cursive;
+            font-size: 22px;
+            color: #1d4ed8;
+            /* Blue pen ink */
+            transform: rotate(-2deg);
+            line-height: 1;
+        }
+
+        .ink.red {
+            color: #b91c1c;
+        }
+
+        /* END GAME SIGNATURE MODAL */
+        .signature-modal {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            z-index: 3000;
+            display: none;
+            flex-direction: column;
+            padding-top: env(safe-area-inset-top);
+        }
+
+        .sig-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .sig-box {
+            margin-bottom: 24px;
+        }
+
+        .sig-box label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--muted);
+        }
+
+        canvas.sig-pad {
+            width: 100%;
+            height: 120px;
+            background: white;
+            border-radius: 12px;
+            touch-action: none;
+            /* Crucial for drawing */
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="app-container">
+
+        <!-- HEADER -->
+        <div class="header">
+            <button class="back-btn" onclick="location.href='index.html'">←</button>
+            <div
+                style="flex:1; text-align:center; font-weight:800; font-size:14px; letter-spacing:1px; color:var(--muted)">
+                LIVE SCOREKEEPER</div>
+            <div style="width:24px"></div> <!-- Spacer -->
+        </div>
+
+        <!-- SCOREBOARD -->
+        <div class="scoreboard">
+            <div class="team-box">
+                <div class="team-name" onclick="renameTeam('A')" id="nameA">TEAM A</div>
+                <div class="team-score teamA-score" id="scoreA">0</div>
+                <button class="timeout-btn" onclick="takeTimeout('A')">Timeout <span id="toA">3</span></button>
+            </div>
+            <div class="team-box">
+                <div class="team-name" onclick="renameTeam('B')" id="nameB">TEAM B</div>
+                <div class="team-score teamB-score" id="scoreB">0</div>
+                <button class="timeout-btn" onclick="takeTimeout('B')">Timeout <span id="toB">3</span></button>
+            </div>
+        </div>
+
+        <div class="match-controls">
+            <button onclick="changePeriod(-1)"
+                style="padding:4px 8px; border-radius:4px; border:none; background:var(--border); color:white;">-</button>
+            <span id="periodLbl">Period 1</span>
+            <button onclick="changePeriod(1)"
+                style="padding:4px 8px; border-radius:4px; border:none; background:var(--border); color:white;">+</button>
+        </div>
+
+        <!-- ROSTERS -->
+        <div class="rosters-container">
+            <div class="roster" id="rosterA">
+                <!-- Team A Players injected here -->
+            </div>
+            <div style="width:1px; background:var(--border); margin: 8px 0;"></div>
+            <div class="roster" id="rosterB">
+                <!-- Team B Players injected here -->
+            </div>
+        </div>
+
+        <!-- BOTTOM BAR -->
+        <div class="bottom-bar">
+            <button class="action-btn btn-livesheet" onclick="openLiveSheet()">View Live Sheet</button>
+            <button class="action-btn btn-endgame" onclick="openEndGame()">End Game</button>
+        </div>
+
+    </div>
+
+    <!-- ACTION MODAL -->
+    <div class="modal-overlay" id="actionModal" onclick="closeActionModal(event)">
+        <div class="action-sheet" onclick="event.stopPropagation()">
+            <div class="sheet-header">
+                <div class="sheet-title" id="actionTitle">Player Name</div>
+                <div class="sheet-subtitle" id="actionSubtitle">Team A • #4</div>
+            </div>
+            <div class="action-grid">
+                <button class="score-btn pt1" onclick="addScore(1)">
+                    +1 <small>Free Throw</small>
+                </button>
+                <button class="score-btn pt2" onclick="addScore(2)">
+                    +2 <small>Field Goal</small>
+                </button>
+                <button class="score-btn pt3" onclick="addScore(3)" style="grid-column: span 2;">
+                    +3 <small>3-Pointer</small>
+                </button>
+            </div>
+            <button class="score-btn foul" onclick="addFoul()" style="width: 100%; margin-bottom: 16px;">
+                PERSONAL FOUL
+            </button>
+            <button class="cancel-btn" onclick="closeActionModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- LIVE SHEET PREVIEW -->
+    <div class="livesheet-modal" id="liveSheetModal">
+        <div class="livesheet-header">
+            <div style="font-weight:800;">FIBA SCORESHEET</div>
+            <button class="livesheet-close" onclick="closeLiveSheet()">✕</button>
+        </div>
+        <div class="sheet-body">
+            <h3>RUNNING SCORE</h3>
+            <div class="running-score" id="runningScoreDisplay">
+                <div class="rs-col">
+                    <div>A</div>
+                    <!-- A scores -->
+                </div>
+                <div class="rs-col">
+                    <div>M</div>
+                    <!-- Divider/Time -->
+                </div>
+                <div class="rs-col">
+                    <div>B</div>
+                    <!-- B scores -->
+                </div>
+            </div>
+            <p style="text-align:center; color:#64748b; font-size:12px; margin-top:40px;">End of live preview.</p>
+        </div>
+    </div>
+
+    <!-- END GAME SIGNATURE -->
+    <div class="signature-modal" id="signatureModal">
+        <div class="livesheet-header">
+            <div style="font-weight:800;">OFFICIAL SIGN OFF</div>
+            <button class="livesheet-close" onclick="closeEndGame()">✕</button>
+        </div>
+        <div class="sig-container">
+            <div style="text-align:center; margin-bottom: 32px;">
+                <h2 style="margin:0 0 8px;">FINAL SCORE</h2>
+                <div style="font-size: 48px; font-weight: 800; display:flex; justify-content:center; gap:24px;">
+                    <span style="color:var(--teamA)" id="finalA">0</span>
+                    <span style="color:var(--muted)">-</span>
+                    <span style="color:var(--teamB)" id="finalB">0</span>
+                </div>
+            </div>
+
+            <div class="sig-box">
+                <label>Referee Signature</label>
+                <canvas class="sig-pad" id="sigRef"></canvas>
+            </div>
+            <div class="sig-box">
+                <label>Team A Captain</label>
+                <canvas class="sig-pad" id="sigA"></canvas>
+            </div>
+
+            <button class="action-btn btn-endgame" style="width:100%" onclick="submitGame()">FINALIZE & SAVE</button>
+        </div>
+    </div>
+
+    <script>
+        // --- STATE ---
+        let state = {
+            period: 1,
+            teamA: { name: "TEAM A", score: 0, timeouts: 3, roster: [] },
+            teamB: { name: "TEAM B", score: 0, timeouts: 3, roster: [] },
+            events: [] // { time, type: 'score'|'foul', team: 'A'|'B', player: #, pts: 1|2|3 }
+        };
+
+        let selectedPlayer = null; // { team: 'A', number: 4 }
+
+        // --- INIT ---
+        function initRosters() {
+            // Generate default FIBA numbers 4-15
+            for (let i = 4; i <= 15; i++) {
+                state.teamA.roster.push({ number: i, fouls: 0, pts: 0 });
+                state.teamB.roster.push({ number: i, fouls: 0, pts: 0 });
+            }
+            renderRosters();
+        }
+
+        function renderRosters() {
+            const rA = document.getElementById("rosterA");
+            const rB = document.getElementById("rosterB");
+            rA.innerHTML = ''; rB.innerHTML = '';
+
+            state.teamA.roster.forEach(p => rA.appendChild(createPlayerRow('A', p)));
+            state.teamB.roster.forEach(p => rB.appendChild(createPlayerRow('B', p)));
+        }
+
+        function createPlayerRow(team, player) {
+            const div = document.createElement("div");
+            div.className = `player-row team${team}`;
+            div.onclick = () => openActionModal(team, player);
+
+            let foulHtml = '';
+            for (let i = 0; i < 5; i++) {
+                foulHtml += `<div class="foul-dot ${i < player.fouls ? 'active' : ''}"></div>`;
+            }
+
+            div.innerHTML = `
+        <div class="jersey">#${player.number}</div>
+        <div style="text-align:right">
+          <div style="font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px;">${player.pts} pts</div>
+          <div class="fouls">${foulHtml}</div>
+        </div>
+      `;
+            return div;
+        }
+
+        // --- ACTIONS ---
+        function openActionModal(team, player) {
+            if (player.fouls >= 5) {
+                alert("Player fouled out.");
+                return;
+            }
+
+            // Haptic Feedback
+            if (navigator.vibrate) navigator.vibrate(50);
+
+            selectedPlayer = { team, player };
+
+            const teamName = team === 'A' ? state.teamA.name : state.teamB.name;
+            document.getElementById("actionTitle").innerText = `Player #${player.number}`;
+            document.getElementById("actionSubtitle").innerText = `${teamName} • ${player.pts} pts / ${player.fouls} fouls`;
+
+            document.getElementById("actionModal").classList.add("active");
+        }
+
+        function closeActionModal(e) {
+            if (e && e.target !== document.getElementById("actionModal")) return;
+            document.getElementById("actionModal").classList.remove("active");
+            selectedPlayer = null;
+        }
+
+        function addScore(pts) {
+            if (!selectedPlayer) return;
+            // Haptics for score
+            if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+
+            const t = selectedPlayer.team;
+            const pId = selectedPlayer.player.number;
+
+            // Update State
+            state[`team${t}`].score += pts;
+            selectedPlayer.player.pts += pts;
+
+            state.events.push({
+                time: Date.now(), period: state.period, type: 'score', team: t, player: pId, pts: pts, totalA: state.teamA.score, totalB: state.teamB.score
+            });
+
+            // Update UI
+            document.getElementById(`score${t}`).innerText = state[`team${t}`].score;
+            renderRosters();
+            closeActionModal();
+        }
+
+        function addFoul() {
+            if (!selectedPlayer) return;
+            // Heavy haptics for foul
+            if (navigator.vibrate) navigator.vibrate(100);
+
+            const t = selectedPlayer.team;
+            const pId = selectedPlayer.player.number;
+
+            selectedPlayer.player.fouls += 1;
+
+            state.events.push({
+                time: Date.now(), period: state.period, type: 'foul', team: t, player: pId
+            });
+
+            renderRosters();
+            closeActionModal();
+        }
+
+        function takeTimeout(team) {
+            if (state[`team${team}`].timeouts > 0) {
+                state[`team${team}`].timeouts--;
+                document.getElementById(`to${team}`).innerText = state[`team${team}`].timeouts;
+                if (state[`team${team}`].timeouts === 0) {
+                    document.querySelector(`#name${team}`).closest('.team-box').querySelector('.timeout-btn').classList.add('used');
+                }
+            }
+        }
+
+        function changePeriod(delta) {
+            state.period = Math.max(1, Math.min(4, state.period + delta));
+            document.getElementById("periodLbl").innerText = `Period ${state.period}`;
+        }
+
+        function renameTeam(team) {
+            const newName = prompt(`Enter new name for Team ${team}`, state[`team${team}`].name);
+            if (newName) {
+                state[`team${team}`].name = newName.substring(0, 12).toUpperCase();
+                document.getElementById(`name${team}`).innerText = state[`team${team}`].name;
+            }
+        }
+
+        // --- LIVE SHEET PREVIEW ---
+        function openLiveSheet() {
+            const modal = document.getElementById("liveSheetModal");
+            const rs = document.getElementById("runningScoreDisplay");
+
+            let htmlA = '<div class="rs-col"><div>A</div>';
+            let htmlM = '<div class="rs-col"><div>M</div>';
+            let htmlB = '<div class="rs-col"><div>B</div>';
+
+            // Generate visual log
+            state.events.filter(e => e.type === 'score').forEach((e) => {
+                if (e.team === 'A') {
+                    htmlA += `<div class="ink red">${e.totalA} (P${e.player})</div>`;
+                    htmlM += `<div>-</div>`;
+                    htmlB += `<div></div>`;
+                } else {
+                    htmlA += `<div></div>`;
+                    htmlM += `<div>-</div>`;
+                    htmlB += `<div class="ink">${e.totalB} (P${e.player})</div>`;
+                }
+            });
+
+            htmlA += '</div>';
+            htmlM += '</div>';
+            htmlB += '</div>';
+
+            rs.innerHTML = htmlA + htmlM + htmlB;
+            modal.style.display = "flex";
+        }
+
+        function closeLiveSheet() {
+            document.getElementById("liveSheetModal").style.display = "none";
+        }
+
+        // --- END GAME & SIGNATURES ---
+        function openEndGame() {
+            document.getElementById("finalA").innerText = state.teamA.score;
+            document.getElementById("finalB").innerText = state.teamB.score;
+            document.getElementById("signatureModal").style.display = "flex";
+            initCanvas('sigRef');
+            initCanvas('sigA');
+        }
+
+        function closeEndGame() {
+            document.getElementById("signatureModal").style.display = "none";
+        }
+
+        function submitGame() {
+            alert("Game finalized and saved to CourtStream!");
+            location.href = 'index.html';
+        }
+
+        // Canvas drawing logic
+        function initCanvas(id) {
+            const canvas = document.getElementById(id);
+            const ctx = canvas.getContext('2d');
+            // Set responsive size based on css
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#000';
+
+            let isDrawing = false;
+
+            function startPos(e) {
+                isDrawing = true;
+                draw(e);
+            }
+            function endPos() {
+                isDrawing = false;
+                ctx.beginPath();
+            }
+            function draw(e) {
+                if (!isDrawing) return;
+                e.preventDefault();
+
+                // Handle touch or mouse
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                const canvasRect = canvas.getBoundingClientRect();
+                const x = clientX - canvasRect.left;
+                const y = clientY - canvasRect.top;
+
+                ctx.lineTo(x, y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+            }
+
+            canvas.addEventListener('mousedown', startPos);
+            canvas.addEventListener('mouseup', endPos);
+            canvas.addEventListener('mousemove', draw);
+
+            canvas.addEventListener('touchstart', startPos, { passive: false });
+            canvas.addEventListener('touchend', endPos);
+            canvas.addEventListener('touchmove', draw, { passive: false });
+        }
+
+        // Boot
+        initRosters();
+
+    </script>
+</body>
+
+</html>
