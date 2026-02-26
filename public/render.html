@@ -196,6 +196,28 @@
             width: 0%;
             transition: width 0.2s;
         }
+
+        .dash-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .dash-btn:hover {
+            border-color: var(--blue);
+            color: white;
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .fallback-toggle {
+            white-space: nowrap;
+        }
     </style>
 </head>
 
@@ -267,7 +289,8 @@
         let state = {
             edl: null,
             videos: {}, // filename -> File
-            mappings: {} // filename -> camId
+            mappings: {}, // filename -> camId
+            fallbackVideo: null // filename of the designated fallback
         };
 
         dropZone.onclick = () => fileInput.click();
@@ -385,9 +408,14 @@
             let extraHtml = '';
             if (explicitType === 'video' || (!explicitType && !file.name.endsWith('.json'))) {
                 extraHtml = `
-                    <select class="cam-selector" onchange="manualMap('${file.name}', this.value)" style="display:none">
-                        <option value="">Select Cam...</option>
-                    </select>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <select class="cam-selector" onchange="manualMap('${file.name}', this.value)" style="display:none">
+                            <option value="">Select Cam...</option>
+                        </select>
+                        <button class="dash-btn fallback-toggle" onclick="toggleFallback('${file.name}')" style="font-size:10px; padding:2px 6px;">
+                            Mark as Fallback
+                        </button>
+                    </div>
                 `;
             }
 
@@ -402,6 +430,15 @@
                 <div class="status">Ready</div>
             `;
             fileList.appendChild(div);
+        }
+
+        function toggleFallback(filename) {
+            if (state.fallbackVideo === filename) {
+                state.fallbackVideo = null;
+            } else {
+                state.fallbackVideo = filename;
+            }
+            checkReady();
         }
 
         function manualMap(filename, camId) {
@@ -473,22 +510,46 @@
                         statusEl.className = 'status done';
                         if (selector) selector.style.display = 'none';
                         mappedCams.add(matchedCamId);
+                    } else if (state.fallbackVideo) {
+                        statusEl.innerText = "Using Fallback";
+                        statusEl.className = 'status done';
+                        statusEl.style.color = "#f59e0b";
+                        if (selector) selector.style.display = 'block';
                     } else {
                         statusEl.innerText = "Select Camera";
                         statusEl.className = 'status warning';
                         if (selector) selector.style.display = 'block';
                     }
+
+                    // Update fallback button UI
+                    const fallbackBtn = el.querySelector('.fallback-toggle');
+                    if (fallbackBtn) {
+                        if (state.fallbackVideo === filename) {
+                            fallbackBtn.innerText = "★ Instant Live Feed";
+                            fallbackBtn.style.background = "var(--blue)";
+                            fallbackBtn.style.color = "white";
+                        } else {
+                            fallbackBtn.innerText = "Mark as Fallback";
+                            fallbackBtn.style.background = "";
+                            fallbackBtn.style.color = "";
+                        }
+                    }
                 }
 
                 const missingCount = requiredCams.size - mappedCams.size;
-                const canRender = mappedCams.size > 0;
+                const canRender = mappedCams.size > 0 || (missingCount > 0 && !!state.fallbackVideo);
 
                 if (canRender) {
                     renderBtn.classList.add('active');
                     renderBtn.disabled = false;
                     if (missingCount > 0) {
-                        renderBtn.innerText = `Render (Missing ${missingCount} Cameras)`;
-                        renderBtn.style.background = "var(--blue)"; // Use secondary color to indicate partial
+                        if (state.fallbackVideo) {
+                            renderBtn.innerText = `Render (${mappedCams.size} Quality + ${missingCount} Fallback)`;
+                            renderBtn.style.background = "#f59e0b";
+                        } else {
+                            renderBtn.innerText = `Render (Missing ${missingCount} Cameras)`;
+                            renderBtn.style.background = "var(--blue)"; // Use secondary color to indicate partial
+                        }
                     } else {
                         renderBtn.innerText = "Start Render Job";
                         renderBtn.style.background = ""; // Reset to default active (green)
@@ -586,21 +647,31 @@
 
                 for (const [filename, file] of Object.entries(state.videos)) {
                     const matchedCamId = state.mappings[filename];
-                    if (!matchedCamId) continue;
+                    const isFallback = state.fallbackVideo === filename;
+
+                    if (!matchedCamId && !isFallback) continue;
 
                     const extMatch = file.name.match(/\.([a-zA-Z0-9]+)$/);
                     const ext = extMatch ? extMatch[1] : 'webm';
-                    const safeName = `iso_${matchedCamId}.${ext}`;
 
-                    await ffmpeg.writeFile(safeName, await fetchFile(file));
-                    memFiles[matchedCamId] = safeName;
+                    if (matchedCamId) {
+                        const safeName = `iso_${matchedCamId}.${ext}`;
+                        await ffmpeg.writeFile(safeName, await fetchFile(file));
+                        memFiles[matchedCamId] = safeName;
+                        filesLoaded++;
+                    }
 
-                    filesLoaded++;
-                    renderBtn.innerText = `Loading Video Files... (${filesLoaded}/${requiredCams.size})`;
+                    if (isFallback) {
+                        const fallbackName = `fallback_feed.${ext}`;
+                        await ffmpeg.writeFile(fallbackName, await fetchFile(file));
+                        memFiles['fallback'] = fallbackName;
+                    }
+
+                    renderBtn.innerText = `Loading Video Files... (${filesLoaded} Quality Loaded)`;
                 }
 
-                if (filesLoaded === 0) {
-                    alert("No video files could be matched to the cameras in your EDL.");
+                if (filesLoaded === 0 && !memFiles['fallback']) {
+                    alert("No video files could be matched and no fallback was selected.");
                     renderBtn.classList.add('active');
                     renderBtn.disabled = false;
                     renderBtn.innerText = "Retry Render";
@@ -617,8 +688,13 @@
 
                     let inputFile = memFiles[cut.camId];
                     if (!inputFile) {
-                        console.error(`Missing staged memory file for Camera ID: ${cut.camId}`, memFiles);
-                        continue;
+                        if (memFiles['fallback']) {
+                            console.log(`Using fallback for Camera ID: ${cut.camId}`);
+                            inputFile = memFiles['fallback'];
+                        } else {
+                            console.error(`Missing staged memory file for Camera ID: ${cut.camId}`, memFiles);
+                            continue;
+                        }
                     }
 
                     const segName = `seg_${i}.mp4`;
