@@ -286,17 +286,34 @@ app.get("/api/streams", (req, res) => {
 app.post("/api/upload-iso", upload.single("video"), (req, res) => {
   if (!req.file) return res.status(400).send("No file uploaded");
 
-  const { sessionId, camId, rotation, zoom, flipHorizontal } = req.body; // Sent by client via FormData
+  const { sessionId, camId, rotation, zoom, flipHorizontal, isSegment, segmentIndex } = req.body;
 
   if (sessionId && camId) {
     if (!sessionUploads[sessionId]) sessionUploads[sessionId] = {};
-    sessionUploads[sessionId][camId] = {
-      path: req.file.path,
-      rotation: parseInt(rotation) || 0,
-      zoom: parseFloat(zoom) || 1,
-      flipHorizontal: flipHorizontal === 'true'
-    };
-    console.log(`💾 ISO Upload Logged: Session ${sessionId} | Cam ${camId} -> ${req.file.filename} (Rot: ${rotation || 0}, Zoom: ${zoom || 1}, Flip: ${flipHorizontal === 'true'})`);
+    if (!sessionUploads[sessionId][camId]) {
+      sessionUploads[sessionId][camId] = {
+        rotation: parseInt(rotation) || 0,
+        zoom: parseFloat(zoom) || 1,
+        flipHorizontal: flipHorizontal === 'true',
+        segments: []
+      };
+    }
+
+    const camData = sessionUploads[sessionId][camId];
+
+    if (isSegment === "true") {
+      camData.segments.push({
+        index: parseInt(segmentIndex),
+        path: req.file.path,
+        filename: req.file.filename
+      });
+      // Sort segments by index just in case they arrive out of order
+      camData.segments.sort((a, b) => a.index - b.index);
+    } else {
+      camData.path = req.file.path; // Single file fallback
+    }
+
+    console.log(`💾 ISO ${isSegment === "true" ? "Segment" : "File"} Logged: Session ${sessionId} | Cam ${camId} | Seg ${segmentIndex || 'N/A'}`);
   }
 
   res.json({
@@ -322,12 +339,19 @@ app.post("/api/render-iso", async (req, res) => {
   const outputFilename = `render_${sessionId}.mp4`;
   const outputPath = path.join(__dirname, "public", "uploads", "iso", outputFilename);
 
-  // VERIFY ALL SOURCE FILES EXIST
+  // VERIFY ALL SOURCE FILES EXIST (or segments)
   const missingFiles = [];
   const uniqueCams = [...new Set(edl.map(cut => cut.camId))];
   uniqueCams.forEach(camId => {
-    const filePath = uploads[camId];
-    if (!filePath || !fs.existsSync(filePath)) {
+    const camData = uploads[camId];
+    if (!camData) {
+      missingFiles.push(camId);
+      return;
+    }
+    const hasPath = camData.path && fs.existsSync(camData.path);
+    const hasSegments = camData.segments && camData.segments.length > 0;
+
+    if (!hasPath && !hasSegments) {
       missingFiles.push(camId);
     }
   });
@@ -356,10 +380,36 @@ app.post("/api/render-iso", async (req, res) => {
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
 
   try {
+    // 1. PRE-STITCH SEGMENTED CAMERAS
+    broadcastProgress(5, "Stitching camera segments...");
+    for (const camId of uniqueCams) {
+      const camData = uploads[camId];
+      if (camData.segments && camData.segments.length > 0) {
+        console.log(`🔗 Stitching ${camData.segments.length} segments for Cam ${camId}...`);
+        const camStitchList = path.join(tempDir, `list_${camId}.txt`);
+        const camOutputPath = path.join(tempDir, `cam_${camId}_full.webm`);
+        const listContent = camData.segments.map(s => `file '${path.resolve(s.path)}'`).join("\n");
+        fs.writeFileSync(camStitchList, listContent);
+
+        await new Promise((resolve, reject) => {
+          ffmpeg()
+            .input(camStitchList)
+            .inputOptions(["-f concat", "-safe 0"])
+            .outputOptions("-c copy")
+            .save(camOutputPath)
+            .on("end", () => {
+              camData.path = camOutputPath; // Point to the newly stitched file
+              resolve();
+            })
+            .on("error", reject);
+        });
+      }
+    }
+
     const listPath = path.join(tempDir, "list.txt");
     const segments = [];
 
-    // PROCESS CLIPS
+    // 2. PROCESS CLIPS (EDL CUTS)
     for (let i = 0; i < edl.length; i++) {
       const cut = edl[i];
       const nextCut = edl[i + 1];
@@ -373,11 +423,10 @@ app.post("/api/render-iso", async (req, res) => {
       const startTime = cut.timestamp / 1000;
       const camId = cut.camId;
       const uploadData = uploads[camId];
-      const inputPath = uploadData?.path || uploadData;
+      const inputPath = uploadData?.path;
 
-      if (!inputPath) {
-        console.warn(`⚠️ Skipped Clip ${i}: No file for Cam '${camId}'`);
-        console.log(`Debug Mapping - Session: ${sessionId}, Expected CamId: '${camId}', Available:`, Object.keys(uploads));
+      if (!inputPath || !fs.existsSync(inputPath)) {
+        console.warn(`⚠️ Skipped Clip ${i}: No file for Cam '${camId}' at ${inputPath}`);
         continue;
       }
 
@@ -394,11 +443,9 @@ app.post("/api/render-iso", async (req, res) => {
         let cmd = ffmpeg(inputPath).setStartTime(startTime);
         if (duration) cmd.setDuration(duration);
 
-        let vfOptions = [];
-
-        const rot = uploadData?.rotation || 0;
-        const zoom = uploadData?.zoom || 1;
-        const flip = uploadData?.flipHorizontal || false;
+        const rot = cut.rotation ?? uploadData?.rotation ?? 0;
+        const zoom = cut.zoom ?? uploadData?.zoom ?? 1;
+        const flip = cut.flipHorizontal ?? uploadData?.flipHorizontal ?? false;
 
         if (rot === 90) vfOptions.push("transpose=1");
         else if (rot === 270 || rot === -90) vfOptions.push("transpose=2");
@@ -681,9 +728,31 @@ io.on("connection", socket => {
 
       socket.join(room);
       socket.room = room;
-      socket.data.role = role; // Official Socket.IO way to store metadata
-      socket.data.clientId = payload.clientId || null; // Persistent client ID
+      socket.data.role = role;
+      socket.data.clientId = payload.clientId || null;
+      socket.data.ip = socket.handshake.address; // Track public IP
       socket.emit("join-success");
+
+      // NETWORK MISMATCH DETECTION
+      if (role === "camera") {
+        const clients = io.sockets.adapter.rooms.get(room);
+        if (clients) {
+          for (const cid of clients) {
+            const s = io.sockets.sockets.get(cid);
+            if (s && s.data.role === "director") {
+              if (s.data.ip !== socket.data.ip) {
+                console.log(`⚠️ Network Mismatch: Camera ${socket.id} is on different IP than Director`);
+                socket.emit("network-warning", {
+                  message: "You are on a different network than the Director. Performance may be affected.",
+                  directorIp: s.data.ip,
+                  cameraIp: socket.data.ip
+                });
+              }
+              break;
+            }
+          }
+        }
+      }
 
       console.log(`👤 ${socket.id} joined room ${room} as ${role} (Client: ${socket.data.clientId})`);
 
@@ -771,6 +840,11 @@ io.on("connection", socket => {
   socket.on("iso-upload-progress", ({ room, progress }) => {
     // Relay upload progress to director
     socket.to(room).emit("iso-upload-progress", { from: socket.id, progress });
+  });
+
+  socket.on("iso-segment-uploaded", (data) => {
+    // Relay segment completion to director
+    socket.to(data.room).emit("iso-segment-uploaded", { from: socket.id, ...data });
   });
 
   socket.on("disconnect", () => {

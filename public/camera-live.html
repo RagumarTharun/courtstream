@@ -222,8 +222,24 @@
     </div>
 
     <div class="controls">
+      <!-- SWITCH CAMERA -->
+      <button id="switchCameraBtn" class="ctrl" onclick="toggleCamera()" title="Switch Camera">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 2a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z" />
+          <path d="M17 2a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z" />
+          <path d="M2 9a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2z" />
+          <path d="M15 9h-3a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h3" />
+          <path d="M22 9a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2z" />
+          <path d="M11 15v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-1" />
+          <path d="M21 15v1a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-1" />
+          <path d="M7 21a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2z" />
+          <path d="M17 21a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2z" />
+        </svg>
+      </button>
+
       <!-- MIC -->
-      <button id="micBtn" class="ctrl" onclick="toggleMic()">
+      <button id="micBtn" class="ctrl" onclick="toggleMic()" title="Toggle Mic">
         <svg viewBox="0 0 24 24">
           <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3z" />
           <path d="M19 11a7 7 0 01-14 0" />
@@ -272,6 +288,11 @@
       try again.</div>
   </div>
 
+  <!-- Network Mismatch Banner -->
+  <div id="networkMismatchBanner">
+    Network Mismatch Detected. Please refresh.
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="feedback.js"></script>
   <script src="modal.js"></script>
@@ -288,6 +309,7 @@
     const passInput = document.getElementById("passInput");
     const joinBtn = document.getElementById("joinBtn");
     const errorMsg = document.getElementById("errorMsg");
+    const networkMismatchBanner = document.getElementById("networkMismatchBanner");
 
     let mediaStream;
     let videoSender;
@@ -343,96 +365,67 @@
     }
 
     const socket = io();
+
+    // Warn user before leaving page if stream is active
+    window.addEventListener('beforeunload', function (e) {
+      if (isLive) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
     /* ===== CAMERA ===== */
-    async function loadVideoDevices() {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      videoDevices = devices.filter(d => d.kind === "videoinput");
-      if (!videoDevices.length) return;
+    // Initial constraints for camera
+    const constraints = {
+      video: {
+        facingMode: "environment" // Start with back camera
+      },
+      audio: true
+    };
 
-      const currentId = mediaStream && mediaStream.getVideoTracks()[0]
-        ? mediaStream.getVideoTracks()[0].getSettings().deviceId
-        : null;
+    async function toggleCamera() {
+      const currentMode = constraints.video.facingMode;
+      const newMode = currentMode === "user" ? "environment" : "user";
+      console.log(`🔄 Switching camera to ${newMode}...`);
 
-      if (currentId) {
-        const idx = videoDevices.findIndex(d => d.deviceId === currentId);
-        if (idx >= 0) currentDeviceIndex = idx;
-      }
-    }
+      constraints.video.facingMode = newMode;
+      await startCamera();
 
-    function pickDefaultBackCamera() {
-      if (!videoDevices.length) return;
-
-      const backIndex = videoDevices.findIndex(d => {
-        const label = (d.label || "").toLowerCase();
-        return label.includes("back") || label.includes("rear") || label.includes("environment");
-      });
-
-      if (backIndex >= 0) {
-        currentDeviceIndex = backIndex;
-        facing = "environment";
-      }
-    }
-
-    async function getStreamWithFallback() {
-      const constraintsByPriority = [];
-
-      if (videoDevices.length) {
-        constraintsByPriority.push({
-          video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } },
-          audio: true
-        });
-      }
-
-      constraintsByPriority.push({
-        video: { facingMode: { exact: facing } },
-        audio: true
-      });
-
-      constraintsByPriority.push({
-        video: { facingMode: { ideal: facing } },
-        audio: true
-      });
-
-      let lastError;
-      for (const constraints of constraintsByPriority) {
-        try {
-          return await navigator.mediaDevices.getUserMedia(constraints);
-        } catch (err) {
-          lastError = err;
-        }
-      }
-
-      throw lastError;
+      const btn = document.getElementById("switchCameraBtn");
+      btn.style.background = "#3b82f6";
+      setTimeout(() => btn.style.background = "", 300);
     }
 
     async function startCamera() {
-      await loadVideoDevices();
+      console.log("📸 Starting Camera with constraints:", constraints);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
-      if (!hasPickedDefault) {
-        pickDefaultBackCamera();
-        hasPickedDefault = true;
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(track => track.stop());
+        }
+
+        video.srcObject = stream;
+
+        // If WebRTC is active, replace the track
+        if (pc && videoSender) {
+          const videoTrack = stream.getVideoTracks()[0];
+          await videoSender.replaceTrack(videoTrack);
+          console.log("✅ WebRTC Track Replaced");
+        }
+
+        mediaStream = stream;
+
+        if (resolveCameraReady) {
+          resolveCameraReady();
+          resolveCameraReady = null;
+        }
+        requestWakeLock();
+
+      } catch (err) {
+        console.error("Camera Error:", err);
+        alert("Could not access camera: " + err.message);
       }
-
-      const stream = await getStreamWithFallback();
-
-      video.srcObject = stream;
-
-      if (!mediaStream) {
-        stream.getTracks().forEach(t => {
-          const sender = pc.addTrack(t, stream);
-          if (t.kind === "video") videoSender = sender;
-        });
-      } else {
-        await videoSender.replaceTrack(stream.getVideoTracks()[0]);
-        mediaStream.getTracks().forEach(t => t.stop());
-      }
-
-      mediaStream = stream;
-      if (resolveCameraReady) {
-        resolveCameraReady();
-        resolveCameraReady = null;
-      }
-      requestWakeLock();
     }
 
     let assignedRotation = 0;
@@ -445,7 +438,7 @@
       setupDataChannel();
 
       checkAccess();
-      startCamera(); // Ensure camera starts after PC is initialized to add tracks
+      await startCamera();
 
       pc.onicecandidate = e => {
         if (e.candidate) {
@@ -674,91 +667,215 @@
       overlay.style.display = "none";
     });
 
-    /* ===== ISO RECORDING ===== */
+    /* ===== PERSISTENT SEGMENT STORAGE (IndexedDB) ===== */
+    class SegmentDB {
+      constructor() {
+        this.dbName = "CourtStreamClips";
+        this.dbVersion = 1;
+        this.db = null;
+      }
+
+      async init() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(this.dbName, this.dbVersion);
+          request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains("segments")) {
+              const store = db.createObjectStore("segments", { keyPath: "id", autoIncrement: true });
+              store.createIndex("status", "status", { unique: false });
+              store.createIndex("sessionId", "sessionId", { unique: false });
+            }
+          };
+          request.onsuccess = (e) => {
+            this.db = e.target.result;
+            resolve();
+          };
+          request.onerror = (e) => reject(e.target.error);
+        });
+      }
+
+      async saveSegment(segment) {
+        return new Promise((resolve, reject) => {
+          const tx = this.db.transaction("segments", "readwrite");
+          const store = tx.objectStore("segments");
+          const request = store.add({
+            ...segment,
+            status: "pending", // pending, uploading, completed, failed
+            retryCount: 0,
+            createdAt: Date.now()
+          });
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = (e) => reject(e.target.error);
+        });
+      }
+
+      async getPendingSegments() {
+        return new Promise((resolve, reject) => {
+          const tx = this.db.transaction("segments", "readonly");
+          const store = tx.objectStore("segments");
+          const index = store.index("status");
+          const request = index.getAll("pending");
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = (e) => reject(e.target.error);
+        });
+      }
+
+      async updateSegmentStatus(id, status, error = null) {
+        return new Promise((resolve, reject) => {
+          const tx = this.db.transaction("segments", "readwrite");
+          const store = tx.objectStore("segments");
+          const getReq = store.get(id);
+          getReq.onsuccess = () => {
+            const data = getReq.result;
+            data.status = status;
+            if (error) data.lastError = error;
+            if (status === "failed") data.retryCount++;
+            store.put(data).onsuccess = () => resolve();
+          };
+        });
+      }
+
+      async clearCompleted() {
+        const tx = this.db.transaction("segments", "readwrite");
+        const store = tx.objectStore("segments");
+        const index = store.index("status");
+        const request = index.openCursor(IDBKeyRange.only("completed"));
+        request.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            cursor.delete();
+            cursor.continue();
+          }
+        };
+      }
+    }
+
+    const segmentDB = new SegmentDB();
+    segmentDB.init().then(() => {
+      console.log("💾 IndexedDB Initialized");
+      startUploadManager();
+    });
+
+    /* ===== ISO RECORDING (SEGMENTED) ===== */
     let isoRecorder = null;
-    let isoChunks = [];
     let currentIsoSessionId = null;
+    let segmentCounter = 0;
 
     socket.on("start-iso", async ({ sessionId }) => {
-      console.log("🎥 Starting ISO Recording for Session:", sessionId);
+      console.log("🎥 Starting Segmented ISO Recording for Session:", sessionId);
       currentIsoSessionId = sessionId;
+      segmentCounter = 0;
       if (!mediaStream) return;
 
-      isoChunks = [];
       try {
-        // High Quality Options
         const options = { mimeType: "video/webm;codecs=vp9,opus", videoBitsPerSecond: 2500000 };
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          // Fallback
-          delete options.mimeType;
-        }
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) delete options.mimeType;
 
         isoRecorder = new MediaRecorder(mediaStream, options);
-        isoRecorder.ondataavailable = e => {
-          if (e.data && e.data.size > 0) isoChunks.push(e.data);
+        isoRecorder.ondataavailable = async (e) => {
+          if (e.data && e.data.size > 1000) { // Essential check for valid blobs
+            const segId = segmentCounter++;
+            console.log(`💾 Saving Segment ${segId} (${(e.data.size / 1024).toFixed(1)} KB)`);
+            await segmentDB.saveSegment({
+              sessionId: currentIsoSessionId,
+              segmentIndex: segId,
+              blob: e.data,
+              camId: socket.id,
+              timestamp: Date.now()
+            });
+            // Trigger manager immediately
+            processUploadQueue();
+          }
         };
-        isoRecorder.start(1000); // 1s chunks
 
-        // Visual indicator
+        // RECORD IN 60s SEGMENTS
+        isoRecorder.start(60000);
+
         liveBadge.textContent = "REC";
         liveBadge.style.background = "#b91c1c";
         liveBadge.style.display = "inline-block";
 
       } catch (e) {
-        console.error("Failed to start ISO recorder:", e);
+        console.error("Failed to start segmented ISO recorder:", e);
       }
     });
 
-    socket.on("stop-iso", (options) => {
-      handleStopIso(options);
-    });
+    let isUploaderActive = false;
+    function startUploadManager() {
+      setInterval(processUploadQueue, 5000); // Check every 5s
+      setInterval(() => segmentDB.clearCompleted(), 60000); // Cleanup every minute
+    }
 
-    let heldIsoBlob = null; // Store blob for delayed transfer
+    async function processUploadQueue() {
+      if (isUploaderActive) return;
+      isUploaderActive = true;
 
-    function handleStopIso(options) {
-      console.log("🛑 Stopping ISO Recording. Options:", options);
-      if (!isoRecorder || isoRecorder.state === "inactive") {
-        console.warn("⚠️ ISO Recorder already inactive or missing");
-        return;
-      }
-
-      isoRecorder.onstop = () => {
-        if (options && options.save === false) {
-          console.log("🗑️ ISO Save skipped by director. Discarding blob.");
-          isoChunks = [];
-          liveBadge.textContent = "DONE";
-          setTimeout(() => liveBadge.style.display = "none", 1000);
+      try {
+        const pending = await segmentDB.getPendingSegments();
+        if (pending.length === 0) {
+          isUploaderActive = false;
           return;
         }
 
-        const blob = new Blob(isoChunks, { type: "video/webm" });
-        isoChunks = []; // Free memory
+        console.log(`🚀 Found ${pending.length} unsent segments. Starting background upload...`);
 
-        if (options && options.save === 'hold') {
-          console.log("✋ Holding ISO Recording in memory. Waiting for transfer request...");
-          heldIsoBlob = blob;
-          liveBadge.textContent = "HELD";
-          liveBadge.style.background = "#eab308"; // Yellow/Orange
-          return;
-        }
+        for (const seg of pending) {
+          try {
+            await segmentDB.updateSegmentStatus(seg.id, "uploading");
+            await uploadSegmentXHR(seg);
+            await segmentDB.updateSegmentStatus(seg.id, "completed");
 
-        // Legacy/Direct Transfer (if save !== 'hold')
-        if (dataChannel && dataChannel.readyState === "open") {
-          console.log("🚀 Starting P2P Transfer to Director...");
-          transferRecording(blob);
-        } else {
-          console.error("❌ Data Channel not open. Cannot transfer.");
-          alert("Connection to Director lost. Cannot transfer recording.");
-          liveBadge.style.display = "none";
+            // Notify Director
+            socket.emit("iso-segment-uploaded", {
+              room: streamId,
+              sessionId: seg.sessionId,
+              segmentIndex: seg.segmentIndex,
+              camId: seg.camId
+            });
+
+            console.log(`✅ Segment ${seg.segmentIndex} uploaded successfully`);
+          } catch (err) {
+            console.error(`❌ Segment ${seg.segmentIndex} upload failed:`, err);
+            await segmentDB.updateSegmentStatus(seg.id, "pending", err.message); // Back to pending for retry
+            break; // Stop queue on error (wait for next heartbeat)
+          }
         }
-      };
-      isoRecorder.stop();
-      if (options && options.save === 'hold') {
-        liveBadge.innerHTML = "SAVING";
-      } else {
-        liveBadge.innerHTML = "SENDING";
+      } catch (e) {
+        console.error("Upload Manager Error:", e);
+      } finally {
+        isUploaderActive = false;
       }
     }
+
+    async function uploadSegmentXHR(seg) {
+      return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append("video", seg.blob, `seg_${seg.segmentIndex}.webm`);
+        formData.append("sessionId", seg.sessionId);
+        formData.append("camId", seg.camId);
+        formData.append("segmentIndex", seg.segmentIndex);
+        formData.append("isSegment", "true");
+
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/upload-iso", true);
+
+        xhr.onload = () => {
+          if (xhr.status === 200) resolve(JSON.parse(xhr.responseText));
+          else reject(new Error(`Server returned ${xhr.status}`));
+        };
+        xhr.onerror = () => reject(new Error("Network Error"));
+        xhr.send(formData);
+      });
+    }
+
+    socket.on("stop-iso", (options) => {
+      console.log("🛑 Stopping ISO Recording. Options:", options);
+      if (isoRecorder) {
+        isoRecorder.stop();
+        liveBadge.textContent = "STOPPED";
+        setTimeout(() => liveBadge.style.display = "none", 3000);
+      }
+    });
 
     // New Handlers for Delayed Workflow
     function handleTransferRequest() {
@@ -950,7 +1067,32 @@
       xhr.send(formData);
     }
 
-    /* ===== RENDER PROGRESS ===== */
+    /* ===== UX SAFEGUARDS & ALERTS ===== */
+    window.addEventListener('beforeunload', (e) => {
+      if (isoRecorder && isoRecorder.state === 'recording') {
+        e.preventDefault();
+        e.returnValue = ''; // Shows standard browser exit prompt
+        return '';
+      }
+    });
+
+    socket.on("network-warning", ({ message }) => {
+      console.warn("🌐 Network Warning:", message);
+      const alertDiv = document.createElement("div");
+      alertDiv.style.cssText = `
+        position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+        background: #f59e0b; color: white; padding: 12px 24px; border-radius: 8px;
+        font-size: 14px; font-weight: 600; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: flex; align-items: center; gap: 10px; transition: all 0.5s ease;
+      `;
+      alertDiv.innerHTML = `
+        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>Different Network than Director</span>
+        <button onclick="this.parentElement.remove()" style="background:none; border:none; color:white; cursor:pointer; font-size:18px;">×</button>
+      `;
+      document.body.appendChild(alertDiv);
+      setTimeout(() => alertDiv.style.opacity = '0.5', 10000);
+    });
     socket.on("render-progress", ({ progress, status }) => {
       const bar = document.getElementById("renderProgressPanel");
       const fill = document.getElementById("renderProgressFill");
