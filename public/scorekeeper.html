@@ -483,6 +483,35 @@
             touch-action: none;
             /* Crucial for drawing */
         }
+
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+
+            .livesheet-modal,
+            .livesheet-modal * {
+                visibility: visible;
+            }
+
+            .livesheet-modal {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white;
+                display: flex !important;
+            }
+
+            .livesheet-header {
+                display: none !important;
+            }
+
+            .sheet-body {
+                background: white !important;
+                padding: 0;
+            }
+        }
     </style>
 </head>
 
@@ -569,7 +598,11 @@
     <div class="livesheet-modal" id="liveSheetModal">
         <div class="livesheet-header">
             <div style="font-weight:800;">FIBA SCORESHEET</div>
-            <button class="livesheet-close" onclick="closeLiveSheet()">✕</button>
+            <div style="display:flex; gap:16px; align-items:center;">
+                <button onclick="window.print()"
+                    style="background:var(--blue); color:white; border:none; padding:6px 12px; border-radius:6px; font-weight:600; cursor:pointer;">Print</button>
+                <button class="livesheet-close" onclick="closeLiveSheet()">✕</button>
+            </div>
         </div>
         <div class="sheet-body">
             <h3>RUNNING SCORE</h3>
@@ -660,13 +693,28 @@
                 foulHtml += `<div class="foul-dot ${i < player.fouls ? 'active' : ''}"></div>`;
             }
 
-            div.innerHTML = `
-        <div class="jersey">#${player.number}</div>
-        <div style="text-align:right">
-          <div style="font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px;">${player.pts} pts</div>
-          <div class="fouls">${foulHtml}</div>
-        </div>
-      `;
+            const jerseyDiv = document.createElement("div");
+            jerseyDiv.className = "jersey";
+            jerseyDiv.innerText = `#${player.number}`;
+            jerseyDiv.onclick = (e) => {
+                e.stopPropagation();
+                const newNum = prompt(`Enter new jersey number for Player #${player.number}`, player.number);
+                if (newNum && newNum.trim() !== '') {
+                    player.number = newNum.trim();
+                    renderRosters();
+                }
+            };
+
+            div.appendChild(jerseyDiv);
+
+            const statsDiv = document.createElement("div");
+            statsDiv.style.textAlign = "right";
+            statsDiv.innerHTML = `
+              <div style="font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px;">${player.pts} pts</div>
+              <div class="fouls">${foulHtml}</div>
+            `;
+            div.appendChild(statsDiv);
+
             return div;
         }
 
