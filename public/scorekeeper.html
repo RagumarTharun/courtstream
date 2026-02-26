@@ -484,6 +484,363 @@
             /* Crucial for drawing */
         }
 
+        /* FIBA SCORESHEET LAYOUT */
+        .fiba-sheet {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            color: #000;
+            font-family: Arial, sans-serif;
+            font-size: 10px;
+            line-height: 1.2;
+        }
+
+        .fiba-sheet input {
+            border: none;
+            border-bottom: 1px dotted #ccc;
+            font-family: 'Caveat', cursive;
+            font-size: 16px;
+            color: #1d4ed8;
+            background: transparent;
+            outline: none;
+            width: 100%;
+        }
+
+        .fiba-header-section {
+            display: flex;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 5px;
+        }
+
+        .fiba-logo-box {
+            width: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 24px;
+            color: #22c55e;
+            border: 2px solid #22c55e;
+            margin-right: 10px;
+        }
+
+        .fiba-title-box {
+            flex: 1;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .fiba-title-box h1 {
+            font-size: 16px;
+            margin: 0;
+            font-weight: bold;
+        }
+
+        .fiba-title-box h2 {
+            font-size: 18px;
+            margin: 4px 0 0;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .fiba-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 30px;
+            margin-bottom: 10px;
+            border: 2px solid #000;
+            padding: 10px;
+        }
+
+        .fiba-info-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .fiba-info-row strong {
+            font-size: 12px;
+        }
+
+        .fiba-info-row span {
+            flex: 1;
+            border-bottom: 1px solid #000;
+            font-family: 'Caveat', cursive;
+            font-size: 16px;
+            color: #1d4ed8;
+            padding-left: 5px;
+        }
+
+        .fiba-body-section {
+            display: flex;
+            border: 2px solid #000;
+            border-bottom: none;
+        }
+
+        .fiba-left {
+            width: 55%;
+            border-right: 2px solid #000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .fiba-right {
+            width: 45%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Running Score Header */
+        .fiba-rs-header {
+            text-align: center;
+            font-weight: bold;
+            font-size: 12px;
+            padding: 4px;
+            border-bottom: 2px solid #000;
+            letter-spacing: 1px;
+        }
+
+        /* 4 Column Running Score Grid */
+        .fiba-rs-grid {
+            display: flex;
+            flex: 1;
+        }
+
+        .fiba-rs-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #000;
+        }
+
+        .fiba-rs-col:last-child {
+            border-right: none;
+        }
+
+        .fiba-rs-col-header {
+            display: flex;
+            border-bottom: 2px solid #000;
+            font-weight: bold;
+        }
+
+        .fiba-rs-col-header div {
+            flex: 1;
+            text-align: center;
+            padding: 2px;
+            border-right: 1px solid #000;
+        }
+
+        .fiba-rs-col-header div:last-child {
+            border-right: none;
+        }
+
+        .fiba-rs-row {
+            display: flex;
+            border-bottom: 1px solid #ccc;
+            height: 18px;
+            /* Tightly packed */
+        }
+
+        .fiba-rs-cell {
+            flex: 1;
+            text-align: center;
+            border-right: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            position: relative;
+        }
+
+        .fiba-rs-cell:last-child {
+            border-right: none;
+        }
+
+        .fiba-rs-cell.num {
+            font-weight: bold;
+            background: #fdfdfd;
+            border-right: 1px solid #000;
+            border-left: 1px solid #000;
+            width: 25px;
+            flex: none;
+        }
+
+        .ink-slash {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: #1d4ed8;
+            transform: rotate(-30deg);
+            z-index: 10;
+        }
+
+        .ink-slash.red {
+            background: #b91c1c;
+        }
+
+        .ink-player {
+            font-family: 'Caveat', cursive;
+            font-size: 14px;
+            color: #1d4ed8;
+            font-weight: bold;
+        }
+
+        .ink-player.red {
+            color: #b91c1c;
+        }
+
+        /* Roster Tables */
+        .fiba-team-box {
+            border-bottom: 2px solid #000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .fiba-team-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 4px 8px;
+            font-size: 14px;
+            font-weight: bold;
+            border-bottom: 1px solid #000;
+        }
+
+        .fiba-timeouts-fouls {
+            display: flex;
+            border-bottom: 2px solid #000;
+        }
+
+        .fiba-timeouts {
+            width: 140px;
+            padding: 4px;
+            border-right: 2px solid #000;
+        }
+
+        .fiba-timeouts-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .fiba-box-group {
+            display: flex;
+            gap: 2px;
+        }
+
+        .fiba-box {
+            width: 16px;
+            height: 16px;
+            border: 1px solid #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Caveat', cursive;
+            font-size: 16px;
+            color: #1d4ed8;
+            font-weight: bold;
+        }
+
+        .fiba-team-fouls {
+            flex: 1;
+            padding: 4px;
+        }
+
+        .fiba-roster-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .fiba-roster-table th,
+        .fiba-roster-table td {
+            border: 1px solid #000;
+            padding: 2px 4px;
+            text-align: center;
+            height: 24px;
+        }
+
+        .fiba-roster-table th {
+            font-weight: bold;
+            background: #f0f0f0;
+        }
+
+        .fiba-roster-table td.left {
+            text-align: left;
+        }
+
+        .fiba-coach-row {
+            display: flex;
+            border-bottom: 1px solid #000;
+        }
+
+        .fiba-coach-row:last-child {
+            border-bottom: none;
+        }
+
+        .fiba-coach-label {
+            padding: 4px;
+            width: 100px;
+            border-right: 1px solid #000;
+        }
+
+        .fiba-coach-input {
+            flex: 1;
+            padding: 4px;
+        }
+
+        /* Signatures Section at bottom */
+        .fiba-footer-section {
+            border: 2px solid #000;
+            display: flex;
+        }
+
+        .fiba-signatures {
+            flex: 1;
+            border-right: 2px solid #000;
+            padding: 8px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        .fiba-sig-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .fiba-sig-row label {
+            width: 140px;
+            font-weight: bold;
+        }
+
+        .fiba-sig-line {
+            flex: 1;
+            border-bottom: 1px solid #000;
+            min-height: 16px;
+        }
+
+        .fiba-final-score {
+            width: 250px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .fiba-final-score-row {
+            display: flex;
+            justify-content: space-between;
+        }
+
         @media print {
             body * {
                 visibility: hidden;
@@ -510,6 +867,12 @@
             .sheet-body {
                 background: white !important;
                 padding: 0;
+            }
+
+            /* Make exact A4 print sizing */
+            @page {
+                size: A4 portrait;
+                margin: 10mm;
             }
         }
     </style>
@@ -603,62 +966,93 @@
         </div>
     </div>
 
-    <!-- LIVE SHEET PREVIEW -->
+    <!-- FIBA SCORESHEET MODAL (PRINTABLE) -->
     <div class="livesheet-modal" id="liveSheetModal">
-        <div class="livesheet-header">
-            <div style="font-weight:800;">FIBA SCORESHEET</div>
+        <div class="livesheet-header" id="lsHeaderControls">
+            <div style="font-weight:800; font-size:14px;">OFFICIAL FIBA SCORESHEET</div>
             <div style="display:flex; gap:16px; align-items:center;">
                 <button onclick="window.print()"
                     style="background:var(--blue); color:white; border:none; padding:6px 12px; border-radius:6px; font-weight:600; cursor:pointer;">Print</button>
                 <button class="livesheet-close" onclick="closeLiveSheet()">✕</button>
             </div>
         </div>
+
         <div class="sheet-body">
-            <h3>RUNNING SCORE</h3>
-            <div class="running-score" id="runningScoreDisplay">
-                <div class="rs-col">
-                    <div>A</div>
-                    <!-- A scores -->
+            <div class="fiba-sheet" id="fibaSheet">
+                <!-- Header Section -->
+                <div class="fiba-header-section">
+                    <div class="fiba-logo-box">FIBA</div>
+                    <div class="fiba-title-box">
+                        <h1>Federation Internationale de Basketball</h1>
+                        <h1>International Basketball Federation</h1>
+                        <h2>SCORESHEET</h2>
+                    </div>
                 </div>
-                <div class="rs-col">
-                    <div>M</div>
-                    <!-- Divider/Time -->
+
+                <div class="fiba-info-grid">
+                    <div class="fiba-info-row"><strong>Team A</strong> <span id="fibaTeamA_Name">TEAM A</span></div>
+                    <div class="fiba-info-row"><strong>Team B</strong> <span id="fibaTeamB_Name">TEAM B</span></div>
+                    <div class="fiba-info-row"><strong>Competition</strong> <input type="text" value="Exhibition Match">
+                    </div>
+                    <div class="fiba-info-row"><strong>Date</strong> <input type="text"></div>
+                    <div class="fiba-info-row"><strong>Game No.</strong> <input type="text" value="001"></div>
+                    <div class="fiba-info-row"><strong>Place</strong> <input type="text" value="Main Court"></div>
                 </div>
-                <div class="rs-col">
-                    <div>B</div>
-                    <!-- B scores -->
+
+                <!-- Main Body -->
+                <div class="fiba-body-section">
+                    <!-- Left Column -->
+                    <div class="fiba-left">
+                        <!-- Team A Roster Block -->
+                        <div class="fiba-team-box" id="fibaRosterA_Box"></div>
+                        <!-- Team B Roster Block -->
+                        <div class="fiba-team-box" id="fibaRosterB_Box"></div>
+                    </div>
+
+                    <!-- Right Column (Running Score) -->
+                    <div class="fiba-right">
+                        <div class="fiba-rs-header">RUNNING SCORE</div>
+                        <div class="fiba-rs-grid" id="fibaRunningScoreGrid"></div>
+                    </div>
+                </div>
+
+                <!-- Footer Signatures -->
+                <div class="fiba-footer-section">
+                    <div class="fiba-signatures">
+                        <div class="fiba-sig-row"><label>Scorekeeper</label>
+                            <div class="fiba-sig-line"><canvas class="sig-pad" id="sig_scorer"
+                                    style="height:30px;"></canvas></div>
+                        </div>
+                        <div class="fiba-sig-row"><label>Timekeeper</label>
+                            <div class="fiba-sig-line"></div>
+                        </div>
+                        <div class="fiba-sig-row"><label>24" operator</label>
+                            <div class="fiba-sig-line"></div>
+                        </div>
+                        <div class="fiba-sig-row"><label>Referee</label>
+                            <div class="fiba-sig-line"><canvas class="sig-pad" id="sig_ref"
+                                    style="height:30px;"></canvas></div>
+                        </div>
+                        <div class="fiba-sig-row"><label>Umpire 1</label>
+                            <div class="fiba-sig-line"><canvas class="sig-pad" id="sig_ump1"
+                                    style="height:30px;"></canvas></div>
+                        </div>
+                        <div class="fiba-sig-row"><label>Umpire 2</label>
+                            <div class="fiba-sig-line"></div>
+                        </div>
+                    </div>
+                    <div class="fiba-final-score">
+                        <div class="fiba-final-score-row"><span>Final Score:</span> <span>Team A <span id="fibaFinalA"
+                                    class="ink red"></span></span></div>
+                        <div class="fiba-final-score-row"><span></span> <span>Team B <span id="fibaFinalB"
+                                    class="ink"></span></span></div>
+                        <div style="margin-top:auto; border-top:1px solid #000; padding-top:4px;">
+                            Name of winning team:<br><span id="fibaWinner" class="ink" style="font-size:24px;"></span>
+                        </div>
+                    </div>
                 </div>
             </div>
             <p style="text-align:center; color:#64748b; font-size:12px; margin-top:40px;">End of live preview.</p>
-        </div>
-    </div>
-
-    <!-- END GAME SIGNATURE -->
-    <div class="signature-modal" id="signatureModal">
-        <div class="livesheet-header">
-            <div style="font-weight:800;">OFFICIAL SIGN OFF</div>
-            <button class="livesheet-close" onclick="closeEndGame()">✕</button>
-        </div>
-        <div class="sig-container">
-            <div style="text-align:center; margin-bottom: 32px;">
-                <h2 style="margin:0 0 8px;">FINAL SCORE</h2>
-                <div style="font-size: 48px; font-weight: 800; display:flex; justify-content:center; gap:24px;">
-                    <span style="color:var(--teamA)" id="finalA">0</span>
-                    <span style="color:var(--muted)">-</span>
-                    <span style="color:var(--teamB)" id="finalB">0</span>
-                </div>
-            </div>
-
-            <div class="sig-box">
-                <label>Referee Signature</label>
-                <canvas class="sig-pad" id="sigRef"></canvas>
-            </div>
-            <div class="sig-box">
-                <label>Team A Captain</label>
-                <canvas class="sig-pad" id="sigA"></canvas>
-            </div>
-
-            <button class="action-btn btn-endgame" style="width:100%" onclick="submitGame()">FINALIZE & SAVE</button>
         </div>
     </div>
 
@@ -818,53 +1212,152 @@
         // --- LIVE SHEET PREVIEW ---
         function openLiveSheet() {
             const modal = document.getElementById("liveSheetModal");
-            const rs = document.getElementById("runningScoreDisplay");
 
-            let htmlA = '<div class="rs-col"><div>A</div>';
-            let htmlM = '<div class="rs-col"><div>M</div>';
-            let htmlB = '<div class="rs-col"><div>B</div>';
+            // Set Header Info
+            document.getElementById("fibaTeamA_Name").innerText = state.teamA.name;
+            document.getElementById("fibaTeamB_Name").innerText = state.teamB.name;
+            document.getElementById("fibaFinalA").innerText = state.teamA.score;
+            document.getElementById("fibaFinalB").innerText = state.teamB.score;
 
-            // Generate visual log
-            state.events.filter(e => e.type === 'score').forEach((e) => {
-                if (e.team === 'A') {
-                    htmlA += `<div class="ink red">${e.totalA} (P${e.player})</div>`;
-                    htmlM += `<div>-</div>`;
-                    htmlB += `<div></div>`;
-                } else {
-                    htmlA += `<div></div>`;
-                    htmlM += `<div>-</div>`;
-                    htmlB += `<div class="ink">${e.totalB} (P${e.player})</div>`;
+            const winner = state.teamA.score > state.teamB.score ? state.teamA.name :
+                (state.teamB.score > state.teamA.score ? state.teamB.name : 'TIE');
+            document.getElementById("fibaWinner").innerText = winner;
+
+            // Generate Running Score
+            generateRunningScore();
+
+            // Generate Rosters
+            generateFibaRoster('A');
+            generateFibaRoster('B');
+
+            modal.style.display = "flex";
+
+            // Init signature canvases after making them visible
+            if (!window.fibaSigsInit) {
+                initCanvas('sig_scorer');
+                initCanvas('sig_ref');
+                initCanvas('sig_ump1');
+                initCanvas('sigCoachA_fiba');
+                initCanvas('sigCoachB_fiba');
+                window.fibaSigsInit = true;
+            }
+        }
+
+        function generateRunningScore() {
+            let rsData = { A: Array(161).fill(null), B: Array(161).fill(null) };
+
+            state.events.filter(e => e.type === 'score').forEach(e => {
+                const team = e.team;
+                const currentScore = team === 'A' ? e.totalA : e.totalB;
+                const pts = e.pts;
+
+                for (let i = 0; i < pts; i++) {
+                    const s = currentScore - i;
+                    if (s > 0 && s <= 160) {
+                        rsData[team][s] = {
+                            slashed: true,
+                            player: (i === 0) ? e.player : null
+                        };
+                    }
                 }
             });
 
-            htmlA += '</div>';
-            htmlM += '</div>';
-            htmlB += '</div>';
+            const grid = document.getElementById("fibaRunningScoreGrid");
+            grid.innerHTML = '';
 
-            rs.innerHTML = htmlA + htmlM + htmlB;
-            modal.style.display = "flex";
+            for (let block = 0; block < 4; block++) {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'fiba-rs-col';
+                colDiv.innerHTML = `<div class="fiba-rs-col-header"><div>A</div><div>B</div></div>`;
+
+                for (let r = 1; r <= 40; r++) {
+                    const scoreVal = block * 40 + r;
+
+                    const aData = rsData.A[scoreVal];
+                    const bData = rsData.B[scoreVal];
+
+                    let aPlayerHtml = aData && aData.player ? `<div class="ink-player red">${aData.player}</div>` : '';
+                    let aSlashHtml = aData && aData.slashed ? `<div class="ink-slash red"></div>` : '';
+                    let bPlayerHtml = bData && bData.player ? `<div class="ink-player">${bData.player}</div>` : '';
+                    let bSlashHtml = bData && bData.slashed ? `<div class="ink-slash"></div>` : '';
+
+                    const rowDiv = document.createElement('div');
+                    rowDiv.className = 'fiba-rs-row';
+                    rowDiv.innerHTML = `
+                        <div class="fiba-rs-cell">${aPlayerHtml}</div>
+                        <div class="fiba-rs-cell num">${scoreVal}${aSlashHtml}</div>
+                        <div class="fiba-rs-cell num">${scoreVal}${bSlashHtml}</div>
+                        <div class="fiba-rs-cell">${bPlayerHtml}</div>
+                    `;
+                    colDiv.appendChild(rowDiv);
+                }
+                grid.appendChild(colDiv);
+            }
+        }
+
+        function generateFibaRoster(team) {
+            const teamState = state[`team${team}`];
+            const box = document.getElementById(`fibaRoster${team}_Box`);
+
+            let html = `
+                <div class="fiba-team-header">
+                    <span>Team ${team}:</span>
+                    <span style="font-family:'Caveat'; color:#1d4ed8; font-size:18px;">${teamState.name}</span>
+                </div>
+                <div class="fiba-timeouts-fouls">
+                    <div class="fiba-timeouts">
+                        <strong>Time-outs</strong>
+                        <div class="fiba-timeouts-row">
+                            <div class="fiba-box-group">
+                                <div class="fiba-box">${3 - teamState.timeouts >= 1 ? 'X' : ''}</div>
+                                <div class="fiba-box">${3 - teamState.timeouts >= 2 ? 'X' : ''}</div>
+                                <div class="fiba-box">${3 - teamState.timeouts >= 3 ? 'X' : ''}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="fiba-team-fouls">
+                        <!-- Simplified FIBA team fouls layout omitted for brevity -->
+                    </div>
+                </div>
+                <table class="fiba-roster-table">
+                    <thead>
+                        <tr>
+                            <th style="width:20px">No.</th>
+                            <th class="left">Players</th>
+                            <th colspan="5">Fouls</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            teamState.roster.forEach(p => {
+                html += `<tr>
+                    <td><strong>${p.number}</strong></td>
+                    <td class="left"><input type="text" style="border:none; border-bottom:1px dotted #ccc; width:100%; font-family:Caveat; color:#1d4ed8; height:20px; font-size:14px;" placeholder="Player Name"></td>
+                    <td>${p.fouls >= 1 ? '<span class="ink red">X</span>' : ''}</td>
+                    <td>${p.fouls >= 2 ? '<span class="ink red">X</span>' : ''}</td>
+                    <td>${p.fouls >= 3 ? '<span class="ink red">X</span>' : ''}</td>
+                    <td>${p.fouls >= 4 ? '<span class="ink red">X</span>' : ''}</td>
+                    <td>${p.fouls >= 5 ? '<span class="ink red">X</span>' : ''}</td>
+                </tr>`;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+                <div class="fiba-coach-row"><div class="fiba-coach-label">Coach</div><div class="fiba-coach-input"><canvas class="sig-pad" id="sigCoach${team}_fiba" style="height:25px"></canvas></div></div>
+            `;
+            box.innerHTML = html;
         }
 
         function closeLiveSheet() {
             document.getElementById("liveSheetModal").style.display = "none";
         }
 
-        // --- END GAME & SIGNATURES ---
+        // --- END GAME ---
         function openEndGame() {
-            document.getElementById("finalA").innerText = state.teamA.score;
-            document.getElementById("finalB").innerText = state.teamB.score;
-            document.getElementById("signatureModal").style.display = "flex";
-            initCanvas('sigRef');
-            initCanvas('sigA');
-        }
-
-        function closeEndGame() {
-            document.getElementById("signatureModal").style.display = "none";
-        }
-
-        function submitGame() {
-            alert("Game finalized and saved to CourtStream!");
-            location.href = 'index.html';
+            openLiveSheet();
+            alert("Please sign the Official FIBA scoresheet at the bottom to finalize.");
         }
 
         // Canvas drawing logic
