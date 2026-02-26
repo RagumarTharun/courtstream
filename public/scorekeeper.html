@@ -939,10 +939,16 @@
                 padding: 0;
             }
 
+            .fiba-sheet {
+                max-width: 100%;
+                transform: scale(0.95);
+                transform-origin: top left;
+            }
+
             /* Make exact A4 print sizing */
             @page {
                 size: A4 portrait;
-                margin: 10mm;
+                margin: 8mm;
             }
         }
     </style>
@@ -1092,17 +1098,20 @@
                         <div class="fiba-sig-row"><label>Scorekeeper</label>
                             <div class="fiba-sig-line" onclick="openSignatureCapture('sig_scorer', 'Scorekeeper')">
                                 <canvas class="sig-pad" id="sig_scorer"
-                                    style="height:30px; pointer-events:none;"></canvas></div>
+                                    style="height:30px; pointer-events:none;"></canvas>
+                            </div>
                         </div>
                         <div class="fiba-sig-row"><label>Timekeeper</label>
                             <div class="fiba-sig-line" onclick="openSignatureCapture('sig_timekeeper', 'Timekeeper')">
                                 <canvas class="sig-pad" id="sig_timekeeper"
-                                    style="height:30px; pointer-events:none;"></canvas></div>
+                                    style="height:30px; pointer-events:none;"></canvas>
+                            </div>
                         </div>
                         <div class="fiba-sig-row"><label>24" operator</label>
                             <div class="fiba-sig-line" onclick="openSignatureCapture('sig_24op', '24\u0022 Operator')">
                                 <canvas class="sig-pad" id="sig_24op"
-                                    style="height:30px; pointer-events:none;"></canvas></div>
+                                    style="height:30px; pointer-events:none;"></canvas>
+                            </div>
                         </div>
                         <div class="fiba-sig-row"><label>Referee</label>
                             <div class="fiba-sig-line" onclick="openSignatureCapture('sig_ref', 'Referee')"><canvas
@@ -1329,16 +1338,6 @@
             generateFibaRoster('B');
 
             modal.style.display = "flex";
-
-            // Init signature canvases after making them visible
-            if (!window.fibaSigsInit) {
-                initCanvas('sig_scorer');
-                initCanvas('sig_ref');
-                initCanvas('sig_ump1');
-                initCanvas('sigCoachA_fiba');
-                initCanvas('sigCoachB_fiba');
-                window.fibaSigsInit = true;
-            }
         }
 
         function generateRunningScore() {
