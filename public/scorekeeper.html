@@ -44,7 +44,7 @@
         .app-container {
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: var(--app-height, 100vh);
             width: 100vw;
             max-width: 450px;
             /* Max width for testing on desktop, fills mobile */
@@ -516,6 +516,15 @@
 </head>
 
 <body>
+    <script>
+        // Set dynamic app height for mobile browsers
+        function setAppHeight() {
+            document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+        }
+        window.addEventListener('resize', setAppHeight);
+        window.addEventListener('orientationchange', () => setTimeout(setAppHeight, 100));
+        setAppHeight();
+    </script>
 
     <div class="app-container">
 
