@@ -1665,44 +1665,61 @@
 
             // --- LIVE SHEET PREVIEW ---
             function openLiveSheet() {
-                const modal = document.getElementById("liveSheetModal");
+                // Show loader immediately
+                document.getElementById('liveSheetLoader').style.display = 'flex';
 
-                // Set Title Based on Format
-                const titleObj = document.getElementById("fibaTitleObj");
-                if (titleObj) {
-                    if (state.meta && state.meta.format === 'JDBA') {
-                        titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Japan Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
-                    } else {
-                        titleObj.innerHTML = `<h1 style="font-size:16px; margin:0;">Federation Internationale de Basketball</h1><h1 style="font-size:16px; margin:0 0 8px 0;">International Basketball Federation</h1><h2 style="font-size:24px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
+                setTimeout(() => {
+                    try {
+                        const modal = document.getElementById("liveSheetModal");
+
+                        // Set Title Based on Format
+                        const titleObj = document.getElementById("fibaTitleObj");
+                        if (titleObj) {
+                            if (state.meta && state.meta.format === 'JDBA') {
+                                titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Japan Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
+                            } else {
+                                titleObj.innerHTML = `<h1 style="font-size:16px; margin:0;">Federation Internationale de Basketball</h1><h1 style="font-size:16px; margin:0 0 8px 0;">International Basketball Federation</h1><h2 style="font-size:24px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
+                            }
+                        }
+
+                        // Set Header Info
+                        const meta = state.meta || {};
+                        document.getElementById("fibaCompetition").innerText = meta.competition || "";
+                        document.getElementById("fibaDate").innerText = meta.date || "";
+                        document.getElementById("fibaTime").innerText = meta.time || "";
+                        document.getElementById("fibaReferee").innerText = meta.referee || "";
+                        document.getElementById("fibaUmpire1").innerText = meta.umpire1 || "";
+                        document.getElementById("fibaUmpire2").innerText = meta.umpire2 || "";
+
+                        document.getElementById("fibaTeamA_Name").innerText = state.teamA.name;
+                        document.getElementById("fibaTeamB_Name").innerText = state.teamB.name;
+                        document.getElementById("fibaFinalA").innerText = state.teamA.score;
+                        document.getElementById("fibaFinalB").innerText = state.teamB.score;
+
+                        const winner = state.teamA.score > state.teamB.score ? state.teamA.name :
+                            (state.teamB.score > state.teamA.score ? state.teamB.name : 'TIE');
+                        document.getElementById("fibaWinner").innerText = winner;
+
+                        // Generate Running Score
+                        generateRunningScore();
+
+                        // Generate Rosters
+                        generateFibaRoster('A');
+                        generateFibaRoster('B');
+
+                        modal.style.display = "flex";
+
+                        if (!inlineCanvasesSetup) {
+                            setTimeout(setupInlineCanvases, 50); // Small delay to let DOM render
+                            inlineCanvasesSetup = true;
+                        }
+
+                    } catch (e) {
+                        alert("LIVE SHEET CRASH: " + e.message + "\n\n" + e.stack);
+                    } finally {
+                        document.getElementById('liveSheetLoader').style.display = 'none';
                     }
-                }
-
-                // Set Header Info
-                const meta = state.meta || {};
-                document.getElementById("fibaCompetition").innerText = meta.competition || "";
-                document.getElementById("fibaDate").innerText = meta.date || "";
-                document.getElementById("fibaTime").innerText = meta.time || "";
-                document.getElementById("fibaReferee").innerText = meta.referee || "";
-                document.getElementById("fibaUmpire1").innerText = meta.umpire1 || "";
-                document.getElementById("fibaUmpire2").innerText = meta.umpire2 || "";
-
-                document.getElementById("fibaTeamA_Name").innerText = state.teamA.name;
-                document.getElementById("fibaTeamB_Name").innerText = state.teamB.name;
-                document.getElementById("fibaFinalA").innerText = state.teamA.score;
-                document.getElementById("fibaFinalB").innerText = state.teamB.score;
-
-                const winner = state.teamA.score > state.teamB.score ? state.teamA.name :
-                    (state.teamB.score > state.teamA.score ? state.teamB.name : 'TIE');
-                document.getElementById("fibaWinner").innerText = winner;
-
-                // Generate Running Score
-                generateRunningScore();
-
-                // Generate Rosters
-                generateFibaRoster('A');
-                generateFibaRoster('B');
-
-                modal.style.display = "flex";
+                }, 50);
             }
 
             function generateRunningScore() {
@@ -2010,25 +2027,6 @@
 
             // Setup inline canvases when they first become visible
             let inlineCanvasesSetup = false;
-            const originalOpenLiveSheet = openLiveSheet;
-            window.openLiveSheet = function () {
-                // Show loader immediately
-                document.getElementById('liveSheetLoader').style.display = 'flex';
-
-                // Yield to the browser so the loader can actually paint,
-                // then freeze the thread with the heavy synchronous DOM generation.
-                setTimeout(() => {
-                    originalOpenLiveSheet();
-
-                    if (!inlineCanvasesSetup) {
-                        setTimeout(setupInlineCanvases, 50); // Small delay to let DOM render
-                        inlineCanvasesSetup = true;
-                    }
-
-                    // Hide loader after process finishes
-                    document.getElementById('liveSheetLoader').style.display = 'none';
-                }, 50);
-            };
 
             // Boot
             // initRosters() will now be called by startMatch() from the setup UI.
