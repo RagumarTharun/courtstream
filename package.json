@@ -18,5 +18,8 @@
     "multer": "^2.0.2",
     "socket.io": "^4.7.2",
     "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.37.5"
   }
 }

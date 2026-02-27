@@ -488,14 +488,21 @@
         .fiba-sheet {
             display: flex;
             flex-direction: column;
-            width: 100%;
-            max-width: 800px;
+            width: 1122px;
+            /* A4 landscape width approx */
+            height: auto;
+            min-height: 793px;
+            /* A4 landscape height approx */
             margin: 0 auto;
             background: #fff;
             color: #000;
-            font-family: Arial, sans-serif;
-            font-size: 10px;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
             line-height: 1.2;
+            padding: 20px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            /* Outer page boundary visual only */
         }
 
         .fiba-sheet input {
@@ -511,9 +518,9 @@
 
         .fiba-header-section {
             display: flex;
-            margin-bottom: 10px;
-            border-bottom: 2px solid #000;
+            margin-bottom: 5px;
             padding-bottom: 5px;
+            /* Official sheets don't usually have a thick line strictly under the header text before the info block */
         }
 
         .fiba-logo-box {
@@ -535,25 +542,28 @@
         }
 
         .fiba-title-box h1 {
-            font-size: 16px;
+            font-size: 14px;
             margin: 0;
             font-weight: bold;
+            line-height: 1;
         }
 
         .fiba-title-box h2 {
-            font-size: 18px;
+            font-size: 24px;
             margin: 4px 0 0;
-            font-weight: bold;
-            letter-spacing: 1px;
+            font-weight: 900;
+            letter-spacing: 2px;
         }
 
         .fiba-info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px 30px;
-            margin-bottom: 10px;
+            gap: 4px 20px;
+            margin-bottom: 0;
             border: 2px solid #000;
-            padding: 10px;
+            border-bottom: none;
+            /* Merges into the body section */
+            padding: 8px 12px;
         }
 
         .fiba-info-row {
@@ -576,21 +586,44 @@
             padding-left: 5px;
         }
 
+        /* JDBA FORMAT SPECIFIC OVERRIDES */
+        .fiba-sheet.jdba-format {
+            font-family: 'Meiryo', 'Hiragino Kaku Gothic ProN', sans-serif;
+        }
+
+        .fiba-sheet.jdba-format .fiba-logo-box {
+            border-color: #000;
+            color: #000;
+            font-size: 18px;
+            text-align: center;
+        }
+
+        .fiba-sheet.jdba-format .fiba-title-box h1 {
+            font-size: 18px;
+        }
+
+        .fiba-sheet.jdba-format .fiba-title-box h2 {
+            font-size: 20px;
+            letter-spacing: 4px;
+        }
+
         .fiba-body-section {
             display: flex;
             border: 2px solid #000;
             border-bottom: none;
+            flex: 1;
+            /* Stretch to fill A4 remaining height */
         }
 
         .fiba-left {
-            width: 55%;
+            width: 50%;
             border-right: 2px solid #000;
             display: flex;
             flex-direction: column;
         }
 
         .fiba-right {
-            width: 45%;
+            width: 50%;
             display: flex;
             flex-direction: column;
         }
@@ -598,11 +631,12 @@
         /* Running Score Header */
         .fiba-rs-header {
             text-align: center;
-            font-weight: bold;
-            font-size: 12px;
+            font-weight: 900;
+            font-size: 14px;
             padding: 4px;
             border-bottom: 2px solid #000;
             letter-spacing: 1px;
+            background: #f1f5f9;
         }
 
         /* 4 Column Running Score Grid */
@@ -625,14 +659,16 @@
         .fiba-rs-col-header {
             display: flex;
             border-bottom: 2px solid #000;
-            font-weight: bold;
+            font-weight: 800;
+            background: #e2e8f0;
         }
 
         .fiba-rs-col-header div {
             flex: 1;
             text-align: center;
-            padding: 2px;
-            border-right: 1px solid #000;
+            padding: 2px 0;
+            font-size: 11px;
+            border-right: 1px dotted #94a3b8;
         }
 
         .fiba-rs-col-header div:last-child {
@@ -641,9 +677,10 @@
 
         .fiba-rs-row {
             display: flex;
-            border-bottom: 1px solid #ccc;
-            height: 18px;
-            /* Tightly packed */
+            flex: 1;
+            /* Stretch rows to neatly fill column */
+            border-bottom: 1px solid #cbd5e1;
+            min-height: 14px;
         }
 
         .fiba-rs-cell {
@@ -798,6 +835,8 @@
         .fiba-roster-table {
             width: 100%;
             border-collapse: collapse;
+            flex: 1;
+            /* Stretch table to fill available roster box height if needed */
         }
 
         .fiba-roster-table th,
@@ -806,15 +845,31 @@
             padding: 2px 4px;
             text-align: center;
             height: 24px;
+            font-size: 11px;
+            font-weight: 800;
         }
 
         .fiba-roster-table th {
-            font-weight: bold;
-            background: #f0f0f0;
+            font-weight: 900;
+            background: #e2e8f0;
+            padding: 4px;
+            text-transform: uppercase;
+            font-size: 10px;
+        }
+
+        .fiba-roster-table td {
+            height: 30px;
+            /* Force minimum height for handwritten names */
         }
 
         .fiba-roster-table td.left {
             text-align: left;
+            width: 50%;
+        }
+
+        /* Foul columns specifically */
+        .fiba-roster-table th[colspan="5"] {
+            letter-spacing: 2px;
         }
 
         .fiba-coach-row {
@@ -1672,12 +1727,16 @@
 
                     // Set Title Based on Format
                     const titleObj = document.getElementById("fibaTitleObj");
-                    if (titleObj) {
-                        if (state.meta && state.meta.format === 'JDBA') {
-                            titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Japan Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
-                        } else {
-                            titleObj.innerHTML = `<h1 style="font-size:16px; margin:0;">Federation Internationale de Basketball</h1><h1 style="font-size:16px; margin:0 0 8px 0;">International Basketball Federation</h1><h2 style="font-size:24px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
-                        }
+                    const sheetContainer = document.getElementById("fibaSheet");
+
+                    if (state.meta && state.meta.format === 'JDBA') {
+                        sheetContainer.classList.add('jdba-format');
+                        if (titleObj) titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Japan Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
+                        document.querySelector('.fiba-logo-box').innerText = 'JDBA';
+                    } else {
+                        sheetContainer.classList.remove('jdba-format');
+                        if (titleObj) titleObj.innerHTML = `<h1 style="font-size:16px; margin:0;">Federation Internationale de Basketball</h1><h1 style="font-size:16px; margin:0 0 8px 0;">International Basketball Federation</h1><h2 style="font-size:24px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
+                        document.querySelector('.fiba-logo-box').innerText = 'FIBA';
                     }
 
                     // Set Header Info
