@@ -437,7 +437,6 @@
             font-size: 22px;
             color: #1d4ed8;
             /* Blue pen ink */
-            transform: rotate(-2deg);
             line-height: 1;
         }
 
@@ -1372,7 +1371,6 @@
             <div class="fiba-sheet" id="fibaSheet">
                 <!-- Header Section -->
                 <div class="fiba-header-section">
-                    <div class="fiba-logo-box">FIBA</div>
                     <div class="fiba-title-box" id="fibaTitleObj">
                         <h1>Federation Internationale de Basketball</h1>
                         <h1>International Basketball Federation</h1>
@@ -1681,7 +1679,7 @@
                         if (state.meta && state.meta.customTitle) {
                             titleObj.innerHTML = state.meta.customTitle;
                         } else if (state.meta && state.meta.format === 'JDBA') {
-                            titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Japan Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
+                            titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Jaffna District Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
                         } else {
                             titleObj.innerHTML = `<h1 style="font-size:16px; margin:0;">Federation Internationale de Basketball</h1><h1 style="font-size:16px; margin:0 0 8px 0;">International Basketball Federation</h1><h2 style="font-size:24px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
                         }
