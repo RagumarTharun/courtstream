@@ -411,9 +411,13 @@
         .sheet-body {
             flex: 1;
             overflow-y: auto;
+            overflow-x: hidden;
             padding: 20px;
             background: repeating-linear-gradient(#f8fafc, #f8fafc 39px, #e2e8f0 40px);
             font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .running-score {
@@ -503,6 +507,8 @@
             box-sizing: border-box;
             border: 1px solid #ccc;
             /* Outer page boundary visual only */
+            transform-origin: top center;
+            transition: transform 0.2s ease-out;
         }
 
         .fiba-sheet input {
@@ -555,15 +561,25 @@
             letter-spacing: 2px;
         }
 
-        .fiba-info-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4px 20px;
-            margin-bottom: 0;
+        .fiba-info-block {
+            display: flex;
             border: 2px solid #000;
             border-bottom: none;
             /* Merges into the body section */
-            padding: 8px 12px;
+            margin-bottom: 0;
+        }
+
+        .fiba-info-side {
+            flex: 1;
+            padding: 4px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            border-right: 2px solid #000;
+        }
+
+        .fiba-info-side:last-child {
+            border-right: none;
         }
 
         .fiba-info-row {
@@ -573,17 +589,40 @@
             white-space: nowrap;
         }
 
-        .fiba-info-row strong {
-            font-size: 12px;
+        .fiba-info-row-multi {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            white-space: nowrap;
         }
 
-        .fiba-info-row span {
+        .fiba-field {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .fiba-field.long {
+            flex: 2;
+        }
+
+        .fiba-field.short {
+            flex: 1;
+        }
+
+        .fiba-info-side strong {
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .fiba-info-side span {
             flex: 1;
             border-bottom: 1px solid #000;
             font-family: 'Caveat', cursive;
-            font-size: 16px;
+            font-size: 14px;
             color: #1d4ed8;
-            padding-left: 5px;
+            padding-left: 2px;
+            min-height: 16px;
         }
 
         /* JDBA FORMAT SPECIFIC OVERRIDES */
@@ -594,17 +633,22 @@
         .fiba-sheet.jdba-format .fiba-logo-box {
             border-color: #000;
             color: #000;
-            font-size: 18px;
+            font-size: 16px;
             text-align: center;
+            border-radius: 50%;
+            /* JDBA logo is round */
+            border-width: 3px;
         }
 
         .fiba-sheet.jdba-format .fiba-title-box h1 {
-            font-size: 18px;
+            font-size: 20px;
+            font-weight: 800;
         }
 
         .fiba-sheet.jdba-format .fiba-title-box h2 {
-            font-size: 20px;
-            letter-spacing: 4px;
+            font-size: 16px;
+            letter-spacing: normal;
+            font-weight: 800;
         }
 
         .fiba-body-section {
@@ -1433,18 +1477,34 @@
                     </div>
                 </div>
 
-                <div class="fiba-info-grid">
-                    <div class="fiba-info-row"><strong>Team A</strong> <span id="fibaTeamA_Name">TEAM A</span></div>
-                    <div class="fiba-info-row"><strong>Team B</strong> <span id="fibaTeamB_Name">TEAM B</span></div>
-                    <div class="fiba-info-row"><strong>Competition</strong> <span class="ink"
-                            id="fibaCompetition"></span></div>
-                    <div class="fiba-info-row"><strong>Referee</strong> <span class="ink" id="fibaReferee"></span>
+                <div class="fiba-info-block">
+                    <div class="fiba-info-side">
+                        <div class="fiba-info-row"><strong>Team A</strong> <span id="fibaTeamA_Name">TEAM A</span></div>
+                        <div class="fiba-info-row-multi">
+                            <div class="fiba-field long"><strong>Competition</strong> <span class="ink"
+                                    id="fibaCompetition"></span></div>
+                            <div class="fiba-field short"><strong>Date</strong> <span class="ink" id="fibaDate"></span>
+                            </div>
+                            <div class="fiba-field short"><strong>Time</strong> <span class="ink" id="fibaTime"></span>
+                            </div>
+                        </div>
+                        <div class="fiba-info-row-multi">
+                            <div class="fiba-field long"><strong>Game No.</strong> <span class="ink"
+                                    id="fibaGameNo"></span></div>
+                            <div class="fiba-field long"><strong>Place</strong> <span class="ink" id="fibaPlace"></span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="fiba-info-row"><strong>Date</strong> <span class="ink" id="fibaDate"></span></div>
-                    <div class="fiba-info-row"><strong>Umpire 1</strong> <span class="ink" id="fibaUmpire1"></span>
-                    </div>
-                    <div class="fiba-info-row"><strong>Time</strong> <span class="ink" id="fibaTime"></span></div>
-                    <div class="fiba-info-row"><strong>Umpire 2</strong> <span class="ink" id="fibaUmpire2"></span>
+                    <div class="fiba-info-side">
+                        <div class="fiba-info-row"><strong>Team B</strong> <span id="fibaTeamB_Name">TEAM B</span></div>
+                        <div class="fiba-info-row"><strong id="lblReferee">Crew chief</strong> <span class="ink"
+                                id="fibaReferee"></span></div>
+                        <div class="fiba-info-row-multi">
+                            <div class="fiba-field long"><strong>Umpire 1</strong> <span class="ink"
+                                    id="fibaUmpire1"></span></div>
+                            <div class="fiba-field long"><strong>Umpire 2</strong> <span class="ink"
+                                    id="fibaUmpire2"></span></div>
+                        </div>
                     </div>
                 </div>
 
@@ -1646,6 +1706,36 @@
             selectedPlayer = null;
         }
 
+        function loadScores() {
+            // Simulated function to load existing scores on page load
+        }
+
+        function resizeLiveSheet() {
+            const sheet = document.getElementById("fibaSheet");
+            const modal = document.getElementById("liveSheetModal");
+
+            if (!sheet || modal.style.display === "none") return;
+
+            // Allow 40px for padding
+            const containerWidth = window.innerWidth - 40;
+            const originalWidth = 1122; // A4 strict width
+
+            if (containerWidth < originalWidth) {
+                const scale = containerWidth / originalWidth;
+                sheet.style.transform = `scale(${scale})`;
+                // Adjust parent height so we don't end up with massive empty scrollable space at the bottom
+                // since transform:scale visually shrinks the element but DOM still thinks it's full height.
+                const originalHeight = sheet.getBoundingClientRect().height / scale; // true unscaled height
+                const scaledHeight = originalHeight * scale;
+                sheet.style.marginBottom = `-${originalHeight - scaledHeight}px`;
+            } else {
+                sheet.style.transform = 'scale(1)';
+                sheet.style.marginBottom = '0px';
+            }
+        }
+
+        window.addEventListener('resize', resizeLiveSheet);
+
         function addScore(pts) {
             if (!selectedPlayer) return;
             // Haptics for score
@@ -1731,22 +1821,26 @@
 
                     if (state.meta && state.meta.format === 'JDBA') {
                         sheetContainer.classList.add('jdba-format');
-                        if (titleObj) titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Japan Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
+                        if (titleObj) titleObj.innerHTML = `<h1 style="font-size:20px; font-weight:800; margin:0 0 4px 0;">Jaffna District Basketball Association</h1><h2 style="font-size:16px; margin:0 0 4px 0;">Annual Tournament - 2026</h2><h3 style="font-size:18px; margin:0; letter-spacing:4px;">Scoresheet</h3>`;
                         document.querySelector('.fiba-logo-box').innerText = 'JDBA';
+                        document.getElementById('lblReferee').innerText = 'Crew chief';
                     } else {
                         sheetContainer.classList.remove('jdba-format');
                         if (titleObj) titleObj.innerHTML = `<h1 style="font-size:16px; margin:0;">Federation Internationale de Basketball</h1><h1 style="font-size:16px; margin:0 0 8px 0;">International Basketball Federation</h1><h2 style="font-size:24px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
                         document.querySelector('.fiba-logo-box').innerText = 'FIBA';
+                        document.getElementById('lblReferee').innerText = 'Crew chief'; // FIBA now uses Crew Chief too
                     }
 
                     // Set Header Info
                     const meta = state.meta || {};
-                    document.getElementById("fibaCompetition").innerText = meta.competition || "";
+                    document.getElementById("fibaCompetition").innerText = meta.competition || "Annual Tournament - 2026";
                     document.getElementById("fibaDate").innerText = meta.date || "";
                     document.getElementById("fibaTime").innerText = meta.time || "";
                     document.getElementById("fibaReferee").innerText = meta.referee || "";
                     document.getElementById("fibaUmpire1").innerText = meta.umpire1 || "";
                     document.getElementById("fibaUmpire2").innerText = meta.umpire2 || "";
+                    document.getElementById("fibaGameNo").innerText = meta.gameNo || "";
+                    document.getElementById("fibaPlace").innerText = meta.place || "";
 
                     document.getElementById("fibaTeamA_Name").innerText = state.teamA.name;
                     document.getElementById("fibaTeamB_Name").innerText = state.teamB.name;
@@ -1770,6 +1864,8 @@
                         setTimeout(setupInlineCanvases, 50); // Small delay to let DOM render
                         inlineCanvasesSetup = true;
                     }
+
+                    resizeLiveSheet(); // Apply scaling immediately
 
                 } catch (e) {
                     alert("LIVE SHEET CRASH: " + e.message + "\n\n" + e.stack);
