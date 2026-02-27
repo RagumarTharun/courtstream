@@ -1183,6 +1183,8 @@
                     <input type="date" id="setupDate" class="setup-input">
                     <input type="time" id="setupTime" class="setup-input">
                     <input type="text" id="setupGameNo" class="setup-input" placeholder="Game No.">
+                    <input type="text" id="setupSheetTitle" class="setup-input"
+                        placeholder="Custom Sheet Title (Leave blank for default)" style="grid-column: span 2;">
                     <input type="text" id="setupPlace" class="setup-input" placeholder="Place / Court"
                         style="grid-column: span 2;">
                     <input type="text" id="setupRef" class="setup-input" placeholder="Referee"
@@ -1673,7 +1675,12 @@
                     // Set Title Based on Format
                     const titleObj = document.getElementById("fibaTitleObj");
                     if (titleObj) {
-                        if (state.meta && state.meta.format === 'JDBA') {
+                        titleObj.contentEditable = "true";
+                        titleObj.oninput = () => { state.meta.customTitle = titleObj.innerHTML; };
+
+                        if (state.meta && state.meta.customTitle) {
+                            titleObj.innerHTML = state.meta.customTitle;
+                        } else if (state.meta && state.meta.format === 'JDBA') {
                             titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Japan Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
                         } else {
                             titleObj.innerHTML = `<h1 style="font-size:16px; margin:0;">Federation Internationale de Basketball</h1><h1 style="font-size:16px; margin:0 0 8px 0;">International Basketball Federation</h1><h2 style="font-size:24px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
@@ -2091,6 +2098,7 @@
                 date: document.getElementById("setupDate").value || "",
                 time: document.getElementById("setupTime").value || "",
                 gameNo: document.getElementById("setupGameNo").value || "",
+                customTitle: document.getElementById("setupSheetTitle").value || "",
                 place: document.getElementById("setupPlace").value || "",
                 referee: document.getElementById("setupRef").value || "",
                 umpire1: document.getElementById("setupUmp1").value || "",
