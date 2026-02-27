@@ -1353,492 +1353,490 @@
                 <button class="cancel-btn" onclick="closeActionModal()" style="margin-top:16px;">Cancel</button>
             </div>
         </div>
+    </div> <!-- END ACTION MODAL -->
 
-        <!-- FIBA SCORESHEET MODAL (PRINTABLE) -->
-        <div class="livesheet-modal" id="liveSheetModal">
-            <div class="livesheet-header" id="lsHeaderControls">
-                <div style="font-weight:800; font-size:14px;">OFFICIAL FIBA SCORESHEET</div>
-                <div style="display:flex; gap:16px; align-items:center;">
-                    <button onclick="window.print()"
-                        style="background:var(--blue); color:white; border:none; padding:6px 12px; border-radius:6px; font-weight:600; cursor:pointer;">Print</button>
-                    <button class="livesheet-close" onclick="closeLiveSheet()">✕</button>
-                </div>
-            </div>
-
-            <div class="sheet-body">
-                <div class="fiba-sheet" id="fibaSheet">
-                    <!-- Header Section -->
-                    <div class="fiba-header-section">
-                        <div class="fiba-logo-box">FIBA</div>
-                        <div class="fiba-title-box" id="fibaTitleObj">
-                            <h1>Federation Internationale de Basketball</h1>
-                            <h1>International Basketball Federation</h1>
-                            <h2>SCORESHEET</h2>
-                        </div>
-                    </div>
-
-                    <div class="fiba-info-grid">
-                        <div class="fiba-info-row"><strong>Team A</strong> <span id="fibaTeamA_Name">TEAM A</span></div>
-                        <div class="fiba-info-row"><strong>Team B</strong> <span id="fibaTeamB_Name">TEAM B</span></div>
-                        <div class="fiba-info-row"><strong>Competition</strong> <span class="ink"
-                                id="fibaCompetition"></span></div>
-                        <div class="fiba-info-row"><strong>Referee</strong> <span class="ink" id="fibaReferee"></span>
-                        </div>
-                        <div class="fiba-info-row"><strong>Date</strong> <span class="ink" id="fibaDate"></span></div>
-                        <div class="fiba-info-row"><strong>Umpire 1</strong> <span class="ink" id="fibaUmpire1"></span>
-                        </div>
-                        <div class="fiba-info-row"><strong>Time</strong> <span class="ink" id="fibaTime"></span></div>
-                        <div class="fiba-info-row"><strong>Umpire 2</strong> <span class="ink" id="fibaUmpire2"></span>
-                        </div>
-                    </div>
-
-                    <!-- Main Body -->
-                    <div class="fiba-body-section">
-                        <!-- Left Column -->
-                        <div class="fiba-left">
-                            <!-- Team A Roster Block -->
-                            <div class="fiba-team-box" id="fibaRosterA_Box"></div>
-                            <!-- Team B Roster Block -->
-                            <div class="fiba-team-box" id="fibaRosterB_Box"></div>
-                        </div>
-
-                        <!-- Right Column (Running Score) -->
-                        <div class="fiba-right">
-                            <div class="fiba-rs-header">RUNNING SCORE</div>
-                            <div class="fiba-rs-grid" id="fibaRunningScoreGrid"></div>
-                        </div>
-                    </div>
-
-                    <!-- Footer Signatures -->
-                    <div class="fiba-footer-section">
-                        <div class="fiba-signatures">
-                            <div class="fiba-sig-row"><label>Scorekeeper</label>
-                                <div class="fiba-sig-line" onclick="openSignatureCapture('sig_scorer', 'Scorekeeper')">
-                                    <canvas class="sig-pad" id="sig_scorer"
-                                        style="height:30px; pointer-events:none;"></canvas>
-                                </div>
-                            </div>
-                            <div class="fiba-sig-row"><label>Timekeeper</label>
-                                <div class="fiba-sig-line"
-                                    onclick="openSignatureCapture('sig_timekeeper', 'Timekeeper')">
-                                    <canvas class="sig-pad" id="sig_timekeeper"
-                                        style="height:30px; pointer-events:none;"></canvas>
-                                </div>
-                            </div>
-                            <div class="fiba-sig-row"><label>24" operator</label>
-                                <div class="fiba-sig-line"
-                                    onclick="openSignatureCapture('sig_24op', '24\u0022 Operator')">
-                                    <canvas class="sig-pad" id="sig_24op"
-                                        style="height:30px; pointer-events:none;"></canvas>
-                                </div>
-                            </div>
-                            <div class="fiba-sig-row"><label>Referee</label>
-                                <div class="fiba-sig-line" onclick="openSignatureCapture('sig_ref', 'Referee')"><canvas
-                                        class="sig-pad" id="sig_ref" style="height:30px; pointer-events:none;"></canvas>
-                                </div>
-                            </div>
-                            <div class="fiba-sig-row"><label>Umpire 1</label>
-                                <div class="fiba-sig-line" onclick="openSignatureCapture('sig_ump1', 'Umpire 1')">
-                                    <canvas class="sig-pad" id="sig_ump1"
-                                        style="height:30px; pointer-events:none;"></canvas>
-                                </div>
-                            </div>
-                            <div class="fiba-sig-row"><label>Umpire 2</label>
-                                <div class="fiba-sig-line" onclick="openSignatureCapture('sig_ump2', 'Umpire 2')">
-                                    <canvas class="sig-pad" id="sig_ump2"
-                                        style="height:30px; pointer-events:none;"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="fiba-final-score">
-                            <div class="fiba-final-score-row"><span>Final Score:</span> <span>Team A <span
-                                        id="fibaFinalA" class="ink red"></span></span></div>
-                            <div class="fiba-final-score-row"><span></span> <span>Team B <span id="fibaFinalB"
-                                        class="ink"></span></span></div>
-                            <div style="margin-top:auto; border-top:1px solid #000; padding-top:4px;">
-                                Name of winning team:<br><span id="fibaWinner" class="ink"
-                                    style="font-size:24px;"></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <p style="text-align:center; color:#64748b; font-size:12px; margin-top:40px;">End of live preview.</p>
+    <!-- FIBA SCORESHEET MODAL (PRINTABLE) -->
+    <div class="livesheet-modal" id="liveSheetModal">
+        <div class="livesheet-header" id="lsHeaderControls">
+            <div style="font-weight:800; font-size:14px;">OFFICIAL FIBA SCORESHEET</div>
+            <div style="display:flex; gap:16px; align-items:center;">
+                <button onclick="window.print()"
+                    style="background:var(--blue); color:white; border:none; padding:6px 12px; border-radius:6px; font-weight:600; cursor:pointer;">Print</button>
+                <button class="livesheet-close" onclick="closeLiveSheet()">✕</button>
             </div>
         </div>
 
-        <!-- SIGNATURE CAPTURE MODAL -->
-        <div class="sig-capture-modal" id="sigCaptureModal">
-            <div class="sig-capture-header">
-                <div id="sigRoleTitle">Sign Here</div>
-                <button onclick="closeSignatureCapture()"
-                    style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">✕</button>
+        <div class="sheet-body">
+            <div class="fiba-sheet" id="fibaSheet">
+                <!-- Header Section -->
+                <div class="fiba-header-section">
+                    <div class="fiba-logo-box">FIBA</div>
+                    <div class="fiba-title-box" id="fibaTitleObj">
+                        <h1>Federation Internationale de Basketball</h1>
+                        <h1>International Basketball Federation</h1>
+                        <h2>SCORESHEET</h2>
+                    </div>
+                </div>
+
+                <div class="fiba-info-grid">
+                    <div class="fiba-info-row"><strong>Team A</strong> <span id="fibaTeamA_Name">TEAM A</span></div>
+                    <div class="fiba-info-row"><strong>Team B</strong> <span id="fibaTeamB_Name">TEAM B</span></div>
+                    <div class="fiba-info-row"><strong>Competition</strong> <span class="ink"
+                            id="fibaCompetition"></span></div>
+                    <div class="fiba-info-row"><strong>Referee</strong> <span class="ink" id="fibaReferee"></span>
+                    </div>
+                    <div class="fiba-info-row"><strong>Date</strong> <span class="ink" id="fibaDate"></span></div>
+                    <div class="fiba-info-row"><strong>Umpire 1</strong> <span class="ink" id="fibaUmpire1"></span>
+                    </div>
+                    <div class="fiba-info-row"><strong>Time</strong> <span class="ink" id="fibaTime"></span></div>
+                    <div class="fiba-info-row"><strong>Umpire 2</strong> <span class="ink" id="fibaUmpire2"></span>
+                    </div>
+                </div>
+
+                <!-- Main Body -->
+                <div class="fiba-body-section">
+                    <!-- Left Column -->
+                    <div class="fiba-left">
+                        <!-- Team A Roster Block -->
+                        <div class="fiba-team-box" id="fibaRosterA_Box"></div>
+                        <!-- Team B Roster Block -->
+                        <div class="fiba-team-box" id="fibaRosterB_Box"></div>
+                    </div>
+
+                    <!-- Right Column (Running Score) -->
+                    <div class="fiba-right">
+                        <div class="fiba-rs-header">RUNNING SCORE</div>
+                        <div class="fiba-rs-grid" id="fibaRunningScoreGrid"></div>
+                    </div>
+                </div>
+
+                <!-- Footer Signatures -->
+                <div class="fiba-footer-section">
+                    <div class="fiba-signatures">
+                        <div class="fiba-sig-row"><label>Scorekeeper</label>
+                            <div class="fiba-sig-line" onclick="openSignatureCapture('sig_scorer', 'Scorekeeper')">
+                                <canvas class="sig-pad" id="sig_scorer"
+                                    style="height:30px; pointer-events:none;"></canvas>
+                            </div>
+                        </div>
+                        <div class="fiba-sig-row"><label>Timekeeper</label>
+                            <div class="fiba-sig-line" onclick="openSignatureCapture('sig_timekeeper', 'Timekeeper')">
+                                <canvas class="sig-pad" id="sig_timekeeper"
+                                    style="height:30px; pointer-events:none;"></canvas>
+                            </div>
+                        </div>
+                        <div class="fiba-sig-row"><label>24" operator</label>
+                            <div class="fiba-sig-line" onclick="openSignatureCapture('sig_24op', '24\u0022 Operator')">
+                                <canvas class="sig-pad" id="sig_24op"
+                                    style="height:30px; pointer-events:none;"></canvas>
+                            </div>
+                        </div>
+                        <div class="fiba-sig-row"><label>Referee</label>
+                            <div class="fiba-sig-line" onclick="openSignatureCapture('sig_ref', 'Referee')"><canvas
+                                    class="sig-pad" id="sig_ref" style="height:30px; pointer-events:none;"></canvas>
+                            </div>
+                        </div>
+                        <div class="fiba-sig-row"><label>Umpire 1</label>
+                            <div class="fiba-sig-line" onclick="openSignatureCapture('sig_ump1', 'Umpire 1')">
+                                <canvas class="sig-pad" id="sig_ump1"
+                                    style="height:30px; pointer-events:none;"></canvas>
+                            </div>
+                        </div>
+                        <div class="fiba-sig-row"><label>Umpire 2</label>
+                            <div class="fiba-sig-line" onclick="openSignatureCapture('sig_ump2', 'Umpire 2')">
+                                <canvas class="sig-pad" id="sig_ump2"
+                                    style="height:30px; pointer-events:none;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="fiba-final-score">
+                        <div class="fiba-final-score-row"><span>Final Score:</span> <span>Team A <span id="fibaFinalA"
+                                    class="ink red"></span></span></div>
+                        <div class="fiba-final-score-row"><span></span> <span>Team B <span id="fibaFinalB"
+                                    class="ink"></span></span></div>
+                        <div style="margin-top:auto; border-top:1px solid #000; padding-top:4px;">
+                            Name of winning team:<br><span id="fibaWinner" class="ink" style="font-size:24px;"></span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="sig-capture-body">
-                <h3 style="color:var(--text); text-align:center; margin-top:0;">Please provide your signature:</h3>
-                <div class="sig-capture-canvas-container">
-                    <canvas id="activeSigPad"></canvas>
-                </div>
-                <div class="sig-capture-footer">
-                    <button class="sig-btn btn-clear" onclick="clearSignature()">Clear</button>
-                    <button class="sig-btn btn-save-sig" onclick="saveSignature()">Save Signature</button>
-                </div>
+            <p style="text-align:center; color:#64748b; font-size:12px; margin-top:40px;">End of live preview.</p>
+        </div>
+    </div>
+
+    <!-- SIGNATURE CAPTURE MODAL -->
+    <div class="sig-capture-modal" id="sigCaptureModal">
+        <div class="sig-capture-header">
+            <div id="sigRoleTitle">Sign Here</div>
+            <button onclick="closeSignatureCapture()"
+                style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">✕</button>
+        </div>
+        <div class="sig-capture-body">
+            <h3 style="color:var(--text); text-align:center; margin-top:0;">Please provide your signature:</h3>
+            <div class="sig-capture-canvas-container">
+                <canvas id="activeSigPad"></canvas>
+            </div>
+            <div class="sig-capture-footer">
+                <button class="sig-btn btn-clear" onclick="clearSignature()">Clear</button>
+                <button class="sig-btn btn-save-sig" onclick="saveSignature()">Save Signature</button>
             </div>
         </div>
+    </div>
 
-        <script>
-            window.onerror = function (msg, url, lineNo, columnNo, error) {
-                fetch("http://localhost:8081/log_error?msg=" + encodeURIComponent(msg + " at " + lineNo));
-                return false;
-            };
+    <script>
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+            fetch("http://localhost:8081/log_error?msg=" + encodeURIComponent(msg + " at " + lineNo));
+            return false;
+        };
 
-            // --- STATE ---
-            let state = {
-                period: 1,
-                teamA: { name: "TEAM A", score: 0, timeouts: 3, roster: [] },
-                teamB: { name: "TEAM B", score: 0, timeouts: 3, roster: [] },
-                events: [] // { time, type: 'score'|'foul', team: 'A'|'B', player: #, pts: 1|2|3 }
-            };
+        // --- STATE ---
+        let state = {
+            period: 1,
+            teamA: { name: "TEAM A", score: 0, timeouts: 3, roster: [] },
+            teamB: { name: "TEAM B", score: 0, timeouts: 3, roster: [] },
+            events: [] // { time, type: 'score'|'foul', team: 'A'|'B', player: #, pts: 1|2|3 }
+        };
 
-            let selectedPlayer = null; // { team: 'A', number: 4 }
+        let selectedPlayer = null; // { team: 'A', number: 4 }
 
-            // --- INIT ---
-            function initRosters() {
-                // Generate default FIBA numbers 4-15
-                for (let i = 4; i <= 15; i++) {
-                    state.teamA.roster.push({ number: i, fouls: 0, pts: 0 });
-                    state.teamB.roster.push({ number: i, fouls: 0, pts: 0 });
-                }
-                renderRosters();
+        // --- INIT ---
+        function initRosters() {
+            // Generate default FIBA numbers 4-15
+            for (let i = 4; i <= 15; i++) {
+                state.teamA.roster.push({ number: i, fouls: 0, pts: 0 });
+                state.teamB.roster.push({ number: i, fouls: 0, pts: 0 });
+            }
+            renderRosters();
+        }
+
+        function renderRosters() {
+            const rA = document.getElementById("rosterA");
+            const rB = document.getElementById("rosterB");
+            rA.innerHTML = ''; rB.innerHTML = '';
+
+            let winningTeam = null;
+            let maxPts = 0;
+            if (state.teamA.score > state.teamB.score) {
+                winningTeam = 'A';
+                maxPts = Math.max(...state.teamA.roster.map(p => p.pts));
+            } else if (state.teamB.score > state.teamA.score) {
+                winningTeam = 'B';
+                maxPts = Math.max(...state.teamB.roster.map(p => p.pts));
             }
 
-            function renderRosters() {
-                const rA = document.getElementById("rosterA");
-                const rB = document.getElementById("rosterB");
-                rA.innerHTML = ''; rB.innerHTML = '';
+            state.teamA.roster.forEach(p => rA.appendChild(createPlayerRow('A', p, winningTeam === 'A' && maxPts > 0 && p.pts === maxPts)));
+            state.teamB.roster.forEach(p => rB.appendChild(createPlayerRow('B', p, winningTeam === 'B' && maxPts > 0 && p.pts === maxPts)));
+        }
 
-                let winningTeam = null;
-                let maxPts = 0;
-                if (state.teamA.score > state.teamB.score) {
-                    winningTeam = 'A';
-                    maxPts = Math.max(...state.teamA.roster.map(p => p.pts));
-                } else if (state.teamB.score > state.teamA.score) {
-                    winningTeam = 'B';
-                    maxPts = Math.max(...state.teamB.roster.map(p => p.pts));
-                }
+        function createPlayerRow(team, player, isMotm = false) {
+            const div = document.createElement("div");
+            div.className = `player-row team${team}`;
+            div.onclick = () => openActionModal(team, player);
 
-                state.teamA.roster.forEach(p => rA.appendChild(createPlayerRow('A', p, winningTeam === 'A' && maxPts > 0 && p.pts === maxPts)));
-                state.teamB.roster.forEach(p => rB.appendChild(createPlayerRow('B', p, winningTeam === 'B' && maxPts > 0 && p.pts === maxPts)));
+            let foulHtml = '';
+            for (let i = 0; i < 5; i++) {
+                foulHtml += `<div class="foul-dot ${i < player.fouls ? 'active' : ''}"></div>`;
             }
 
-            function createPlayerRow(team, player, isMotm = false) {
-                const div = document.createElement("div");
-                div.className = `player-row team${team}`;
-                div.onclick = () => openActionModal(team, player);
-
-                let foulHtml = '';
-                for (let i = 0; i < 5; i++) {
-                    foulHtml += `<div class="foul-dot ${i < player.fouls ? 'active' : ''}"></div>`;
+            const jerseyDiv = document.createElement("div");
+            jerseyDiv.className = "jersey";
+            jerseyDiv.innerText = `#${player.number}`;
+            jerseyDiv.onclick = (e) => {
+                e.stopPropagation();
+                const newNum = prompt(`Enter new jersey number for Player #${player.number}`, player.number);
+                if (newNum && newNum.trim() !== '') {
+                    player.number = newNum.trim();
+                    renderRosters();
                 }
+            };
 
-                const jerseyDiv = document.createElement("div");
-                jerseyDiv.className = "jersey";
-                jerseyDiv.innerText = `#${player.number}`;
-                jerseyDiv.onclick = (e) => {
-                    e.stopPropagation();
-                    const newNum = prompt(`Enter new jersey number for Player #${player.number}`, player.number);
-                    if (newNum && newNum.trim() !== '') {
-                        player.number = newNum.trim();
-                        renderRosters();
-                    }
-                };
+            div.appendChild(jerseyDiv);
 
-                div.appendChild(jerseyDiv);
+            const statsDiv = document.createElement("div");
+            statsDiv.style.textAlign = "right";
 
-                const statsDiv = document.createElement("div");
-                statsDiv.style.textAlign = "right";
+            let motmHtml = isMotm ? `<span style="background:var(--amber); color:#0f172a; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:800; margin-right:6px; letter-spacing:0.5px; vertical-align:middle; display:inline-block;">MOTM 🏆</span>` : '';
 
-                let motmHtml = isMotm ? `<span style="background:var(--amber); color:#0f172a; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:800; margin-right:6px; letter-spacing:0.5px; vertical-align:middle; display:inline-block;">MOTM 🏆</span>` : '';
-
-                statsDiv.innerHTML = `
+            statsDiv.innerHTML = `
               <div style="font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px;">${motmHtml}${player.pts} pts</div>
               <div class="fouls">${foulHtml}</div>
             `;
-                div.appendChild(statsDiv);
+            div.appendChild(statsDiv);
 
-                return div;
+            return div;
+        }
+
+        // --- ACTIONS ---
+        function openActionModal(team, player) {
+            if (player.fouls >= 5) {
+                alert("Player fouled out.");
+                return;
             }
 
-            // --- ACTIONS ---
-            function openActionModal(team, player) {
-                if (player.fouls >= 5) {
-                    alert("Player fouled out.");
-                    return;
+            // Haptic Feedback
+            if (navigator.vibrate) navigator.vibrate(50);
+
+            selectedPlayer = { team, player };
+
+            const teamName = team === 'A' ? state.teamA.name : state.teamB.name;
+            document.getElementById("actionTitle").innerText = `Player #${player.number}`;
+            document.getElementById("actionSubtitle").innerText = `${teamName} • ${player.pts} pts / ${player.fouls} fouls`;
+
+            document.getElementById("actionModal").classList.add("active");
+        }
+
+        function closeActionModal(e) {
+            if (e && e.target !== document.getElementById("actionModal")) return;
+            document.getElementById("actionModal").classList.remove("active");
+            selectedPlayer = null;
+        }
+
+        function addScore(pts) {
+            if (!selectedPlayer) return;
+            // Haptics for score
+            if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+
+            const t = selectedPlayer.team;
+            const pId = selectedPlayer.player.number;
+
+            // Update State
+            state[`team${t}`].score += pts;
+            selectedPlayer.player.pts += pts;
+
+            state.events.push({
+                time: Date.now(), period: state.period, type: 'score', team: t, player: pId, pts: pts, totalA: state.teamA.score, totalB: state.teamB.score
+            });
+
+            // Update UI
+            document.getElementById(`score${t}`).innerText = state[`team${t}`].score;
+            renderRosters();
+            closeActionModal();
+        }
+
+        function addFoul(foulType = 'P') {
+            if (!selectedPlayer) return;
+            // Heavy haptics for foul
+            if (navigator.vibrate) navigator.vibrate(100);
+
+            const t = selectedPlayer.team;
+            const pId = selectedPlayer.player.number;
+
+            selectedPlayer.player.fouls += 1;
+
+            state.events.push({
+                time: Date.now(), period: state.period, type: 'foul', team: t, player: pId, foulType: foulType
+            });
+
+            renderRosters();
+            closeActionModal();
+        }
+
+        function takeTimeout(team) {
+            if (state[`team${team}`].timeouts > 0) {
+                const minute = prompt(`Enter the minute of the period for this Time-out (e.g. 5):`);
+                if (!minute) return; // Cancelled
+
+                state[`team${team}`].timeouts--;
+                document.getElementById(`to${team}`).innerText = state[`team${team}`].timeouts;
+                if (state[`team${team}`].timeouts === 0) {
+                    document.querySelector(`#name${team}`).closest('.team-box').querySelector('.timeout-btn').classList.add('used');
                 }
-
-                // Haptic Feedback
-                if (navigator.vibrate) navigator.vibrate(50);
-
-                selectedPlayer = { team, player };
-
-                const teamName = team === 'A' ? state.teamA.name : state.teamB.name;
-                document.getElementById("actionTitle").innerText = `Player #${player.number}`;
-                document.getElementById("actionSubtitle").innerText = `${teamName} • ${player.pts} pts / ${player.fouls} fouls`;
-
-                document.getElementById("actionModal").classList.add("active");
-            }
-
-            function closeActionModal(e) {
-                if (e && e.target !== document.getElementById("actionModal")) return;
-                document.getElementById("actionModal").classList.remove("active");
-                selectedPlayer = null;
-            }
-
-            function addScore(pts) {
-                if (!selectedPlayer) return;
-                // Haptics for score
-                if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
-
-                const t = selectedPlayer.team;
-                const pId = selectedPlayer.player.number;
-
-                // Update State
-                state[`team${t}`].score += pts;
-                selectedPlayer.player.pts += pts;
 
                 state.events.push({
-                    time: Date.now(), period: state.period, type: 'score', team: t, player: pId, pts: pts, totalA: state.teamA.score, totalB: state.teamB.score
+                    time: Date.now(), period: state.period, type: 'timeout', team: team, minute: minute
                 });
-
-                // Update UI
-                document.getElementById(`score${t}`).innerText = state[`team${t}`].score;
-                renderRosters();
-                closeActionModal();
             }
+        }
 
-            function addFoul(foulType = 'P') {
-                if (!selectedPlayer) return;
-                // Heavy haptics for foul
-                if (navigator.vibrate) navigator.vibrate(100);
+        function changePeriod(delta) {
+            state.period = Math.max(1, Math.min(4, state.period + delta));
+            document.getElementById("periodLbl").innerText = `Period ${state.period}`;
+        }
 
-                const t = selectedPlayer.team;
-                const pId = selectedPlayer.player.number;
-
-                selectedPlayer.player.fouls += 1;
-
-                state.events.push({
-                    time: Date.now(), period: state.period, type: 'foul', team: t, player: pId, foulType: foulType
-                });
-
-                renderRosters();
-                closeActionModal();
+        function renameTeam(team) {
+            const newName = prompt(`Enter new name for Team ${team}`, state[`team${team}`].name);
+            if (newName) {
+                state[`team${team}`].name = newName.substring(0, 12).toUpperCase();
+                document.getElementById(`name${team}`).innerText = state[`team${team}`].name;
             }
+        }
 
-            function takeTimeout(team) {
-                if (state[`team${team}`].timeouts > 0) {
-                    const minute = prompt(`Enter the minute of the period for this Time-out (e.g. 5):`);
-                    if (!minute) return; // Cancelled
+        // --- LIVE SHEET PREVIEW ---
+        function openLiveSheet() {
+            // Show loader immediately
+            document.getElementById('liveSheetLoader').style.display = 'flex';
 
-                    state[`team${team}`].timeouts--;
-                    document.getElementById(`to${team}`).innerText = state[`team${team}`].timeouts;
-                    if (state[`team${team}`].timeouts === 0) {
-                        document.querySelector(`#name${team}`).closest('.team-box').querySelector('.timeout-btn').classList.add('used');
+            setTimeout(() => {
+                try {
+                    const modal = document.getElementById("liveSheetModal");
+
+                    // Set Title Based on Format
+                    const titleObj = document.getElementById("fibaTitleObj");
+                    if (titleObj) {
+                        if (state.meta && state.meta.format === 'JDBA') {
+                            titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Japan Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
+                        } else {
+                            titleObj.innerHTML = `<h1 style="font-size:16px; margin:0;">Federation Internationale de Basketball</h1><h1 style="font-size:16px; margin:0 0 8px 0;">International Basketball Federation</h1><h2 style="font-size:24px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
+                        }
                     }
 
-                    state.events.push({
-                        time: Date.now(), period: state.period, type: 'timeout', team: team, minute: minute
-                    });
+                    // Set Header Info
+                    const meta = state.meta || {};
+                    document.getElementById("fibaCompetition").innerText = meta.competition || "";
+                    document.getElementById("fibaDate").innerText = meta.date || "";
+                    document.getElementById("fibaTime").innerText = meta.time || "";
+                    document.getElementById("fibaReferee").innerText = meta.referee || "";
+                    document.getElementById("fibaUmpire1").innerText = meta.umpire1 || "";
+                    document.getElementById("fibaUmpire2").innerText = meta.umpire2 || "";
+
+                    document.getElementById("fibaTeamA_Name").innerText = state.teamA.name;
+                    document.getElementById("fibaTeamB_Name").innerText = state.teamB.name;
+                    document.getElementById("fibaFinalA").innerText = state.teamA.score;
+                    document.getElementById("fibaFinalB").innerText = state.teamB.score;
+
+                    const winner = state.teamA.score > state.teamB.score ? state.teamA.name :
+                        (state.teamB.score > state.teamA.score ? state.teamB.name : 'TIE');
+                    document.getElementById("fibaWinner").innerText = winner;
+
+                    // Generate Running Score
+                    generateRunningScore();
+
+                    // Generate Rosters
+                    generateFibaRoster('A');
+                    generateFibaRoster('B');
+
+                    modal.style.display = "flex";
+
+                    if (!inlineCanvasesSetup) {
+                        setTimeout(setupInlineCanvases, 50); // Small delay to let DOM render
+                        inlineCanvasesSetup = true;
+                    }
+
+                } catch (e) {
+                    alert("LIVE SHEET CRASH: " + e.message + "\n\n" + e.stack);
+                } finally {
+                    document.getElementById('liveSheetLoader').style.display = 'none';
                 }
-            }
+            }, 50);
+        }
 
-            function changePeriod(delta) {
-                state.period = Math.max(1, Math.min(4, state.period + delta));
-                document.getElementById("periodLbl").innerText = `Period ${state.period}`;
-            }
+        function generateRunningScore() {
+            let rsData = { A: Array(161).fill(null), B: Array(161).fill(null) };
+            let runningScoreA = 0;
+            let runningScoreB = 0;
 
-            function renameTeam(team) {
-                const newName = prompt(`Enter new name for Team ${team}`, state[`team${team}`].name);
-                if (newName) {
-                    state[`team${team}`].name = newName.substring(0, 12).toUpperCase();
-                    document.getElementById(`name${team}`).innerText = state[`team${team}`].name;
+            // Track chronological events
+            state.events.forEach(e => {
+                if (e.type === 'score') {
+                    const team = e.team;
+                    const pts = e.pts;
+                    const oldScore = team === 'A' ? runningScoreA : runningScoreB;
+                    const newScore = oldScore + pts;
+
+                    if (team === 'A') runningScoreA = newScore;
+                    else runningScoreB = newScore;
+
+                    // Only draw if within bounds
+                    if (pts === 1) {
+                        if (newScore <= 160) rsData[team][newScore] = { symbol: 'dot', player: e.player, circled: false };
+                    } else if (pts === 2) {
+                        if (newScore <= 160) rsData[team][newScore] = { symbol: 'slash', player: e.player, circled: false };
+                        if (newScore - 1 <= 160 && newScore - 1 > 0) rsData[team][newScore - 1] = { symbol: 'slash', player: null, circled: false };
+                    } else if (pts === 3) {
+                        if (newScore <= 160) rsData[team][newScore] = { symbol: 'slash', player: e.player, circled: true };
+                        if (newScore - 1 <= 160 && newScore - 1 > 0) rsData[team][newScore - 1] = { symbol: 'slash', player: null, circled: false };
+                        if (newScore - 2 <= 160 && newScore - 2 > 0) rsData[team][newScore - 2] = { symbol: 'slash', player: null, circled: false };
+                    }
+                } else if (e.type === 'periodEnd') {
+                    if (runningScoreA <= 160 && runningScoreA > 0) {
+                        if (!rsData.A[runningScoreA]) rsData.A[runningScoreA] = {};
+                        rsData.A[runningScoreA].periodEnd = true;
+                    }
+                    if (runningScoreB <= 160 && runningScoreB > 0) {
+                        if (!rsData.B[runningScoreB]) rsData.B[runningScoreB] = {};
+                        rsData.B[runningScoreB].periodEnd = true;
+                    }
                 }
-            }
+            });
 
-            // --- LIVE SHEET PREVIEW ---
-            function openLiveSheet() {
-                // Show loader immediately
-                document.getElementById('liveSheetLoader').style.display = 'flex';
+            const grid = document.getElementById("fibaRunningScoreGrid");
+            grid.innerHTML = '';
 
-                setTimeout(() => {
-                    try {
-                        const modal = document.getElementById("liveSheetModal");
+            for (let block = 0; block < 4; block++) {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'fiba-rs-col';
+                colDiv.innerHTML = `<div class="fiba-rs-col-header"><div>A</div><div>B</div></div>`;
 
-                        // Set Title Based on Format
-                        const titleObj = document.getElementById("fibaTitleObj");
-                        if (titleObj) {
-                            if (state.meta && state.meta.format === 'JDBA') {
-                                titleObj.innerHTML = `<h1 style="font-size:24px; margin:0 0 8px 0; text-transform:uppercase;">Japan Basketball Association</h1><h2 style="font-size:18px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
-                            } else {
-                                titleObj.innerHTML = `<h1 style="font-size:16px; margin:0;">Federation Internationale de Basketball</h1><h1 style="font-size:16px; margin:0 0 8px 0;">International Basketball Federation</h1><h2 style="font-size:24px; margin:0; letter-spacing:4px;">SCORESHEET</h2>`;
-                            }
+                for (let r = 1; r <= 40; r++) {
+                    const scoreVal = block * 40 + r;
+
+                    const aData = rsData.A[scoreVal];
+                    const bData = rsData.B[scoreVal];
+
+                    // Team A
+                    let aPlayerHtml = '';
+                    let aSymbolHtml = '';
+                    let aContainerClass = 'fiba-rs-cell num';
+                    let aScoreStr = scoreVal;
+
+                    if (aData) {
+                        if (aData.periodEnd) {
+                            aContainerClass += ' period-end';
+                            aScoreStr = `<div class="period-end-circle">${scoreVal}</div>`;
                         }
-
-                        // Set Header Info
-                        const meta = state.meta || {};
-                        document.getElementById("fibaCompetition").innerText = meta.competition || "";
-                        document.getElementById("fibaDate").innerText = meta.date || "";
-                        document.getElementById("fibaTime").innerText = meta.time || "";
-                        document.getElementById("fibaReferee").innerText = meta.referee || "";
-                        document.getElementById("fibaUmpire1").innerText = meta.umpire1 || "";
-                        document.getElementById("fibaUmpire2").innerText = meta.umpire2 || "";
-
-                        document.getElementById("fibaTeamA_Name").innerText = state.teamA.name;
-                        document.getElementById("fibaTeamB_Name").innerText = state.teamB.name;
-                        document.getElementById("fibaFinalA").innerText = state.teamA.score;
-                        document.getElementById("fibaFinalB").innerText = state.teamB.score;
-
-                        const winner = state.teamA.score > state.teamB.score ? state.teamA.name :
-                            (state.teamB.score > state.teamA.score ? state.teamB.name : 'TIE');
-                        document.getElementById("fibaWinner").innerText = winner;
-
-                        // Generate Running Score
-                        generateRunningScore();
-
-                        // Generate Rosters
-                        generateFibaRoster('A');
-                        generateFibaRoster('B');
-
-                        modal.style.display = "flex";
-
-                        if (!inlineCanvasesSetup) {
-                            setTimeout(setupInlineCanvases, 50); // Small delay to let DOM render
-                            inlineCanvasesSetup = true;
+                        if (aData.player) {
+                            let pNum = aData.circled ? `<span class="circled-ink">${aData.player}</span>` : aData.player;
+                            aPlayerHtml = `<div class="ink-player red">${pNum}</div>`;
                         }
-
-                    } catch (e) {
-                        alert("LIVE SHEET CRASH: " + e.message + "\n\n" + e.stack);
-                    } finally {
-                        document.getElementById('liveSheetLoader').style.display = 'none';
+                        if (aData.symbol === 'slash') aSymbolHtml = `<div class="ink-slash red"></div>`;
+                        if (aData.symbol === 'dot') aSymbolHtml = `<div class="ink-dot red"></div>`;
                     }
-                }, 50);
-            }
 
-            function generateRunningScore() {
-                let rsData = { A: Array(161).fill(null), B: Array(161).fill(null) };
-                let runningScoreA = 0;
-                let runningScoreB = 0;
+                    // Team B
+                    let bPlayerHtml = '';
+                    let bSymbolHtml = '';
+                    let bContainerClass = 'fiba-rs-cell num';
+                    let bScoreStr = scoreVal;
 
-                // Track chronological events
-                state.events.forEach(e => {
-                    if (e.type === 'score') {
-                        const team = e.team;
-                        const pts = e.pts;
-                        const oldScore = team === 'A' ? runningScoreA : runningScoreB;
-                        const newScore = oldScore + pts;
-
-                        if (team === 'A') runningScoreA = newScore;
-                        else runningScoreB = newScore;
-
-                        // Only draw if within bounds
-                        if (pts === 1) {
-                            if (newScore <= 160) rsData[team][newScore] = { symbol: 'dot', player: e.player, circled: false };
-                        } else if (pts === 2) {
-                            if (newScore <= 160) rsData[team][newScore] = { symbol: 'slash', player: e.player, circled: false };
-                            if (newScore - 1 <= 160 && newScore - 1 > 0) rsData[team][newScore - 1] = { symbol: 'slash', player: null, circled: false };
-                        } else if (pts === 3) {
-                            if (newScore <= 160) rsData[team][newScore] = { symbol: 'slash', player: e.player, circled: true };
-                            if (newScore - 1 <= 160 && newScore - 1 > 0) rsData[team][newScore - 1] = { symbol: 'slash', player: null, circled: false };
-                            if (newScore - 2 <= 160 && newScore - 2 > 0) rsData[team][newScore - 2] = { symbol: 'slash', player: null, circled: false };
+                    if (bData) {
+                        if (bData.periodEnd) {
+                            bContainerClass += ' period-end';
+                            bScoreStr = `<div class="period-end-circle">${scoreVal}</div>`;
                         }
-                    } else if (e.type === 'periodEnd') {
-                        if (runningScoreA <= 160 && runningScoreA > 0) {
-                            if (!rsData.A[runningScoreA]) rsData.A[runningScoreA] = {};
-                            rsData.A[runningScoreA].periodEnd = true;
+                        if (bData.player) {
+                            let pNum = bData.circled ? `<span class="circled-ink">${bData.player}</span>` : bData.player;
+                            bPlayerHtml = `<div class="ink-player">${pNum}</div>`;
                         }
-                        if (runningScoreB <= 160 && runningScoreB > 0) {
-                            if (!rsData.B[runningScoreB]) rsData.B[runningScoreB] = {};
-                            rsData.B[runningScoreB].periodEnd = true;
-                        }
+                        if (bData.symbol === 'slash') bSymbolHtml = `<div class="ink-slash"></div>`;
+                        if (bData.symbol === 'dot') bSymbolHtml = `<div class="ink-dot"></div>`;
                     }
-                });
 
-                const grid = document.getElementById("fibaRunningScoreGrid");
-                grid.innerHTML = '';
-
-                for (let block = 0; block < 4; block++) {
-                    const colDiv = document.createElement('div');
-                    colDiv.className = 'fiba-rs-col';
-                    colDiv.innerHTML = `<div class="fiba-rs-col-header"><div>A</div><div>B</div></div>`;
-
-                    for (let r = 1; r <= 40; r++) {
-                        const scoreVal = block * 40 + r;
-
-                        const aData = rsData.A[scoreVal];
-                        const bData = rsData.B[scoreVal];
-
-                        // Team A
-                        let aPlayerHtml = '';
-                        let aSymbolHtml = '';
-                        let aContainerClass = 'fiba-rs-cell num';
-                        let aScoreStr = scoreVal;
-
-                        if (aData) {
-                            if (aData.periodEnd) {
-                                aContainerClass += ' period-end';
-                                aScoreStr = `<div class="period-end-circle">${scoreVal}</div>`;
-                            }
-                            if (aData.player) {
-                                let pNum = aData.circled ? `<span class="circled-ink">${aData.player}</span>` : aData.player;
-                                aPlayerHtml = `<div class="ink-player red">${pNum}</div>`;
-                            }
-                            if (aData.symbol === 'slash') aSymbolHtml = `<div class="ink-slash red"></div>`;
-                            if (aData.symbol === 'dot') aSymbolHtml = `<div class="ink-dot red"></div>`;
-                        }
-
-                        // Team B
-                        let bPlayerHtml = '';
-                        let bSymbolHtml = '';
-                        let bContainerClass = 'fiba-rs-cell num';
-                        let bScoreStr = scoreVal;
-
-                        if (bData) {
-                            if (bData.periodEnd) {
-                                bContainerClass += ' period-end';
-                                bScoreStr = `<div class="period-end-circle">${scoreVal}</div>`;
-                            }
-                            if (bData.player) {
-                                let pNum = bData.circled ? `<span class="circled-ink">${bData.player}</span>` : bData.player;
-                                bPlayerHtml = `<div class="ink-player">${pNum}</div>`;
-                            }
-                            if (bData.symbol === 'slash') bSymbolHtml = `<div class="ink-slash"></div>`;
-                            if (bData.symbol === 'dot') bSymbolHtml = `<div class="ink-dot"></div>`;
-                        }
-
-                        const rowDiv = document.createElement('div');
-                        rowDiv.className = 'fiba-rs-row';
-                        rowDiv.innerHTML = `
+                    const rowDiv = document.createElement('div');
+                    rowDiv.className = 'fiba-rs-row';
+                    rowDiv.innerHTML = `
                             <div class="fiba-rs-cell">${aPlayerHtml}</div>
                             <div class="${aContainerClass}">${aScoreStr}${aSymbolHtml}</div>
                             <div class="${bContainerClass}">${bScoreStr}${bSymbolHtml}</div>
                             <div class="fiba-rs-cell">${bPlayerHtml}</div>
                         `;
-                        colDiv.appendChild(rowDiv);
-                    }
-                    grid.appendChild(colDiv);
+                    colDiv.appendChild(rowDiv);
                 }
+                grid.appendChild(colDiv);
+            }
+        }
+
+        function generateFibaRoster(team) {
+            const teamState = state[`team${team}`];
+            const box = document.getElementById(`fibaRoster${team}_Box`);
+
+            const timeoutsForTeam = state.events.filter(e => e.type === 'timeout' && e.team === team);
+            let toBoxesHtml = '';
+            for (let i = 0; i < 3; i++) {
+                const to = timeoutsForTeam[i];
+                toBoxesHtml += `<div class="fiba-box">${to ? `<span class="ink" style="color:#1d4ed8; font-weight:bold;">${to.minute}</span>` : ''}</div>`;
             }
 
-            function generateFibaRoster(team) {
-                const teamState = state[`team${team}`];
-                const box = document.getElementById(`fibaRoster${team}_Box`);
-
-                const timeoutsForTeam = state.events.filter(e => e.type === 'timeout' && e.team === team);
-                let toBoxesHtml = '';
-                for (let i = 0; i < 3; i++) {
-                    const to = timeoutsForTeam[i];
-                    toBoxesHtml += `<div class="fiba-box">${to ? `<span class="ink" style="color:#1d4ed8; font-weight:bold;">${to.minute}</span>` : ''}</div>`;
-                }
-
-                let html = `
+            let html = `
                 <div class="fiba-team-header">
                     <span>Team ${team}:</span>
                     <span style="font-family:'Caveat'; color:#1d4ed8; font-size:18px;">${teamState.name}</span>
@@ -1867,262 +1865,262 @@
                     <tbody>
             `;
 
-                teamState.roster.forEach(p => {
-                    const foulsForPlayer = state.events.filter(e => e.type === 'foul' && e.team === team && e.player === p.number);
-                    let foulBoxesHtml = '';
-                    for (let i = 0; i < 5; i++) {
-                        const f = foulsForPlayer[i];
-                        if (f) {
-                            const styleClass = (f.foulType === 'T' || f.foulType === 'U' || f.foulType === 'D') ? 'ink red' : 'ink';
-                            let fStr = f.foulType || 'P';
-                            if (fStr.length === 2 && fStr.startsWith('P')) {
-                                fStr = `P<sub>${fStr[1]}</sub>`;
-                            }
-                            foulBoxesHtml += `<td><span class="${styleClass}" style="color:${styleClass.includes('red') ? '#b91c1c' : '#1d4ed8'}; font-weight:bold; font-size:14px;">${fStr}</span></td>`;
-                        } else {
-                            foulBoxesHtml += `<td></td>`;
+            teamState.roster.forEach(p => {
+                const foulsForPlayer = state.events.filter(e => e.type === 'foul' && e.team === team && e.player === p.number);
+                let foulBoxesHtml = '';
+                for (let i = 0; i < 5; i++) {
+                    const f = foulsForPlayer[i];
+                    if (f) {
+                        const styleClass = (f.foulType === 'T' || f.foulType === 'U' || f.foulType === 'D') ? 'ink red' : 'ink';
+                        let fStr = f.foulType || 'P';
+                        if (fStr.length === 2 && fStr.startsWith('P')) {
+                            fStr = `P<sub>${fStr[1]}</sub>`;
                         }
+                        foulBoxesHtml += `<td><span class="${styleClass}" style="color:${styleClass.includes('red') ? '#b91c1c' : '#1d4ed8'}; font-weight:bold; font-size:14px;">${fStr}</span></td>`;
+                    } else {
+                        foulBoxesHtml += `<td></td>`;
                     }
+                }
 
-                    html += `<tr>
+                html += `<tr>
                     <td><strong>${p.number}</strong></td>
                     <td class="left"><input type="text" style="border:none; border-bottom:1px dotted #ccc; width:100%; font-family:Caveat; color:#1d4ed8; height:20px; font-size:14px;" placeholder="Player Name" value="${p.name}"></td>
                     ${foulBoxesHtml}
                 </tr>`;
-                });
+            });
 
-                html += `
+            html += `
                     </tbody>
                 </table>
                 <div class="fiba-coach-row"><div class="fiba-coach-label">Coach</div><div class="fiba-coach-input" onclick="openSignatureCapture('sigCoach${team}_fiba', 'Team ${team} Coach')"><canvas class="sig-pad" id="sigCoach${team}_fiba" style="height:25px; pointer-events:none;"></canvas></div></div>
             `;
-                box.innerHTML = html;
+            box.innerHTML = html;
+        }
+
+        // Canvas drawing logic for the main popup pad
+        let sigCtx = null;
+        let isDrawing = false;
+        let currentTargetCanvasId = null; // The ID of the inline canvas to map back to
+
+        function initSigCaptureCanvas() {
+            const canvas = document.getElementById('activeSigPad');
+            sigCtx = canvas.getContext('2d');
+
+            // Set responsive size based on container dynamically
+            const resizeCanvas = () => {
+                const rect = canvas.parentElement.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                sigCtx.lineWidth = 4;
+                sigCtx.lineCap = 'round';
+                sigCtx.strokeStyle = '#000';
+            };
+
+            // Call once, and add event listener
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            function startPos(e) {
+                isDrawing = true;
+                draw(e);
+            }
+            function endPos() {
+                isDrawing = false;
+                sigCtx.beginPath();
+            }
+            function draw(e) {
+                if (!isDrawing) return;
+                e.preventDefault();
+
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                const canvasRect = canvas.getBoundingClientRect();
+                const x = clientX - canvasRect.left;
+                const y = clientY - canvasRect.top;
+
+                sigCtx.lineTo(x, y);
+                sigCtx.stroke();
+                sigCtx.beginPath();
+                sigCtx.moveTo(x, y);
             }
 
-            // Canvas drawing logic for the main popup pad
-            let sigCtx = null;
-            let isDrawing = false;
-            let currentTargetCanvasId = null; // The ID of the inline canvas to map back to
+            canvas.addEventListener('mousedown', startPos);
+            canvas.addEventListener('mouseup', endPos);
+            canvas.addEventListener('mousemove', draw);
+            // Handle touch leaving canvas
+            canvas.addEventListener('mouseleave', endPos);
 
-            function initSigCaptureCanvas() {
+            canvas.addEventListener('touchstart', startPos, { passive: false });
+            canvas.addEventListener('touchend', endPos);
+            canvas.addEventListener('touchmove', draw, { passive: false });
+            canvas.addEventListener('touchcancel', endPos);
+        }
+
+        function openSignatureCapture(targetCanvasId, roleName) {
+            currentTargetCanvasId = targetCanvasId;
+            document.getElementById('sigRoleTitle').innerText = `${roleName} Signature`;
+            document.getElementById('sigCaptureModal').style.display = 'flex';
+
+            // Ensure context is initialized
+            if (!sigCtx) {
+                initSigCaptureCanvas();
+            } else {
+                // Resize check on every open
                 const canvas = document.getElementById('activeSigPad');
-                sigCtx = canvas.getContext('2d');
+                const rect = canvas.parentElement.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                sigCtx.lineWidth = 4;
+                sigCtx.lineCap = 'round';
+            }
 
-                // Set responsive size based on container dynamically
-                const resizeCanvas = () => {
-                    const rect = canvas.parentElement.getBoundingClientRect();
-                    canvas.width = rect.width;
-                    canvas.height = rect.height;
-                    sigCtx.lineWidth = 4;
-                    sigCtx.lineCap = 'round';
-                    sigCtx.strokeStyle = '#000';
-                };
+            clearSignature();
+        }
 
-                // Call once, and add event listener
-                resizeCanvas();
-                window.addEventListener('resize', resizeCanvas);
+        function closeSignatureCapture() {
+            document.getElementById('sigCaptureModal').style.display = 'none';
+        }
 
-                function startPos(e) {
-                    isDrawing = true;
-                    draw(e);
+        function clearSignature() {
+            if (sigCtx) {
+                const canvas = document.getElementById('activeSigPad');
+                sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        function saveSignature() {
+            if (!currentTargetCanvasId) return;
+
+            const sourceCanvas = document.getElementById('activeSigPad');
+            const targetCanvas = document.getElementById(currentTargetCanvasId);
+
+            if (targetCanvas) {
+                // Ensure target canvas dimensions match its visually rendered size
+                const rect = targetCanvas.getBoundingClientRect();
+                targetCanvas.width = rect.width * 2; // High-DPI support
+                targetCanvas.height = rect.height * 2;
+
+                const tCtx = targetCanvas.getContext('2d');
+                tCtx.scale(2, 2);
+                tCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+                // Draw the captured large signature scaled down into the inline canvas bounds
+                tCtx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, rect.width, rect.height);
+            }
+
+            closeSignatureCapture();
+        }
+
+        // Prepare inline canvases with proper high-res setup, though they now only serve as display targets
+        function setupInlineCanvases() {
+            const pads = document.querySelectorAll('.sig-pad:not(#activeSigPad)');
+            pads.forEach(canvas => {
+                const rect = canvas.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    canvas.width = rect.width * 2;
+                    canvas.height = rect.height * 2;
                 }
-                function endPos() {
-                    isDrawing = false;
-                    sigCtx.beginPath();
-                }
-                function draw(e) {
-                    if (!isDrawing) return;
-                    e.preventDefault();
+            });
+        }
 
-                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        // Setup inline canvases when they first become visible
+        let inlineCanvasesSetup = false;
 
-                    const canvasRect = canvas.getBoundingClientRect();
-                    const x = clientX - canvasRect.left;
-                    const y = clientY - canvasRect.top;
+        // Boot
+        // initRosters() will now be called by startMatch() from the setup UI.
 
-                    sigCtx.lineTo(x, y);
-                    sigCtx.stroke();
-                    sigCtx.beginPath();
-                    sigCtx.moveTo(x, y);
-                }
+        // --- SETUP LOGIC ---
+        let draftRosterA = [];
+        let draftRosterB = [];
+        let draftPlayerIdCounter = 0;
 
-                canvas.addEventListener('mousedown', startPos);
-                canvas.addEventListener('mouseup', endPos);
-                canvas.addEventListener('mousemove', draw);
-                // Handle touch leaving canvas
-                canvas.addEventListener('mouseleave', endPos);
+        function addDraftPlayer() {
+            const team = document.getElementById("draftTeamSelect").value;
+            const number = document.getElementById("draftNumber").value;
+            const nameStr = document.getElementById("draftName").value;
 
-                canvas.addEventListener('touchstart', startPos, { passive: false });
-                canvas.addEventListener('touchend', endPos);
-                canvas.addEventListener('touchmove', draw, { passive: false });
-                canvas.addEventListener('touchcancel', endPos);
+            if (!number) {
+                alert("Please enter a jersey number.");
+                return;
             }
 
-            function openSignatureCapture(targetCanvasId, roleName) {
-                currentTargetCanvasId = targetCanvasId;
-                document.getElementById('sigRoleTitle').innerText = `${roleName} Signature`;
-                document.getElementById('sigCaptureModal').style.display = 'flex';
+            const p = { id: draftPlayerIdCounter++, number: number, name: nameStr || "Unknown", fouls: 0, pts: 0 };
 
-                // Ensure context is initialized
-                if (!sigCtx) {
-                    initSigCaptureCanvas();
-                } else {
-                    // Resize check on every open
-                    const canvas = document.getElementById('activeSigPad');
-                    const rect = canvas.parentElement.getBoundingClientRect();
-                    canvas.width = rect.width;
-                    canvas.height = rect.height;
-                    sigCtx.lineWidth = 4;
-                    sigCtx.lineCap = 'round';
-                }
+            if (team === 'A') draftRosterA.push(p);
+            else draftRosterB.push(p);
 
-                clearSignature();
-            }
-
-            function closeSignatureCapture() {
-                document.getElementById('sigCaptureModal').style.display = 'none';
-            }
-
-            function clearSignature() {
-                if (sigCtx) {
-                    const canvas = document.getElementById('activeSigPad');
-                    sigCtx.clearRect(0, 0, canvas.width, canvas.height);
-                }
-            }
-
-            function saveSignature() {
-                if (!currentTargetCanvasId) return;
-
-                const sourceCanvas = document.getElementById('activeSigPad');
-                const targetCanvas = document.getElementById(currentTargetCanvasId);
-
-                if (targetCanvas) {
-                    // Ensure target canvas dimensions match its visually rendered size
-                    const rect = targetCanvas.getBoundingClientRect();
-                    targetCanvas.width = rect.width * 2; // High-DPI support
-                    targetCanvas.height = rect.height * 2;
-
-                    const tCtx = targetCanvas.getContext('2d');
-                    tCtx.scale(2, 2);
-                    tCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
-                    // Draw the captured large signature scaled down into the inline canvas bounds
-                    tCtx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, rect.width, rect.height);
-                }
-
-                closeSignatureCapture();
-            }
-
-            // Prepare inline canvases with proper high-res setup, though they now only serve as display targets
-            function setupInlineCanvases() {
-                const pads = document.querySelectorAll('.sig-pad:not(#activeSigPad)');
-                pads.forEach(canvas => {
-                    const rect = canvas.getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) {
-                        canvas.width = rect.width * 2;
-                        canvas.height = rect.height * 2;
-                    }
-                });
-            }
-
-            // Setup inline canvases when they first become visible
-            let inlineCanvasesSetup = false;
-
-            // Boot
-            // initRosters() will now be called by startMatch() from the setup UI.
-
-            // --- SETUP LOGIC ---
-            let draftRosterA = [];
-            let draftRosterB = [];
-            let draftPlayerIdCounter = 0;
-
-            function addDraftPlayer() {
-                const team = document.getElementById("draftTeamSelect").value;
-                const number = document.getElementById("draftNumber").value;
-                const nameStr = document.getElementById("draftName").value;
-
-                if (!number) {
-                    alert("Please enter a jersey number.");
-                    return;
-                }
-
-                const p = { id: draftPlayerIdCounter++, number: number, name: nameStr || "Unknown", fouls: 0, pts: 0 };
-
-                if (team === 'A') draftRosterA.push(p);
-                else draftRosterB.push(p);
-
-                document.getElementById("draftNumber").value = '';
-                document.getElementById("draftName").value = '';
-                renderDraftTables();
-            }
-
-            function removeDraftPlayer(team, id) {
-                if (team === 'A') draftRosterA = draftRosterA.filter(p => p.id !== id);
-                else draftRosterB = draftRosterB.filter(p => p.id !== id);
-                renderDraftTables();
-            }
-
-            function renderDraftTables() {
-                const tA = document.querySelector("#draftTableA tbody");
-                const tB = document.querySelector("#draftTableB tbody");
-                tA.innerHTML = ''; tB.innerHTML = '';
-
-                draftRosterA.sort((a, b) => a.number - b.number).forEach(p => {
-                    tA.innerHTML += `<tr><td>${p.number}</td><td>${p.name}</td><td><button class="remove-draft-btn" onclick="removeDraftPlayer('A', ${p.id})">X</button></td></tr>`;
-                });
-                draftRosterB.sort((a, b) => a.number - b.number).forEach(p => {
-                    tB.innerHTML += `<tr><td>${p.number}</td><td>${p.name}</td><td><button class="remove-draft-btn" onclick="removeDraftPlayer('B', ${p.id})">X</button></td></tr>`;
-                });
-            }
-
-            function startMatch() {
-                // Setup Team Info
-                state.teamA.name = document.getElementById("setupTeamA").value || "TEAM A";
-                state.teamB.name = document.getElementById("setupTeamB").value || "TEAM B";
-                state.teamA.coach = document.getElementById("setupCoachA").value || "";
-                state.teamB.coach = document.getElementById("setupCoachB").value || "";
-                state.teamA.asst = document.getElementById("setupAsstA").value || "";
-                state.teamB.asst = document.getElementById("setupAsstB").value || "";
-
-                document.getElementById("nameA").innerText = state.teamA.name;
-                document.getElementById("nameB").innerText = state.teamB.name;
-
-                // Setup Meta
-                state.meta = {
-                    competition: document.getElementById("setupComp").value || "",
-                    date: document.getElementById("setupDate").value || "",
-                    time: document.getElementById("setupTime").value || "",
-                    gameNo: document.getElementById("setupGameNo").value || "",
-                    place: document.getElementById("setupPlace").value || "",
-                    referee: document.getElementById("setupRef").value || "",
-                    umpire1: document.getElementById("setupUmp1").value || "",
-                    umpire2: document.getElementById("setupUmp2").value || "",
-                    format: document.querySelector('input[name="sheetFormat"]:checked').value
-                };
-
-                // Inject Rosters
-                if (draftRosterA.length === 0 && draftRosterB.length === 0) {
-                    // If they bypassed building a roster, fallback to generic 4-15
-                    for (let i = 4; i <= 15; i++) {
-                        state.teamA.roster.push({ number: i, name: "", fouls: 0, pts: 0 });
-                        state.teamB.roster.push({ number: i, name: "", fouls: 0, pts: 0 });
-                    }
-                } else {
-                    state.teamA.roster = [...draftRosterA];
-                    state.teamB.roster = [...draftRosterB];
-                }
-
-                renderRosters();
-
-                // Hide Setup, Show App
-                document.getElementById("setupPhase").style.display = 'none';
-                document.getElementById("mainApp").style.display = 'flex';
-            }
-
-            // Initialize draft tables visually empty
+            document.getElementById("draftNumber").value = '';
+            document.getElementById("draftName").value = '';
             renderDraftTables();
+        }
 
-        </script>
+        function removeDraftPlayer(team, id) {
+            if (team === 'A') draftRosterA = draftRosterA.filter(p => p.id !== id);
+            else draftRosterB = draftRosterB.filter(p => p.id !== id);
+            renderDraftTables();
+        }
+
+        function renderDraftTables() {
+            const tA = document.querySelector("#draftTableA tbody");
+            const tB = document.querySelector("#draftTableB tbody");
+            tA.innerHTML = ''; tB.innerHTML = '';
+
+            draftRosterA.sort((a, b) => a.number - b.number).forEach(p => {
+                tA.innerHTML += `<tr><td>${p.number}</td><td>${p.name}</td><td><button class="remove-draft-btn" onclick="removeDraftPlayer('A', ${p.id})">X</button></td></tr>`;
+            });
+            draftRosterB.sort((a, b) => a.number - b.number).forEach(p => {
+                tB.innerHTML += `<tr><td>${p.number}</td><td>${p.name}</td><td><button class="remove-draft-btn" onclick="removeDraftPlayer('B', ${p.id})">X</button></td></tr>`;
+            });
+        }
+
+        function startMatch() {
+            // Setup Team Info
+            state.teamA.name = document.getElementById("setupTeamA").value || "TEAM A";
+            state.teamB.name = document.getElementById("setupTeamB").value || "TEAM B";
+            state.teamA.coach = document.getElementById("setupCoachA").value || "";
+            state.teamB.coach = document.getElementById("setupCoachB").value || "";
+            state.teamA.asst = document.getElementById("setupAsstA").value || "";
+            state.teamB.asst = document.getElementById("setupAsstB").value || "";
+
+            document.getElementById("nameA").innerText = state.teamA.name;
+            document.getElementById("nameB").innerText = state.teamB.name;
+
+            // Setup Meta
+            state.meta = {
+                competition: document.getElementById("setupComp").value || "",
+                date: document.getElementById("setupDate").value || "",
+                time: document.getElementById("setupTime").value || "",
+                gameNo: document.getElementById("setupGameNo").value || "",
+                place: document.getElementById("setupPlace").value || "",
+                referee: document.getElementById("setupRef").value || "",
+                umpire1: document.getElementById("setupUmp1").value || "",
+                umpire2: document.getElementById("setupUmp2").value || "",
+                format: document.querySelector('input[name="sheetFormat"]:checked').value
+            };
+
+            // Inject Rosters
+            if (draftRosterA.length === 0 && draftRosterB.length === 0) {
+                // If they bypassed building a roster, fallback to generic 4-15
+                for (let i = 4; i <= 15; i++) {
+                    state.teamA.roster.push({ number: i, name: "", fouls: 0, pts: 0 });
+                    state.teamB.roster.push({ number: i, name: "", fouls: 0, pts: 0 });
+                }
+            } else {
+                state.teamA.roster = [...draftRosterA];
+                state.teamB.roster = [...draftRosterB];
+            }
+
+            renderRosters();
+
+            // Hide Setup, Show App
+            document.getElementById("setupPhase").style.display = 'none';
+            document.getElementById("mainApp").style.display = 'flex';
+        }
+
+        // Initialize draft tables visually empty
+        renderDraftTables();
+
+    </script>
 </body>
 
 </html>
