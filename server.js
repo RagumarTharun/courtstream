@@ -325,10 +325,14 @@ app.post("/api/upload-iso", upload.single("video"), (req, res) => {
 
 // ISO Render Endpoint
 app.post("/api/render-iso", async (req, res) => {
-  const { sessionId, edl, room } = req.body; // room added for progress broadcast
+  const { sessionId, edl, room, skipFinalMix } = req.body; // room added for progress broadcast
 
-  if (!sessionId || !edl || !Array.isArray(edl) || edl.length === 0) {
-    return res.status(400).json({ error: "Invalid data" });
+  if (!skipFinalMix) {
+    if (!sessionId || !edl || !Array.isArray(edl) || edl.length === 0) {
+      return res.status(400).json({ error: "Invalid data" });
+    }
+  } else if (!sessionId) {
+    return res.status(400).json({ error: "Invalid session ID" });
   }
 
   const uploads = sessionUploads[sessionId];
@@ -341,7 +345,8 @@ app.post("/api/render-iso", async (req, res) => {
 
   // VERIFY ALL SOURCE FILES EXIST (or segments)
   const missingFiles = [];
-  const uniqueCams = [...new Set(edl.map(cut => cut.camId))];
+  const uniqueCams = skipFinalMix ? Object.keys(uploads) : [...new Set(edl.map(cut => cut.camId))];
+
   uniqueCams.forEach(camId => {
     const camData = uploads[camId];
     if (!camData) {
@@ -364,11 +369,10 @@ app.post("/api/render-iso", async (req, res) => {
     });
   }
 
-  console.log(`🎬 Starting Render for Session ${sessionId} (${edl.length} clips)...`);
+  console.log(`🎬 Starting Render for Session ${sessionId} (skipFinalMix: ${!!skipFinalMix})...`);
 
   const broadcastProgress = (progress, status) => {
     if (room) {
-      // console.log(`📢 Broadcasting progress to ${room}: ${progress}% - ${status}`);
       io.to(room).emit("render-progress", { sessionId, progress, status });
     } else {
       console.warn("⚠️ No room provided for progress broadcast");
@@ -406,120 +410,111 @@ app.post("/api/render-iso", async (req, res) => {
       }
     }
 
-    const listPath = path.join(tempDir, "list.txt");
-    const segments = [];
+    if (!skipFinalMix) {
+      const listPath = path.join(tempDir, "list.txt");
+      const segments = [];
 
-    // 2. PROCESS CLIPS (EDL CUTS)
-    for (let i = 0; i < edl.length; i++) {
-      const cut = edl[i];
-      const nextCut = edl[i + 1];
+      // 2. PROCESS CLIPS (EDL CUTS)
+      for (let i = 0; i < edl.length; i++) {
+        const cut = edl[i];
+        const nextCut = edl[i + 1];
 
-      let duration = null;
-      if (nextCut) {
-        duration = (nextCut.timestamp - cut.timestamp) / 1000;
+        let duration = null;
+        if (nextCut) {
+          duration = (nextCut.timestamp - cut.timestamp) / 1000;
+        }
+
+        const startTime = cut.timestamp / 1000;
+        const camId = cut.camId;
+        const uploadData = uploads[camId];
+        const inputPath = uploadData?.path;
+
+        if (!inputPath || !fs.existsSync(inputPath)) {
+          console.warn(`⚠️ Skipped Clip ${i}: No file for Cam '${camId}' at ${inputPath}`);
+          continue;
+        }
+
+        console.log(`🎬 Clip ${i}: Using Cam '${camId}' [${inputPath}]`);
+
+        broadcastProgress(Math.round(5 + (i / edl.length) * 80), `Processing clip ${i + 1}/${edl.length}`);
+
+        const segmentPath = path.join(tempDir, `seg_${i}.mp4`);
+        segments.push(segmentPath);
+
+        console.log(`✂️ Processing Clip ${i}: Cam ${camId} @ ${startTime}s (${duration ? duration + 's' : 'end'})`);
+
+        await new Promise((resolve, reject) => {
+          let cmd = ffmpeg(inputPath).setStartTime(startTime);
+          if (duration) cmd.setDuration(duration);
+
+          let vfOptions = [];
+          const rot = cut.rotation !== undefined ? cut.rotation : (uploadData?.rotation || 0);
+          const zoom = cut.zoom !== undefined ? cut.zoom : (uploadData?.zoom || 1);
+          const flip = cut.flipHorizontal !== undefined ? cut.flipHorizontal : (uploadData?.flipHorizontal || false);
+
+          if (rot === 90) vfOptions.push("transpose=1");
+          else if (rot === 180) vfOptions.push("transpose=1,transpose=1");
+          else if (rot === 270 || rot === -90) vfOptions.push("transpose=2");
+
+          if (flip) vfOptions.push("hflip");
+
+          if (zoom > 1) {
+            const w = 1920;
+            const h = 1080;
+            const cropW = w / zoom;
+            const cropH = h / zoom;
+            const cropX = (w - cropW) / 2;
+            const cropY = (h - cropH) / 2;
+            vfOptions.push(`crop=${cropW}:${cropH}:${cropX}:${cropY}`);
+            vfOptions.push(`scale=1920:1080`);
+          } else {
+            vfOptions.push(`scale=1920:1080`);
+          }
+
+          if (vfOptions.length > 0) {
+            cmd.videoFilters(vfOptions);
+          }
+
+          cmd.outputOptions([
+            "-c:v libx264",
+            "-preset veryfast",
+            "-crf 23",
+            "-c:a aac",
+            "-b:a 192k",
+            "-pix_fmt yuv420p"
+          ])
+            .on("start", (cmdLine) => console.log(`🎬 FFmpeg Started Clip ${i}: ${cmdLine}`))
+            .save(segmentPath)
+            .on("end", () => {
+              console.log(`✅ Clip ${i} processed`);
+              resolve();
+            })
+            .on("error", (err) => {
+              console.error(`❌ Error processing clip ${i} (Cam ${camId}):`, err.message);
+              reject(new Error(`Clip ${i} (Cam ${camId}) failed: ${err.message}`));
+            });
+        });
       }
 
-      // Start time relative to recording start (ms -> s)
-      const startTime = cut.timestamp / 1000;
-      const camId = cut.camId;
-      const uploadData = uploads[camId];
-      const inputPath = uploadData?.path;
-
-      if (!inputPath || !fs.existsSync(inputPath)) {
-        console.warn(`⚠️ Skipped Clip ${i}: No file for Cam '${camId}' at ${inputPath}`);
-        continue;
-      }
-
-      console.log(`🎬 Clip ${i}: Using Cam '${camId}' [${inputPath}]`);
-
-      broadcastProgress(Math.round((i / edl.length) * 80), `Processing clip ${i + 1}/${edl.length}`);
-
-      const segmentPath = path.join(tempDir, `seg_${i}.mp4`);
-      segments.push(segmentPath);
-
-      console.log(`✂️ Processing Clip ${i}: Cam ${camId} @ ${startTime}s (${duration ? duration + 's' : 'end'})`);
+      // CONCAT
+      broadcastProgress(85, "Concatenating segments...");
+      console.log("🔗 Concatenating segments...");
+      const fileListContent = segments.map(p => `file '${p}'`).join("\n");
+      fs.writeFileSync(listPath, fileListContent);
 
       await new Promise((resolve, reject) => {
-        let cmd = ffmpeg(inputPath).setStartTime(startTime);
-        if (duration) cmd.setDuration(duration);
-
-        let vfOptions = [];
-
-        // 1. Prioritize cut-specific metadata (Dynamic Zoom/Rotation from Director)
-        // 2. Fallback to general camera metadata
-        const rot = cut.rotation !== undefined ? cut.rotation : (uploadData?.rotation || 0);
-        const zoom = cut.zoom !== undefined ? cut.zoom : (uploadData?.zoom || 1);
-        const flip = cut.flipHorizontal !== undefined ? cut.flipHorizontal : (uploadData?.flipHorizontal || false);
-
-        if (rot === 90) vfOptions.push("transpose=1");
-        else if (rot === 180) vfOptions.push("transpose=1,transpose=1");
-        else if (rot === 270 || rot === -90) vfOptions.push("transpose=2");
-
-        if (flip) vfOptions.push("hflip");
-
-        if (zoom > 1) {
-          const w = 1920;
-          const h = 1080;
-          const cropW = w / zoom;
-          const cropH = h / zoom;
-          // Center crop
-          const cropX = (w - cropW) / 2;
-          const cropY = (h - cropH) / 2;
-          vfOptions.push(`crop=${cropW}:${cropH}:${cropX}:${cropY}`);
-          vfOptions.push(`scale=1920:1080`); // Always scale back up to base resolution
-        } else {
-          // Ensure base resolution for consistency
-          vfOptions.push(`scale=1920:1080`);
-        }
-
-        if (vfOptions.length > 0) {
-          cmd.videoFilters(vfOptions);
-        }
-
-        cmd.outputOptions([
-          "-c:v libx264",
-          "-preset veryfast",
-          "-crf 23",
-          "-c:a aac",
-          "-b:a 192k",
-          "-pix_fmt yuv420p"
-        ])
-          .on("start", (cmdLine) => {
-            console.log(`🎬 FFmpeg Started Clip ${i}: ${cmdLine}`);
-          })
-          .on("progress", (p) => {
-            // Optional: more granular progress logging if needed
-          })
-          .save(segmentPath)
-          .on("end", () => {
-            console.log(`✅ Clip ${i} processed`);
-            resolve();
-          })
+        ffmpeg()
+          .input(listPath)
+          .inputOptions(["-f concat", "-safe 0"])
+          .outputOptions("-c copy")
+          .save(outputPath)
+          .on("end", resolve)
           .on("error", (err) => {
-            console.error(`❌ Error processing clip ${i} (Cam ${camId}):`, err.message);
-            reject(new Error(`Clip ${i} (Cam ${camId}) failed: ${err.message}`));
+            console.error("Concat Error:", err.message);
+            reject(new Error("Final concat failed: " + err.message));
           });
       });
     }
-
-    // CONCAT
-    broadcastProgress(85, "Concatenating segments...");
-    console.log("🔗 Concatenating segments...");
-    const fileListContent = segments.map(p => `file '${p}'`).join("\n");
-    fs.writeFileSync(listPath, fileListContent);
-
-    await new Promise((resolve, reject) => {
-      ffmpeg()
-        .input(listPath)
-        .inputOptions(["-f concat", "-safe 0"])
-        .outputOptions("-c copy")
-        .save(outputPath)
-        .on("end", resolve)
-        .on("error", (err) => {
-          console.error("Concat Error:", err.message);
-          reject(new Error("Final concat failed: " + err.message));
-        });
-    });
 
     // Cleanup segments
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -527,7 +522,9 @@ app.post("/api/render-iso", async (req, res) => {
     // --- NEW: Convert Source Files to MP4 for Download ---
     broadcastProgress(90, "Converting source files to MP4...");
     const sourceFilesInfo = [];
-    const uniqueCamIds = Object.keys(uploads);
+
+    // Convert all cams if skipFinalMix, else only those used in EDL
+    const uniqueCamIds = skipFinalMix ? Object.keys(uploads) : uniqueCams;
 
     for (let i = 0; i < uniqueCamIds.length; i++) {
       const camId = uniqueCamIds[i];
@@ -614,17 +611,17 @@ app.post("/api/render-iso", async (req, res) => {
     }
 
     broadcastProgress(100, "Render Complete");
-    console.log(`✅ Render Success: ${outputFilename}`);
+    console.log(`✅ Server processing success for session ${sessionId}`);
 
     res.json({
       success: true,
-      url: `/uploads/iso/${outputFilename}`,
+      url: skipFinalMix ? null : `/uploads/iso/${outputFilename}`,
       sourceFiles: sourceFilesInfo
     });
 
   } catch (e) {
     console.error("❌ Render Failed:", e.message);
-    broadcastProgress(-1, `Render Failed: ${e.message}`);
+    broadcastProgress(-1, `Process Failed: ${e.message}`);
     // Cleanup on error
     if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
     res.status(500).json({ error: e.message });
