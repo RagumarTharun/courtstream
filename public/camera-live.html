@@ -843,8 +843,6 @@
       });
 
       let isUploaderActive = false;
-      let isRecordingStopped = false;
-
       function startUploadManager() {
         setInterval(processUploadQueue, 5000); // Check every 5s
         setInterval(() => segmentDB.clearCompleted(), 60000); // Cleanup every minute
@@ -858,13 +856,6 @@
           const pending = await segmentDB.getPendingSegments();
           if (pending.length === 0) {
             isUploaderActive = false;
-
-            // If recording is stopped and queue is empty, notify completion
-            if (isRecordingStopped && currentIsoSessionId) {
-              console.log("✅ All segments uploaded. Notifying director.");
-              socket.emit("iso-upload-complete", { room: streamId, filename: "segmented_upload" });
-              isRecordingStopped = false; // Reset for next session
-            }
             return;
           }
 
@@ -921,7 +912,6 @@
 
       socket.on("stop-iso", (options) => {
         console.log("🛑 Stopping ISO Recording. Options:", options);
-        isRecordingStopped = true;
         if (isoRecorder) {
           isoRecorder.stop();
           liveBadge.textContent = "STOPPED";
