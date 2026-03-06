@@ -1209,6 +1209,12 @@
       updateTransferUI(data.from, 100, false, data);
     });
 
+    socket.on("iso-upload-complete", (data) => {
+      console.log("✅ Final ISO upload complete for:", data.from);
+      completedUploads.add(data.from);
+      updateTransferUI(data.from, 100, true);
+    });
+
     socket.on("camera-left", ({ id }) => {
       if (viewers[id]) {
         const v = viewers[id];
@@ -1813,6 +1819,7 @@
     // ISO STATE
     let isoSessionId = null;
     let isoEdl = []; // [{ timestamp, camId }]
+    const completedUploads = new Set();
     /* uploadedCameras removed - moved to downloads.html */
 
     const recordBar = document.getElementById("recordBar");
@@ -1884,6 +1891,7 @@
       // 1. START ISO (Server-Side)
       isoSessionId = `session_${Date.now()}`;
       isoEdl = [];
+      completedUploads.clear();
 
       // Log initial camera or First available if none selected
       if (activeCameraId) {
@@ -2688,83 +2696,83 @@
 
         // SERVER PROCESSING: Fetch stitched and optionally rendered files
         updateStatus(10, "Asking Server for Files...");
-        
+
         try {
-            const skipFinalMix = onlyRaw;
-            
-            const res = await fetch("/api/render-iso", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    sessionId: isoSessionId,
-                    edl: isoEdl,
-                    room: streamId,
-                    skipFinalMix: skipFinalMix
-                })
-            });
-            const data = await res.json();
-            
-            if (!data.success) throw new Error(data.error || "Server processing failed");
-            
-            // Download Finals
-            const safeStreamName = sanitizeName(streamName || streamId);
-            if (!skipFinalMix && data.url) {
-                // Download final mix
-                const ext = data.url.split('.').pop();
+          const skipFinalMix = onlyRaw;
+
+          const res = await fetch("/api/render-iso", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: isoSessionId,
+              edl: isoEdl,
+              room: streamId,
+              skipFinalMix: skipFinalMix
+            })
+          });
+          const data = await res.json();
+
+          if (!data.success) throw new Error(data.error || "Server processing failed");
+
+          // Download Finals
+          const safeStreamName = sanitizeName(streamName || streamId);
+          if (!skipFinalMix && data.url) {
+            // Download final mix
+            const ext = data.url.split('.').pop();
+            const a = document.createElement("a");
+            a.style.display = 'none';
+            a.href = data.url;
+            a.download = `${safeStreamName}_final_mix_${formatDate(Date.now())}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          }
+
+          // Download Individual Feeds
+          if (data.sourceFiles && data.sourceFiles.length > 0) {
+            for (const source of data.sourceFiles) {
+              const id = source.camId;
+              // Only download if requested in ops.isos
+              if (ops.isos[id] || (ops.program === 'mp4' && id === 'program')) {
+                const safeCamName = sanitizeName(peers[id]?.name || id);
+                let suffix = "_raw_quality";
+                if (id.startsWith('instant_')) suffix = "_instant_feed";
+                else if (id === 'program') suffix = "_local_program";
+                const ext = source.filename.split('.').pop();
+
                 const a = document.createElement("a");
                 a.style.display = 'none';
-                a.href = data.url;
-                a.download = `${safeStreamName}_final_mix_${formatDate(Date.now())}.${ext}`;
+                a.href = source.url;
+                a.download = `${safeStreamName}_${safeCamName}${suffix}.${ext}`;
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
+              }
             }
-            
-            // Download Individual Feeds
-            if (data.sourceFiles && data.sourceFiles.length > 0) {
-               for (const source of data.sourceFiles) {
-                  const id = source.camId;
-                  // Only download if requested in ops.isos
-                  if (ops.isos[id] || (ops.program === 'mp4' && id === 'program')) {
-                     const safeCamName = sanitizeName(peers[id]?.name || id);
-                     let suffix = "_raw_quality";
-                     if (id.startsWith('instant_')) suffix = "_instant_feed";
-                     else if (id === 'program') suffix = "_local_program";
-                     const ext = source.filename.split('.').pop();
-                     
-                     const a = document.createElement("a");
-                     a.style.display = 'none';
-                     a.href = source.url;
-                     a.download = `${safeStreamName}_${safeCamName}${suffix}.${ext}`;
-                     document.body.appendChild(a);
-                     a.click();
-                     a.remove();
-                  }
-               }
+          }
+
+          // Local Program fallback
+          if (ops.program === 'webm' && programChunks.length) {
+            downloadBlob(new Blob(programChunks, { type: "video/webm" }), `${safeStreamName}_program_local.webm`);
+          }
+          // Local Mirrors
+          Object.keys(ops.mirrors).forEach(id => {
+            const rec = cameraRecorders[id];
+            if (rec && rec.chunks.length) {
+              const safeCamName = sanitizeName(peers[id]?.name || id);
+              const safeStreamName = sanitizeName(streamName || streamId);
+              downloadBlob(new Blob(rec.chunks, { type: "video/webm" }), `${safeStreamName}_${safeCamName}_mirror.webm`);
             }
-            
-            // Local Program fallback
-            if (ops.program === 'webm' && programChunks.length) {
-                downloadBlob(new Blob(programChunks, { type: "video/webm" }), `${safeStreamName}_program_local.webm`);
-            }
-            // Local Mirrors
-            Object.keys(ops.mirrors).forEach(id => {
-                const rec = cameraRecorders[id];
-                if (rec && rec.chunks.length) {
-                    const safeCamName = sanitizeName(peers[id]?.name || id);
-                    const safeStreamName = sanitizeName(streamName || streamId);
-                    downloadBlob(new Blob(rec.chunks, { type: "video/webm" }), `${safeStreamName}_${safeCamName}_mirror.webm`);
-                }
-            });
+          });
 
         } catch (e) {
-            console.error("Server API Error:", e);
-            throw e;
+          console.error("Server API Error:", e);
+          throw e;
         }
 
         // Final UI Update: Hide selection, show simple status or download history
         if (isAuto) {
-           document.getElementById("renderPhase").innerHTML = `
+          document.getElementById("renderPhase").innerHTML = `
                <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid #22c55e; border-radius: 12px; padding: 30px; text-align: center;">
                    <div style="font-size: 40px; margin-bottom: 10px;">✅</div>
                    <h3 style="color:white; margin:0;">Downloads Ready!</h3>
@@ -2789,10 +2797,10 @@
         const start = Date.now();
         const timeout = 60000; // Increase to 60s for high-quality files
         const check = setInterval(() => {
-          // Check if any required local cameras are missing (external ones are on server)
+          // Check if any required cameras are missing (local or server)
           const missing = Array.from(requiredSet).filter(id => {
             if (id === 'program') return !receivedRecordings[id];
-            return false; // external feeds upload direct to server, skip waiting for local blobs
+            return !completedUploads.has(id); // Check server array for external feeds
           });
           const elapsed = Date.now() - start;
 
