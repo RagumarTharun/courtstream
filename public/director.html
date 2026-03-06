@@ -2695,19 +2695,27 @@
         if (onlyRaw) {
           updateStatus(90, "Preparing Files...");
           Object.keys(ops.isos).forEach(id => {
-            const blob = receivedRecordings[id];
+            let blob = receivedRecordings[id];
+            if (!blob && cameraRecorders[id]?.chunks.length) {
+              blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+            }
             if (blob) {
               const safeCamName = sanitizeName(peers[id]?.name || id);
               const safeStreamName = sanitizeName(streamName || streamId);
               let suffix = "_raw_quality";
               if (id.startsWith('instant_')) suffix = "_instant_feed";
-              else if (id === 'program') suffix = "_local_program";
               downloadBlob(blob, `${safeStreamName}_${safeCamName}${suffix}.webm`);
             }
           });
-          if (ops.program === 'webm' && programChunks.length) {
-            const safeStreamName = sanitizeName(streamName || streamId);
-            downloadBlob(new Blob(programChunks, { type: "video/webm" }), `${safeStreamName}_program_local_instant.webm`);
+          if (ops.program === 'webm') {
+            let pBlob = receivedRecordings['program'];
+            if (!pBlob && programChunks.length) {
+              pBlob = new Blob(programChunks, { type: "video/webm" });
+            }
+            if (pBlob) {
+              const safeStreamName = sanitizeName(streamName || streamId);
+              downloadBlob(pBlob, `${safeStreamName}_program_local_instant.webm`);
+            }
           }
           // Mirrors
           Object.keys(ops.mirrors).forEach(id => {
