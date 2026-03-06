@@ -2681,8 +2681,83 @@
 
         const memFiles = {};
 
-        // EDL DOWNLOAD
-        if (autoMode === 'raw_later' || autoMode === 'render_now' || ops.final) {
+        // INTERCEPT 'render_now' FOR AUTOLOAD
+        if (autoMode === 'render_now') {
+          updateStatus(10, "Preparing Render Data...");
+          try {
+            const dbReq = indexedDB.open("CourtStreamRenderDB", 1);
+            dbReq.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains("renderFiles")) {
+                db.createObjectStore("renderFiles");
+              }
+            };
+
+            await new Promise((resolve, reject) => {
+              dbReq.onsuccess = async (e) => {
+                const db = e.target.result;
+                const tx = db.transaction("renderFiles", "readwrite");
+                const store = tx.objectStore("renderFiles");
+
+                store.put(isoEdl, "edl");
+
+                const videoFiles = [];
+                for (const id of Array.from(camerasToTransfer)) {
+                  let blob = receivedRecordings[id];
+                  if (!blob && cameraRecorders[id]?.chunks.length) {
+                    blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+                  }
+                  if (blob) {
+                    const safeCamName = sanitizeName(peers[id]?.name || id);
+                    const safeStreamName = sanitizeName(streamName || streamId);
+                    let suffix = "_raw_quality";
+                    if (id.startsWith('instant_')) suffix = "_instant_feed";
+                    videoFiles.push({
+                      name: `${safeStreamName}_${safeCamName}${suffix}.webm`,
+                      blob: blob,
+                      camId: id.replace('instant_', '') // map to original camera ID 
+                    });
+                  }
+                }
+
+                // Add program mix if available 
+                if (ops.program === 'webm') {
+                  let pBlob = receivedRecordings['program'];
+                  if (!pBlob && programChunks.length) {
+                    pBlob = new Blob(programChunks, { type: "video/webm" });
+                  }
+                  if (pBlob) {
+                    const safeStreamName = sanitizeName(streamName || streamId);
+                    videoFiles.push({
+                      name: `${safeStreamName}_program_local_instant.webm`,
+                      blob: pBlob,
+                      camId: 'program'
+                    });
+                  }
+                }
+
+                store.put(videoFiles, "videos");
+
+                tx.oncomplete = () => {
+                  updateStatus(100, "Transferring to Render Studio...");
+                  setTimeout(() => {
+                    window.location.href = "render.html";
+                  }, 500);
+                  resolve();
+                };
+                tx.onerror = () => reject(tx.error);
+              };
+              dbReq.onerror = () => reject(dbReq.error);
+            });
+            return;
+          } catch (err) {
+            console.error("IndexedDB Error:", err);
+            updateStatus(-1, "Auto-transfer failed. Please manually save your files.");
+          }
+        }
+
+        // EDL DOWNLOAD (Fallback / Other modes)
+        if (autoMode === 'raw_later' || ops.final) {
           try {
             const cutData = JSON.stringify(isoEdl, null, 2);
             downloadBlob(new Blob([cutData], { type: 'application/json' }), `session_cuts_${formatDate(Date.now())}.json`);

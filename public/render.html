@@ -309,6 +309,53 @@
 
         fileInput.onchange = (e) => handleFiles(e.target.files);
 
+        // Auto-load from IndexedDB if coming from Director
+        window.addEventListener('DOMContentLoaded', () => {
+            const req = indexedDB.open("CourtStreamRenderDB", 1);
+            req.onsuccess = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains("renderFiles")) return;
+
+                const tx = db.transaction("renderFiles", "readwrite");
+                const store = tx.objectStore("renderFiles");
+
+                store.get("edl").onsuccess = (ev) => {
+                    const edlData = ev.target.result;
+                    if (edlData) {
+                        state.edl = edlData;
+                        console.log("✅ Auto-Loaded EDL from IndexedDB");
+                        renderFileItem({ name: "Session_EDL.json", size: JSON.stringify(edlData).length }, "edl");
+                    }
+                };
+
+                store.get("videos").onsuccess = (ev) => {
+                    const videosData = ev.target.result;
+                    if (videosData && Array.isArray(videosData) && videosData.length > 0) {
+                        console.log("✅ Auto-Loaded Videos from IndexedDB");
+                        for (const rawFile of videosData) {
+                            const videoFile = new File([rawFile.blob], rawFile.name, { type: "video/webm" });
+                            state.videos[rawFile.name] = videoFile;
+                            files.push(videoFile);
+                            renderFileItem(videoFile, "video");
+
+                            // Try to auto-map based on the payload camId
+                            if (rawFile.camId) {
+                                state.mappings[rawFile.name] = rawFile.camId;
+                            }
+                        }
+                        checkReady();
+                    }
+                };
+
+                // Clear out the DB immediately so it doesn't get infinitely reloaded
+                // on future refreshes unless Director sends it again
+                tx.oncomplete = () => {
+                    const clearTx = db.transaction("renderFiles", "readwrite");
+                    clearTx.objectStore("renderFiles").clear();
+                };
+            };
+        });
+
         async function handleFiles(fileListObj) {
             if (!fileListObj) return;
 
