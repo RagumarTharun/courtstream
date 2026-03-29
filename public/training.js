@@ -128,22 +128,37 @@ async function predictLoop() {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Extremely fast custom ball tracking reading from video directly
-        const ballCenter = trackOrangeBall(video, canvas.width, canvas.height);
+        let activeWristRaw = null;
+        if (poses.length > 0) {
+            const keypoints = poses[0].keypoints;
+            drawSkeleton(keypoints);
+
+            // Find active wrist to restrict ball search area
+            const lw = keypoints.find(k => k.name === 'left_wrist');
+            const rw = keypoints.find(k => k.name === 'right_wrist');
+            if (lw && rw && lw.score > 0.2 && rw.score > 0.2) {
+                activeWristRaw = lw.y < rw.y ? lw : rw;
+            } else if (lw && lw.score > 0.2) {
+                activeWristRaw = lw;
+            } else if (rw && rw.score > 0.2) {
+                activeWristRaw = rw;
+            }
+        }
+
+        // Extremely fast custom ball tracking reading from video directly, localized to wrist
+        const ballCenter = trackOrangeBall(video, canvas.width, canvas.height, activeWristRaw);
         if (ballCenter) {
             ctx.beginPath();
-            ctx.arc(ballCenter.x, ballCenter.y, 25, 0, 2 * Math.PI);
+            ctx.arc(ballCenter.x, ballCenter.y, 20, 0, 2 * Math.PI);
             ctx.strokeStyle = "#f97316";
             ctx.lineWidth = 4;
             ctx.stroke();
             ctx.fillStyle = "#f97316";
-            ctx.fillText("Ball", ballCenter.x - 12, ballCenter.y - 30);
+            ctx.fillText("Ball Tracking", ballCenter.x - 20, ballCenter.y - 30);
         }
 
         if (poses.length > 0) {
-            const keypoints = poses[0].keypoints;
-            drawSkeleton(keypoints);
-            analyzePosture(keypoints, ballCenter);
+            analyzePosture(poses[0].keypoints, ballCenter);
         }
     }
 
@@ -188,7 +203,7 @@ function drawSkeleton(keypoints) {
 let offscreenCanvas = null;
 let offCtx = null;
 
-function trackOrangeBall(videoEl, width, height) {
+function trackOrangeBall(videoEl, width, height, wrist) {
     if (!offscreenCanvas) {
         offscreenCanvas = document.createElement('canvas');
         offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
@@ -205,16 +220,24 @@ function trackOrangeBall(videoEl, width, height) {
     
     for (let y = 0; y < height; y += 4) {
         for (let x = 0; x < width; x += 4) {
+            // Restrict search radius to 200px around the wrist if wrist is known
+            if (wrist) {
+                if (Math.abs(x - wrist.x) > 200 || Math.abs(y - wrist.y) > 200) {
+                    continue;
+                }
+            }
+
             const i = (y * width + x) * 4;
             const r = data[i], g = data[i+1], b = data[i+2];
-            if (r > 100 && r > g * 1.1 && g > b * 1.1 && (r - g) > 20) {
+            // Generous check for basketball orange/brown hues
+            if (r > 90 && r > g * 1.05 && g > b * 0.9 && (r - g) > 15 && (r - b) > 20) {
                 sumX += x;
                 sumY += y;
                 count++;
             }
         }
     }
-    if (count > 20) {
+    if (count > 10) {
         return { x: sumX / count, y: sumY / count };
     }
     return null;
