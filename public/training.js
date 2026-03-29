@@ -198,32 +198,32 @@ function analyzePosture(keypoints) {
     }
 
     // Basic Shot Detection Logic & Feedback
-    // 1. Idle -> knees bend (angle drops below ~140) => dipping
-    // 2. Dipping -> knees extend (angle goes up) => shooting
-    // 3. Shooting -> elbow fully extends (angle > 150) => release
-    // 4. Release -> arm comes back down => idle
+    // 1. Idle -> knees bend slightly (< 165) => dipping
+    // 2. Dipping / Idle -> raising wrist above shoulder => shooting
+    // 3. Shooting -> elbow fully extends (angle > 130) => release
+    // 4. Release -> arm comes down or timeout => idle
 
     if (kneeAngle && elbowAngle) {
         // Detect dipping (knee bending)
-        if (phase === 'idle' && kneeAngle < 150 && elbowAngle < 100) {
+        if (phase === 'idle' && kneeAngle < 165) {
             phase = 'dipping';
             updateFeedbackUI('Good, bending knees...', true);
         }
 
-        // Detect moving up
-        if (phase === 'dipping' && kneeAngle > 150 && elbowAngle < 120) {
+        // Detect moving up: wrist goes above shoulder
+        if ((phase === 'idle' || phase === 'dipping') && rightWrist.y < rightShoulder.y) {
             phase = 'shooting';
             updateFeedbackUI('Going up...', true);
         }
 
-        // Detect release (wrist goes above shoulder, elbow extends)
-        if (phase === 'shooting' && rightWrist.y < rightShoulder.y && elbowAngle > 140) {
+        // Detect release: arm is up and elbow extends
+        if (phase === 'shooting' && rightWrist.y < rightShoulder.y && elbowAngle > 130) {
             phase = 'release';
             shotCount++;
             shotCountEl.textContent = shotCount;
 
             // Analyze follow-through at release
-            if (elbowAngle > 165) {
+            if (elbowAngle > 150) {
                 updateFeedbackUI('Excellent Follow-Through!', true);
                 speakFeedback('Great shot.');
             } else {
@@ -231,14 +231,19 @@ function analyzePosture(keypoints) {
                 speakFeedback('Extend your elbow.');
             }
 
-            // Reset phase after 2 seconds
-            setTimeout(() => { if (phase === 'release') phase = 'idle'; }, 2000);
+            // Reset phase after 1.5 seconds
+            setTimeout(() => { 
+                if (phase === 'release') {
+                    phase = 'idle';
+                    updateFeedbackUI('Waiting for shot...', true);
+                }
+            }, 1500);
         }
 
-        // Safety check to reset if stuck
-        if (phase !== 'idle' && rightWrist.y > rightShoulder.y && kneeAngle > 160) {
-            // Only reset if it's been a while, or immediately if they put arms completely down
+        // Safety check to reset if stuck (arms down and knees relatively straight)
+        if (phase !== 'idle' && phase !== 'release' && rightWrist.y > rightShoulder.y && kneeAngle > 150) {
             phase = 'idle';
+            updateFeedbackUI('Waiting for shot...', true);
         }
     }
 }
