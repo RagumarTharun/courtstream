@@ -12,6 +12,7 @@ const shotCountEl = document.getElementById('shotCount');
 const feedbackMsg = document.getElementById('feedbackMsg');
 
 let detector;
+let objDetector;
 let rafId;
 let isPlaying = false;
 let shotCount = 0;
@@ -28,6 +29,10 @@ async function init() {
         const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
         detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
         console.log("MoveNet loaded.");
+
+        // Load COCO-SSD for Object Tracking (Basketball)
+        objDetector = await cocoSsd.load();
+        console.log("COCO-SSD loaded.");
 
         loader.style.display = 'none';
         startBtn.disabled = false;
@@ -122,15 +127,33 @@ async function predictLoop() {
     if (!isPlaying) return;
 
     if (video.readyState >= 2) {
-        // Detect poses
-        const poses = await detector.estimatePoses(video, { maxPoses: 1, flipHorizontal: false }); // We mirrored via CSS, so we don't flip horizontally in TFJS unless coords don't match.
+        // Detect poses and objects
+        const [poses, objPredictions] = await Promise.all([
+            detector.estimatePoses(video, { maxPoses: 1, flipHorizontal: false }),
+            objDetector.detect(video)
+        ]);
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Find ball
+        const ball = objPredictions.find(p => p.class === 'sports ball');
+        let ballCenter = null;
+
+        if (ball) {
+            const [x, y, width, height] = ball.bbox;
+            ballCenter = { x: x + width / 2, y: y + height / 2 };
+            ctx.strokeStyle = "#f97316";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = "#f97316";
+            ctx.font = "14px Arial";
+            ctx.fillText("Ball", x, y > 20 ? y - 10 : 20);
+        }
 
         if (poses.length > 0) {
             const keypoints = poses[0].keypoints;
             drawSkeleton(keypoints);
-            analyzePosture(keypoints);
+            analyzePosture(keypoints, ballCenter);
         }
     }
 
@@ -172,7 +195,7 @@ function drawSkeleton(keypoints) {
     });
 }
 
-function analyzePosture(keypoints) {
+function analyzePosture(keypoints, ballCenter) {
     // Identify key joints. We assume right-handed shooter for now (can be made dynamic).
     const rightShoulder = keypoints.find(k => k.name === 'right_shoulder');
     const rightElbow = keypoints.find(k => k.name === 'right_elbow');
@@ -197,10 +220,16 @@ function analyzePosture(keypoints) {
         kneeAngleEl.textContent = Math.round(kneeAngle) + '°';
     }
 
+    // Distance from wrist to ball (if tracked)
+    let distBallWrist = null;
+    if (ballCenter && rightWrist && rightWrist.score > 0.3) {
+        distBallWrist = Math.hypot(ballCenter.x - rightWrist.x, ballCenter.y - rightWrist.y);
+    }
+
     // Basic Shot Detection Logic & Feedback
     // 1. Idle -> knees bend slightly (< 165) => dipping
     // 2. Dipping / Idle -> raising wrist above shoulder => shooting
-    // 3. Shooting -> elbow fully extends (angle > 130) => release
+    // 3. Shooting -> elbow extends OR ball separates from wrist => release
     // 4. Release -> arm comes down or timeout => idle
 
     if (kneeAngle && elbowAngle) {
@@ -216,8 +245,22 @@ function analyzePosture(keypoints) {
             updateFeedbackUI('Going up...', true);
         }
 
-        // Detect release: arm is up and elbow extends
-        if (phase === 'shooting' && rightWrist.y < rightShoulder.y && elbowAngle > 130) {
+        // Detect release: check if ball separates or elbow fully extends
+        let isRelease = false;
+        if (phase === 'shooting' && rightWrist.y < rightShoulder.y) {
+            if (distBallWrist !== null && distBallWrist > 120) {
+                // Ball has left the hand significantly
+                isRelease = true;
+            } else if (elbowAngle > 130 && distBallWrist === null) {
+                // Ball tracking failed, rely on pose extension
+                isRelease = true;
+            } else if (elbowAngle > 145) {
+                // Strong extension is almost certainly a release
+                isRelease = true;
+            }
+        }
+
+        if (isRelease) {
             phase = 'release';
             shotCount++;
             shotCountEl.textContent = shotCount;
