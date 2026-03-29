@@ -128,10 +128,22 @@ async function predictLoop() {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // Extremely fast custom ball tracking
+        const ballCenter = trackOrangeBall(ctx, canvas.width, canvas.height);
+        if (ballCenter) {
+            ctx.beginPath();
+            ctx.arc(ballCenter.x, ballCenter.y, 25, 0, 2 * Math.PI);
+            ctx.strokeStyle = "#f97316";
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            ctx.fillStyle = "#f97316";
+            ctx.fillText("Ball", ballCenter.x - 12, ballCenter.y - 30);
+        }
+
         if (poses.length > 0) {
             const keypoints = poses[0].keypoints;
             drawSkeleton(keypoints);
-            analyzePosture(keypoints);
+            analyzePosture(keypoints, ballCenter);
         }
     }
 
@@ -173,7 +185,29 @@ function drawSkeleton(keypoints) {
     });
 }
 
-function analyzePosture(keypoints) {
+function trackOrangeBall(ctx, width, height) {
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    let sumX = 0, sumY = 0, count = 0;
+    
+    for (let y = 0; y < height; y += 4) {
+        for (let x = 0; x < width; x += 4) {
+            const i = (y * width + x) * 4;
+            const r = data[i], g = data[i+1], b = data[i+2];
+            if (r > 100 && r > g * 1.1 && g > b * 1.1 && (r - g) > 20) {
+                sumX += x;
+                sumY += y;
+                count++;
+            }
+        }
+    }
+    if (count > 20) {
+        return { x: sumX / count, y: sumY / count };
+    }
+    return null;
+}
+
+function analyzePosture(keypoints, ballCenter) {
     // Identify key joints. We assume right-handed shooter for now (can be made dynamic).
     const rightShoulder = keypoints.find(k => k.name === 'right_shoulder');
     const rightElbow = keypoints.find(k => k.name === 'right_elbow');
@@ -198,22 +232,27 @@ function analyzePosture(keypoints) {
         kneeAngleEl.textContent = Math.round(kneeAngle) + '°';
     }
 
-    // Basic Shot Detection Logic & Feedback (Max Extension Tracking)
+    // Distance from wrist to ball (if tracked)
+    let distBallWrist = null;
+    if (ballCenter && rightWrist && rightWrist.score > 0.3) {
+        distBallWrist = Math.hypot(ballCenter.x - rightWrist.x, ballCenter.y - rightWrist.y);
+    }
+
+    // Basic Shot Detection Logic & Feedback (Max Extension & Ball Distance)
     // A shot starts when wrist goes above shoulder.
     // We track the maximum elbow angle while the arm is up.
-    // Once arm comes back down, we evaluate the shot based on max extension.
+    // Once arm comes back down OR ball leaves hand, we evaluate the shot.
 
-    if (rightShoulder && rightWrist && rightElbow && kneeAngle && elbowAngle) {
+    if (rightShoulder && rightWrist && rightElbow && elbowAngle) {
         if (phase === 'idle') {
             if (rightWrist.y < rightShoulder.y) {
                 // Arm raised above shoulder -> Started shooting phase
                 phase = 'shooting';
                 maxElbowAngleDuringShot = elbowAngle;
                 updateFeedbackUI('Going up...', true);
-                // Verbal command disabled intentionally to not interrupt the actual shot, but we can do a subtle one
                 speakFeedback('Shooting');
-            } else if (kneeAngle < 160) {
-                // Bending knees (UI feedback only)
+            } else if (kneeAngle && kneeAngle > 0 && kneeAngle < 160) {
+                // Bending knees (UI feedback only, optional)
                 updateFeedbackUI('Good, bending knees...', true);
             } else {
                 updateFeedbackUI('Waiting for shot...', true);
@@ -224,15 +263,21 @@ function analyzePosture(keypoints) {
                 maxElbowAngleDuringShot = elbowAngle;
             }
 
-            // Has the arm come back down?
-            if (rightWrist.y > rightShoulder.y) {
+            let ballReleased = false;
+            // if the ball suddenly spikes in distance from wrist, it's released
+            if (distBallWrist !== null && distBallWrist > 150) {
+                ballReleased = true;
+            }
+
+            // Has the arm come back down OR ball released?
+            if (rightWrist.y > rightShoulder.y || ballReleased) {
                 // Evaluate the shot
-                if (maxElbowAngleDuringShot > 130) {
+                if (maxElbowAngleDuringShot > 120 || ballReleased) {
                     // Count as a shot
                     shotCount++;
                     shotCountEl.textContent = shotCount;
 
-                    if (maxElbowAngleDuringShot > 150) {
+                    if (maxElbowAngleDuringShot > 145) {
                         updateFeedbackUI(`Shot ${shotCount}! Excellent Follow-Through!`, true);
                         speakFeedback(`Great shot. Excellent extension.`);
                     } else {
@@ -240,12 +285,11 @@ function analyzePosture(keypoints) {
                         speakFeedback(`Shot ${shotCount}. Extend your elbow more.`);
                     }
                 } else {
-                    // Arm went up and down without extending clearly -> Aborted or fake out
                     updateFeedbackUI('Shot aborted (elbow not fully extended)', false);
                     speakFeedback('Shot aborted.');
                 }
 
-                // Cooldown to prevent double counting right away
+                // Cooldown to prevent double counting
                 phase = 'cooldown';
                 setTimeout(() => { 
                     if (phase === 'cooldown') {
