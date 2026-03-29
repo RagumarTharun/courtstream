@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>CourtStream – Personal Training</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #161922;
+            --border: #262b3d;
+            --text: #e6e6eb;
+            --muted: #9aa0b4;
+            --blue: #3b82f6;
+            --red: #ef4444;
+            --green: #22c55e;
+            --orange: #f97316;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        /* HEADER */
+        header {
+            height: 64px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .brand {
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .brand-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        button {
+            cursor: pointer;
+            border: none;
+            background: var(--border);
+            color: var(--text);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #333;
+        }
+
+        button.primary {
+            background: var(--blue);
+            color: white;
+        }
+
+        button.primary:hover {
+            background: #2563eb;
+        }
+
+        button.danger {
+            background: var(--red);
+            color: white;
+        }
+
+        button.danger:hover {
+            background: #dc2626;
+        }
+
+        /* CONTAINER */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        @media(min-width: 768px) {
+            .container {
+                flex-direction: row;
+            }
+        }
+
+        .video-section {
+            flex: 2;
+            position: relative;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px;
+        }
+
+        #video {
+            width: 100%;
+            height: auto;
+            background: #000;
+            display: block;
+            /* Mirror the camera for front-facing */
+            transform: scaleX(-1);
+        }
+
+        #output {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            /* Mirror the canvas drawing too */
+            transform: scaleX(-1);
+        }
+
+        .dashboard {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+        }
+
+        h2 {
+            margin: 0 0 16px;
+            font-size: 20px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-weight: 500;
+        }
+
+        .metric-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .metric-value.good {
+            color: var(--green);
+        }
+
+        .metric-value.bad {
+            color: var(--orange);
+        }
+
+        .feedback-box {
+            margin-top: 16px;
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: var(--blue);
+            font-weight: 600;
+            text-align: center;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .loader {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: 600;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 16px 24px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <a href="index.html" class="brand">
+            <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" stroke="var(--red)" />
+                <path d="M2.5 12h19M12 2.5a14 14 0 0 1 0 19M12 2.5a14 14 0 0 0 0 19" stroke="var(--red)"
+                    stroke-width="1.5" opacity="0.5" />
+                <path d="M10 8l6 4-6 4V8z" fill="white" stroke="none" />
+            </svg>
+            CourtStream Training
+        </a>
+    </header>
+
+    <div class="container">
+        <div class="video-section">
+            <video id="video" playsinline></video>
+            <canvas id="output"></canvas>
+            <div id="loader" class="loader">Loading AI Models...</div>
+        </div>
+
+        <div class="dashboard">
+            <div class="card">
+                <h2>Controls</h2>
+                <div class="controls">
+                    <button id="startBtn" class="primary">Start Camera</button>
+                    <button id="stopBtn" class="danger" style="display:none;">Stop Camera</button>
+                </div>
+                <p style="color:var(--muted); font-size:13px;">
+                    Stand back so your full body is visible. Mimic a shooting motion to get real-time feedback.
+                </p>
+            </div>
+
+            <div class="card">
+                <h2>Live Statistics</h2>
+                <div class="metric">
+                    <span class="metric-label">Elbow Angle</span>
+                    <span class="metric-value" id="elbowAngle">--°</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Knee Angle</span>
+                    <span class="metric-value" id="kneeAngle">--°</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Shots Detected</span>
+                    <span class="metric-value" id="shotCount">0</span>
+                </div>
+
+                <div class="feedback-box" id="feedbackMsg">
+                    Waiting for shot...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load TensorFlow.js and Pose Detection Models -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
+    <!-- Load our custom logic -->
+    <script src="training.js"></script>
+
+</body>
+
+</html>

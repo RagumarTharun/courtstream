@@ -2599,7 +2599,7 @@
 
       if (autoMode === 'raw_later' || autoMode === 'render_now') {
         // "Raw" choice: Select all High-Quality ISOs + EDL
-        // Note: 'render_now' also starts with raw download + EDL as safety
+        // Note: 'render_now' also starts with raw download + EDL as safety, then boots into render.html
         Object.keys(peers).forEach(id => ops.isos[id] = 'webm');
         if (autoMode === 'render_now') ops.final = 'webm';
       } else if (autoMode === 'instant') {
@@ -2712,26 +2712,13 @@
                     const safeStreamName = sanitizeName(streamName || streamId);
                     let suffix = "_raw_quality";
                     if (id.startsWith('instant_')) suffix = "_instant_feed";
+                    
+                    const fName = `${safeStreamName}_${safeCamName}${suffix}.webm`;
+                    // Add standard file object
                     videoFiles.push({
-                      name: `${safeStreamName}_${safeCamName}${suffix}.webm`,
+                      name: fName,
                       blob: blob,
                       camId: id.replace('instant_', '') // map to original camera ID 
-                    });
-                  }
-                }
-
-                // Add program mix if available 
-                if (ops.program === 'webm') {
-                  let pBlob = receivedRecordings['program'];
-                  if (!pBlob && programChunks.length) {
-                    pBlob = new Blob(programChunks, { type: "video/webm" });
-                  }
-                  if (pBlob) {
-                    const safeStreamName = sanitizeName(streamName || streamId);
-                    videoFiles.push({
-                      name: `${safeStreamName}_program_local_instant.webm`,
-                      blob: pBlob,
-                      camId: 'program'
                     });
                   }
                 }
@@ -2839,38 +2826,59 @@
         }
 
         if (ops.final) {
-          const ext = ops.final === 'webm' ? 'webm' : 'mp4';
-          const vCodec = ext === 'mp4' ? ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"] : ["-c:v", "libvpx", "-deadline", "realtime", "-b:v", "2M"];
-          const aCodec = ext === 'mp4' ? ["-c:a", "aac", "-b:a", "128k"] : ["-c:a", "libvorbis"];
+          // If Manual 'Final Mix' was selected but autoMode was not 'render_now'
+          // We can just dump the files to IndexedDB and redirect anyway since server is deprecated.
+          updateStatus(10, "Preparing Render Data...");
+          try {
+            const dbReq = indexedDB.open("CourtStreamRenderDB", 1);
+            dbReq.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains("renderFiles")) {
+                db.createObjectStore("renderFiles");
+              }
+            };
+            await new Promise((resolve, reject) => {
+              dbReq.onsuccess = async (e) => {
+                const db = e.target.result;
+                const tx = db.transaction("renderFiles", "readwrite");
+                const store = tx.objectStore("renderFiles");
 
-          updateStatus(40, `Processing Cuts...`);
-          const segments = [];
-          for (let i = 0; i < isoEdl.length; i++) {
-            const cut = isoEdl[i];
-            const nextCut = isoEdl[i + 1];
-            let duration = nextCut ? (nextCut.timestamp - cut.timestamp) / 1000 : (recordEndTime - (recordStartTime + cut.timestamp)) / 1000;
-            if (duration < 0.1) continue;
+                store.put(isoEdl, "edl");
 
-            let inputFile = memFiles[`iso_${cut.camId}_webm`];
-            if (!inputFile) continue;
+                const videoFiles = [];
+                for (const id of Array.from(camerasToTransfer)) {
+                  let blob = receivedRecordings[id];
+                  if (!blob && cameraRecorders[id]?.chunks.length) {
+                    blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+                  }
+                  if (blob) {
+                    const safeCamName = sanitizeName(peers[id]?.name || id);
+                    const safeStreamName = sanitizeName(streamName || streamId);
+                    let suffix = "_raw_quality";
+                    if (id.startsWith('instant_')) suffix = "_instant_feed";
+                    videoFiles.push({
+                      name: `${safeStreamName}_${safeCamName}${suffix}.webm`,
+                      blob: blob,
+                      camId: id.replace('instant_', '') 
+                    });
+                  }
+                }
+                store.put(videoFiles, "videos");
 
-            const segName = `seg_${i}.${ext}`;
-            const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
-            if (duration) args.push("-t", String(duration));
-            args.push("-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p", "-r", "30", "-ar", "44100", ...vCodec, ...aCodec, segName);
-
-            await ffmpeg.exec(args);
-            segments.push(segName);
-            updateStatus(40 + Math.round((i / isoEdl.length) * 30), `Segment ${i + 1}/${isoEdl.length}`);
-          }
-
-          if (segments.length > 0) {
-            updateStatus(80, "Stitching Mix...");
-            await ffmpeg.writeFile("list.txt", segments.map(s => `file '${s}'`).join("\n"));
-            const finalName = `final_mix.${ext}`;
-            await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", finalName]);
-            const safeStreamName = sanitizeName(streamName || streamId);
-            downloadBlob(new Blob([(await ffmpeg.readFile(finalName)).buffer], { type: ext === 'mp4' ? "video/mp4" : "video/webm" }), `${safeStreamName}_final_mix_${formatDate(Date.now())}.${ext}`);
+                tx.oncomplete = () => {
+                  updateStatus(100, "Transferring to Render Studio...");
+                  setTimeout(() => {
+                    window.location.href = "render.html";
+                  }, 500);
+                  resolve();
+                };
+                tx.onerror = () => reject(tx.error);
+              };
+              dbReq.onerror = () => reject(dbReq.error);
+            });
+            return;
+          } catch (err) {
+             console.error("IndexedDB Error", err);
           }
         }
 
