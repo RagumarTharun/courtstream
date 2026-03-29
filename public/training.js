@@ -146,7 +146,7 @@ async function predictLoop() {
         }
 
         // Extremely fast custom ball tracking reading from video directly, localized to wrist
-        const ballCenter = trackOrangeBall(video, canvas.width, canvas.height, activeWristRaw);
+        const ballCenter = trackOrangeBall(video, ctx, canvas.width, canvas.height, activeWristRaw);
         if (ballCenter) {
             ctx.beginPath();
             ctx.arc(ballCenter.x, ballCenter.y, 20, 0, 2 * Math.PI);
@@ -203,7 +203,7 @@ function drawSkeleton(keypoints) {
 let offscreenCanvas = null;
 let offCtx = null;
 
-function trackOrangeBall(videoEl, width, height, wrist) {
+function trackOrangeBall(videoEl, drawCtx, width, height, wrist) {
     if (!offscreenCanvas) {
         offscreenCanvas = document.createElement('canvas');
         offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
@@ -218,26 +218,32 @@ function trackOrangeBall(videoEl, width, height, wrist) {
     const data = imageData.data;
     let sumX = 0, sumY = 0, count = 0;
     
-    for (let y = 0; y < height; y += 4) {
-        for (let x = 0; x < width; x += 4) {
+    // Using a bright color to show what the AI thinks is the ball
+    drawCtx.fillStyle = 'rgba(249, 115, 22, 0.4)';
+
+    for (let y = 0; y < height; y += 6) {
+        for (let x = 0; x < width; x += 6) {
             // Restrict search radius to 200px around the wrist if wrist is known
             if (wrist) {
-                if (Math.abs(x - wrist.x) > 200 || Math.abs(y - wrist.y) > 200) {
+                if (Math.abs(x - wrist.x) > 250 || Math.abs(y - wrist.y) > 250) {
                     continue;
                 }
             }
 
             const i = (y * width + x) * 4;
             const r = data[i], g = data[i+1], b = data[i+2];
-            // Generous check for basketball orange/brown hues
-            if (r > 90 && r > g * 1.05 && g > b * 0.9 && (r - g) > 15 && (r - b) > 20) {
+            // Extremely forgiving color check: Red must be the dominant color by at least a small margin, 
+            // and it must be reasonably bright to avoid absolute black.
+            if (r > 60 && r > g + 10 && r > b + 10) {
                 sumX += x;
                 sumY += y;
                 count++;
+                // Paint this pixel on the screen so user sees what is being tracked
+                drawCtx.fillRect(x, y, 6, 6);
             }
         }
     }
-    if (count > 10) {
+    if (count > 5) {
         return { x: sumX / count, y: sumY / count };
     }
     return null;
