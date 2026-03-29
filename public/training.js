@@ -208,72 +208,84 @@ function trackOrangeBall(ctx, width, height) {
 }
 
 function analyzePosture(keypoints, ballCenter) {
-    // Identify key joints. We assume right-handed shooter for now (can be made dynamic).
+    // Identify key joints for BOTH arms to dynamically pick the shooting arm
     const rightShoulder = keypoints.find(k => k.name === 'right_shoulder');
     const rightElbow = keypoints.find(k => k.name === 'right_elbow');
     const rightWrist = keypoints.find(k => k.name === 'right_wrist');
 
-    const rightHip = keypoints.find(k => k.name === 'right_hip');
-    const rightKnee = keypoints.find(k => k.name === 'right_knee');
-    const rightAnkle = keypoints.find(k => k.name === 'right_ankle');
+    const leftShoulder = keypoints.find(k => k.name === 'left_shoulder');
+    const leftElbow = keypoints.find(k => k.name === 'left_elbow');
+    const leftWrist = keypoints.find(k => k.name === 'left_wrist');
+
+    // Find the primary shooting arm (the one that is higher or more visible)
+    let activeShoulder = rightShoulder;
+    let activeElbow = rightElbow;
+    let activeWrist = rightWrist;
+
+    // Using a lower threshold (0.2) to not lose tracking during fast motion blur
+    const thresh = 0.2;
+
+    let hasRight = rightShoulder && rightElbow && rightWrist && rightShoulder.score > thresh && rightElbow.score > thresh && rightWrist.score > thresh;
+    let hasLeft = leftShoulder && leftElbow && leftWrist && leftShoulder.score > thresh && leftElbow.score > thresh && leftWrist.score > thresh;
+
+    if (hasLeft && hasRight) {
+        // Both visible, pick the hand that is higher up (smaller y)
+        if (leftWrist.y < rightWrist.y) {
+            activeShoulder = leftShoulder; activeElbow = leftElbow; activeWrist = leftWrist;
+        }
+    } else if (hasLeft) {
+        activeShoulder = leftShoulder; activeElbow = leftElbow; activeWrist = leftWrist;
+    }
 
     let elbowAngle = 0;
-    let kneeAngle = 0;
-
-    if (rightShoulder && rightElbow && rightWrist &&
-        rightShoulder.score > 0.3 && rightElbow.score > 0.3 && rightWrist.score > 0.3) {
-        elbowAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
+    if (activeShoulder && activeElbow && activeWrist && activeShoulder.score > thresh && activeElbow.score > thresh && activeWrist.score > thresh) {
+        elbowAngle = calculateAngle(activeShoulder, activeElbow, activeWrist);
         elbowAngleEl.textContent = Math.round(elbowAngle) + '°';
     }
 
-    if (rightHip && rightKnee && rightAnkle &&
-        rightHip.score > 0.3 && rightKnee.score > 0.3 && rightAnkle.score > 0.3) {
+    // UI update for knees contextually, optional now
+    const rightHip = keypoints.find(k => k.name === 'right_hip');
+    const rightKnee = keypoints.find(k => k.name === 'right_knee');
+    const rightAnkle = keypoints.find(k => k.name === 'right_ankle');
+    let kneeAngle = 0;
+    if (rightHip && rightKnee && rightAnkle && rightHip.score > 0.3 && rightKnee.score > 0.3 && rightAnkle.score > 0.3) {
         kneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
         kneeAngleEl.textContent = Math.round(kneeAngle) + '°';
     }
 
     // Distance from wrist to ball (if tracked)
     let distBallWrist = null;
-    if (ballCenter && rightWrist && rightWrist.score > 0.3) {
-        distBallWrist = Math.hypot(ballCenter.x - rightWrist.x, ballCenter.y - rightWrist.y);
+    if (ballCenter && activeWrist && activeWrist.score > thresh) {
+        distBallWrist = Math.hypot(ballCenter.x - activeWrist.x, ballCenter.y - activeWrist.y);
     }
 
-    // Basic Shot Detection Logic & Feedback (Max Extension & Ball Distance)
-    // A shot starts when wrist goes above shoulder.
-    // We track the maximum elbow angle while the arm is up.
-    // Once arm comes back down OR ball leaves hand, we evaluate the shot.
-
-    if (rightShoulder && rightWrist && rightElbow && elbowAngle) {
+    // Basic Shot Detection Logic & Feedback
+    if (activeShoulder && activeWrist && activeElbow && elbowAngle > 0) {
         if (phase === 'idle') {
-            if (rightWrist.y < rightShoulder.y) {
-                // Arm raised above shoulder -> Started shooting phase
+            // Looser check: if wrist is above shoulder + 20px (accounting for chest shots)
+            if (activeWrist.y < activeShoulder.y + 20) {
                 phase = 'shooting';
                 maxElbowAngleDuringShot = elbowAngle;
                 updateFeedbackUI('Going up...', true);
                 speakFeedback('Shooting');
             } else if (kneeAngle && kneeAngle > 0 && kneeAngle < 160) {
-                // Bending knees (UI feedback only, optional)
                 updateFeedbackUI('Good, bending knees...', true);
             } else {
                 updateFeedbackUI('Waiting for shot...', true);
             }
         } else if (phase === 'shooting') {
-            // Track max extension while arm is up
             if (elbowAngle > maxElbowAngleDuringShot) {
                 maxElbowAngleDuringShot = elbowAngle;
             }
 
             let ballReleased = false;
-            // if the ball suddenly spikes in distance from wrist, it's released
             if (distBallWrist !== null && distBallWrist > 150) {
                 ballReleased = true;
             }
 
             // Has the arm come back down OR ball released?
-            if (rightWrist.y > rightShoulder.y || ballReleased) {
-                // Evaluate the shot
+            if (activeWrist.y > activeShoulder.y + 20 || ballReleased) {
                 if (maxElbowAngleDuringShot > 120 || ballReleased) {
-                    // Count as a shot
                     shotCount++;
                     shotCountEl.textContent = shotCount;
 
@@ -289,7 +301,6 @@ function analyzePosture(keypoints, ballCenter) {
                     speakFeedback('Shot aborted.');
                 }
 
-                // Cooldown to prevent double counting
                 phase = 'cooldown';
                 setTimeout(() => { 
                     if (phase === 'cooldown') {
