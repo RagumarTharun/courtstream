@@ -128,8 +128,8 @@ async function predictLoop() {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Extremely fast custom ball tracking
-        const ballCenter = trackOrangeBall(ctx, canvas.width, canvas.height);
+        // Extremely fast custom ball tracking reading from video directly
+        const ballCenter = trackOrangeBall(video, canvas.width, canvas.height);
         if (ballCenter) {
             ctx.beginPath();
             ctx.arc(ballCenter.x, ballCenter.y, 25, 0, 2 * Math.PI);
@@ -185,8 +185,21 @@ function drawSkeleton(keypoints) {
     });
 }
 
-function trackOrangeBall(ctx, width, height) {
-    const imageData = ctx.getImageData(0, 0, width, height);
+let offscreenCanvas = null;
+let offCtx = null;
+
+function trackOrangeBall(videoEl, width, height) {
+    if (!offscreenCanvas) {
+        offscreenCanvas = document.createElement('canvas');
+        offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (offscreenCanvas.width !== width) {
+        offscreenCanvas.width = width;
+        offscreenCanvas.height = height;
+    }
+
+    offCtx.drawImage(videoEl, 0, 0, width, height);
+    const imageData = offCtx.getImageData(0, 0, width, height);
     const data = imageData.data;
     let sumX = 0, sumY = 0, count = 0;
     
@@ -259,11 +272,14 @@ function analyzePosture(keypoints, ballCenter) {
         distBallWrist = Math.hypot(ballCenter.x - activeWrist.x, ballCenter.y - activeWrist.y);
     }
 
-    // Basic Shot Detection Logic & Feedback
+    // Basic Shot Detection Logic & Feedback combining Arm angle and Ball tracking
     if (activeShoulder && activeWrist && activeElbow && elbowAngle > 0) {
         if (phase === 'idle') {
             // Looser check: if wrist is above shoulder + 20px (accounting for chest shots)
-            if (activeWrist.y < activeShoulder.y + 20) {
+            // AND they are loosely holding the ball or the ball tracking is temporarily lost overhead
+            let holdingBall = distBallWrist === null || distBallWrist < 100;
+
+            if (activeWrist.y < activeShoulder.y + 30 && holdingBall) {
                 phase = 'shooting';
                 maxElbowAngleDuringShot = elbowAngle;
                 updateFeedbackUI('Going up...', true);
@@ -279,12 +295,13 @@ function analyzePosture(keypoints, ballCenter) {
             }
 
             let ballReleased = false;
-            if (distBallWrist !== null && distBallWrist > 150) {
+            // if the ball suddenly spikes in distance from wrist (ball goes up, wrist stops)
+            if (distBallWrist !== null && distBallWrist > 120 && ballCenter.y < activeWrist.y - 30) {
                 ballReleased = true;
             }
 
-            // Has the arm come back down OR ball released?
-            if (activeWrist.y > activeShoulder.y + 20 || ballReleased) {
+            // Has the arm come back down OR ball clearly released?
+            if (activeWrist.y > activeShoulder.y + 40 || ballReleased) {
                 if (maxElbowAngleDuringShot > 120 || ballReleased) {
                     shotCount++;
                     shotCountEl.textContent = shotCount;
