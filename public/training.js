@@ -198,9 +198,21 @@ function stopCamera() {
 switchCamBtn.addEventListener('click', async () => {
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
     if (isPlaying) {
-        stopCamera();
-        // Await slightly if needed, but keeping it in the async chain maintains the gesture
-        await startCamera();
+        // Seamlessly hot-swap the video stream without stopping the MediaRecorder session
+        if (video.srcObject) {
+            video.srcObject.getTracks().forEach(track => track.stop());
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: currentFacingMode, width: 640, height: 480 },
+                audio: false
+            });
+            video.srcObject = stream;
+            logTranscript(`Switched to ${currentFacingMode === 'user' ? 'Front' : 'Back'} Camera`, 'info');
+        } catch (e) {
+            console.error("Camera switch failed:", e);
+            logTranscript("Camera switch blocked or failed.", 'error');
+        }
     }
 });
 
