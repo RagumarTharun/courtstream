@@ -4,17 +4,29 @@ const canvas = document.getElementById('output');
 const ctx = canvas.getContext('2d');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
+const switchCamBtn = document.getElementById('switchCamBtn');
 const loader = document.getElementById('loader');
 
 const elbowAngleEl = document.getElementById('elbowAngle');
 const kneeAngleEl = document.getElementById('kneeAngle');
 const shotCountEl = document.getElementById('shotCount');
 const feedbackMsg = document.getElementById('feedbackMsg');
+const transcriptBox = document.getElementById('transcriptBox');
 
 let detector;
+let objDetector;
 let rafId;
 let isPlaying = false;
 let shotCount = 0;
+let currentFacingMode = 'user';
+
+// Session Recording
+let mediaRecorder;
+let recordedChunks = [];
+
+// Ball tracking
+let asyncBallCenter = null;
+let objDetectionInterval = null;
 
 // Simple state machine for shot detection
 let phase = 'idle'; // idle, shooting, cooldown
@@ -25,10 +37,13 @@ async function init() {
     startBtn.disabled = true;
 
     try {
-        // Load the MoveNet model via MediaPipe in TFJS
         const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
         detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
         console.log("MoveNet loaded.");
+
+        // Load COCO-SSD generically
+        objDetector = await cocoSsd.load();
+        console.log("COCO-SSD loaded.");
 
         loader.style.display = 'none';
         startBtn.disabled = false;
@@ -39,68 +54,27 @@ async function init() {
     }
 }
 
-async function startCamera() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("Camera API not available in this browser.");
-        return;
+function logTranscript(msg, type = 'info') {
+    const div = document.createElement('div');
+    const time = new Date().toLocaleTimeString([], { hour12: false });
+    div.innerHTML = `<span style="color:var(--muted)">[${time}]</span> ${msg}`;
+    if (type === 'error') div.style.color = 'var(--red)';
+    else if (type === 'success') div.style.color = 'var(--green)';
+    
+    // remove placeholder if exists
+    if (transcriptBox.children.length === 1 && transcriptBox.children[0].textContent.includes('Waiting for session')) {
+        transcriptBox.innerHTML = '';
     }
-
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: 640, height: 480 },
-            audio: false
-        });
-
-        video.srcObject = stream;
-
-        video.onloadedmetadata = () => {
-            video.play();
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            isPlaying = true;
-            startBtn.style.display = 'none';
-            stopBtn.style.display = 'inline-block';
-            predictLoop();
-        };
-    } catch (error) {
-        console.error("Camera access denied or error:", error);
-        alert("Could not access camera. Please grant permissions.");
-    }
+    
+    transcriptBox.appendChild(div);
+    transcriptBox.scrollTop = transcriptBox.scrollHeight;
 }
 
-function stopCamera() {
-    isPlaying = false;
-    if (rafId) cancelAnimationFrame(rafId);
-
-    if (video.srcObject) {
-        video.srcObject.getTracks().forEach(track => track.stop());
-        video.srcObject = null;
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    startBtn.style.display = 'inline-block';
-    stopBtn.style.display = 'none';
-
-    elbowAngleEl.textContent = '--°';
-    kneeAngleEl.textContent = '--°';
-    feedbackMsg.textContent = 'Camera stopped.';
-}
-
-// Calculate angle between three 2D points: A, B, C (B is the vertex)
-function calculateAngle(a, b, c) {
-    const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
-    let angle = Math.abs(radians * 180.0 / Math.PI);
-    if (angle > 180.0) angle = 360 - angle;
-    return angle;
-}
-
-// Speak feedback using Web Speech API
 function speakFeedback(text) {
     if ('speechSynthesis' in window) {
-        // Only speak if not currently speaking to avoid overlapping
         if (!window.speechSynthesis.speaking) {
             const msg = new SpeechSynthesisUtterance(text);
-            msg.rate = 1.1; // Slightly faster
+            msg.rate = 1.1; 
             window.speechSynthesis.speak(msg);
         }
     }
@@ -119,58 +93,119 @@ function updateFeedbackUI(text, isGood = true) {
     }
 }
 
-async function predictLoop() {
-    if (!isPlaying) return;
-
-    if (video.readyState >= 2) {
-        // Detect poses
-        const poses = await detector.estimatePoses(video, { maxPoses: 1, flipHorizontal: false }); // We mirrored via CSS, so we don't flip horizontally in TFJS unless coords don't match.
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        let activeWristRaw = null;
-        if (poses.length > 0) {
-            const keypoints = poses[0].keypoints;
-            drawSkeleton(keypoints);
-
-            // Find active wrist to restrict ball search area
-            const lw = keypoints.find(k => k.name === 'left_wrist');
-            const rw = keypoints.find(k => k.name === 'right_wrist');
-            if (lw && rw && lw.score > 0.2 && rw.score > 0.2) {
-                activeWristRaw = lw.y < rw.y ? lw : rw;
-            } else if (lw && lw.score > 0.2) {
-                activeWristRaw = lw;
-            } else if (rw && rw.score > 0.2) {
-                activeWristRaw = rw;
-            }
-        }
-
-        // Extremely fast custom ball tracking reading from video directly, localized to wrist
-        const ballCenter = trackOrangeBall(video, ctx, canvas.width, canvas.height, activeWristRaw);
-        if (ballCenter) {
-            ctx.beginPath();
-            ctx.arc(ballCenter.x, ballCenter.y, 20, 0, 2 * Math.PI);
-            ctx.strokeStyle = "#f97316";
-            ctx.lineWidth = 4;
-            ctx.stroke();
-            ctx.fillStyle = "#f97316";
-            ctx.fillText("Ball Tracking", ballCenter.x - 20, ballCenter.y - 30);
-        }
-
-        if (poses.length > 0) {
-            analyzePosture(poses[0].keypoints, ballCenter);
-        }
+async function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Camera API not available in this browser.");
+        return;
     }
 
-    // Throttle requestAnimationFrame slightly if performance drops, but let's try 60fps first.
-    rafId = requestAnimationFrame(predictLoop);
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: currentFacingMode, width: 640, height: 480 },
+            audio: false
+        });
+
+        video.srcObject = stream;
+
+        video.onloadedmetadata = () => {
+            video.play();
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            isPlaying = true;
+            
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            
+            transcriptBox.innerHTML = '';
+            logTranscript(`Session started (${currentFacingMode === 'user' ? 'Front' : 'Back'} camera).`, 'info');
+
+            // Setup Recording
+            const canvasStream = canvas.captureStream(30);
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm' });
+            
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) recordedChunks.push(e.data);
+            };
+            
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `courtstream_session_${Date.now()}.webm`;
+                a.click();
+                URL.revokeObjectURL(url);
+                logTranscript('Session video downloaded.', 'success');
+            };
+
+            mediaRecorder.start();
+            logTranscript('Recording started...', 'success');
+
+            // Async COCO-SSD Interval (every 100ms)
+            objDetectionInterval = setInterval(async () => {
+                if (isPlaying && objDetector && video.readyState >= 2) {
+                    const predictions = await objDetector.detect(video);
+                    // Just look for sports ball or any round object if needed. COCO-SSD uses 'sports ball'
+                    const ball = predictions.find(p => p.class === 'sports ball');
+                    if (ball) {
+                        const [x, y, w, h] = ball.bbox;
+                        asyncBallCenter = { x: x + w/2, y: y + h/2, radius: Math.max(w, h)/2 };
+                    } else {
+                        asyncBallCenter = null;
+                    }
+                }
+            }, 100);
+
+            predictLoop();
+        };
+    } catch (error) {
+        console.error("Camera access denied or error:", error);
+        alert("Could not access camera. Please grant permissions.");
+    }
+}
+
+function stopCamera() {
+    isPlaying = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (objDetectionInterval) clearInterval(objDetectionInterval);
+
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+    }
+
+    // Don't clear ctx, leave the last frame visible
+    startBtn.style.display = 'inline-block';
+    stopBtn.style.display = 'none';
+
+    elbowAngleEl.textContent = '--°';
+    kneeAngleEl.textContent = '--°';
+    updateFeedbackUI('Session stopped.', true);
+    logTranscript('Session ended.', 'info');
+}
+
+switchCamBtn.addEventListener('click', () => {
+    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    if (isPlaying) {
+        stopCamera();
+        setTimeout(startCamera, 500);
+    }
+});
+
+function calculateAngle(a, b, c) {
+    const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+    let angle = Math.abs(radians * 180.0 / Math.PI);
+    if (angle > 180.0) angle = 360 - angle;
+    return angle;
 }
 
 function drawSkeleton(keypoints) {
-    // Filter out low confidence points
-    const points = keypoints.filter(p => p.score > 0.3);
-
-    // Draw points
+    const points = keypoints.filter(p => p.score > 0.2);
     ctx.fillStyle = "#3b82f6";
     points.forEach(point => {
         ctx.beginPath();
@@ -178,20 +213,13 @@ function drawSkeleton(keypoints) {
         ctx.fill();
     });
 
-    // Define connections for skeleton
     const adjacentKeyPoints = poseDetection.util.getAdjacentPairs(poseDetection.SupportedModels.MoveNet);
-
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 2;
-
     adjacentKeyPoints.forEach((pair) => {
-        const i = pair[0];
-        const j = pair[1];
-        const kp1 = keypoints[i];
-        const kp2 = keypoints[j];
-
-        // If both points have a score > 0.3, draw a line between them
-        if (kp1.score > 0.3 && kp2.score > 0.3) {
+        const kp1 = keypoints[pair[0]];
+        const kp2 = keypoints[pair[1]];
+        if (kp1.score > 0.2 && kp2.score > 0.2) {
             ctx.beginPath();
             ctx.moveTo(kp1.x, kp1.y);
             ctx.lineTo(kp2.x, kp2.y);
@@ -200,78 +228,98 @@ function drawSkeleton(keypoints) {
     });
 }
 
-let offscreenCanvas = null;
-let offCtx = null;
+async function predictLoop() {
+    if (!isPlaying) return;
 
-function trackOrangeBall(videoEl, drawCtx, width, height, wrist) {
-    if (!offscreenCanvas) {
-        offscreenCanvas = document.createElement('canvas');
-        offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
-    }
-    if (offscreenCanvas.width !== width) {
-        offscreenCanvas.width = width;
-        offscreenCanvas.height = height;
-    }
+    if (video.readyState >= 2) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    offCtx.drawImage(videoEl, 0, 0, width, height);
-    const imageData = offCtx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    let sumX = 0, sumY = 0, count = 0;
-    
-    // Using a bright color to show what the AI thinks is the ball
-    drawCtx.fillStyle = 'rgba(249, 115, 22, 0.4)';
+        if (currentFacingMode === 'user') {
+            ctx.save();
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+        } else {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
 
-    for (let y = 0; y < height; y += 6) {
-        for (let x = 0; x < width; x += 6) {
-            // Restrict search radius to 200px around the wrist if wrist is known
-            if (wrist) {
-                if (Math.abs(x - wrist.x) > 250 || Math.abs(y - wrist.y) > 250) {
-                    continue;
-                }
+        const poses = await detector.estimatePoses(video, { maxPoses: 1, flipHorizontal: false });
+        
+        if (poses.length > 0) {
+            const keypoints = poses[0].keypoints;
+            
+            if (currentFacingMode === 'user') {
+                 ctx.save();
+                 ctx.translate(canvas.width, 0);
+                 ctx.scale(-1, 1);
+            }
+            drawSkeleton(keypoints);
+            
+            if (asyncBallCenter) {
+                ctx.beginPath();
+                ctx.arc(asyncBallCenter.x, asyncBallCenter.y, asyncBallCenter.radius || 20, 0, 2 * Math.PI);
+                ctx.strokeStyle = "#f97316";
+                ctx.lineWidth = 4;
+                ctx.stroke();
             }
 
-            const i = (y * width + x) * 4;
-            const r = data[i], g = data[i+1], b = data[i+2];
-            // Extremely forgiving color check: Red must be the dominant color by at least a small margin, 
-            // and it must be reasonably bright to avoid absolute black.
-            if (r > 60 && r > g + 10 && r > b + 10) {
-                sumX += x;
-                sumY += y;
-                count++;
-                // Paint this pixel on the screen so user sees what is being tracked
-                drawCtx.fillRect(x, y, 6, 6);
+            if (currentFacingMode === 'user') {
+                 ctx.restore();
+            }
+
+            // Find active wrist
+            const lw = keypoints.find(k => k.name === 'left_wrist');
+            const rw = keypoints.find(k => k.name === 'right_wrist');
+            let activeWristRaw = null;
+            if (lw && rw && lw.score > 0.2 && rw.score > 0.2) {
+                activeWristRaw = lw.y < rw.y ? lw : rw;
+            } else if (lw && lw.score > 0.2) {
+                activeWristRaw = lw;
+            } else if (rw && rw.score > 0.2) {
+                activeWristRaw = rw;
+            }
+            analyzePosture(keypoints, asyncBallCenter);
+        } else {
+            // Draw ball even if nobody is found
+            if (asyncBallCenter) {
+                if (currentFacingMode === 'user') {
+                     ctx.save();
+                     ctx.translate(canvas.width, 0);
+                     ctx.scale(-1, 1);
+                }
+                ctx.beginPath();
+                ctx.arc(asyncBallCenter.x, asyncBallCenter.y, asyncBallCenter.radius || 20, 0, 2 * Math.PI);
+                ctx.strokeStyle = "#f97316";
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                if (currentFacingMode === 'user') {
+                     ctx.restore();
+                }
             }
         }
     }
-    if (count > 5) {
-        return { x: sumX / count, y: sumY / count };
-    }
-    return null;
+
+    rafId = requestAnimationFrame(predictLoop);
 }
 
 function analyzePosture(keypoints, ballCenter) {
-    // Identify key joints for BOTH arms to dynamically pick the shooting arm
     const rightShoulder = keypoints.find(k => k.name === 'right_shoulder');
     const rightElbow = keypoints.find(k => k.name === 'right_elbow');
     const rightWrist = keypoints.find(k => k.name === 'right_wrist');
-
     const leftShoulder = keypoints.find(k => k.name === 'left_shoulder');
     const leftElbow = keypoints.find(k => k.name === 'left_elbow');
     const leftWrist = keypoints.find(k => k.name === 'left_wrist');
 
-    // Find the primary shooting arm (the one that is higher or more visible)
     let activeShoulder = rightShoulder;
     let activeElbow = rightElbow;
     let activeWrist = rightWrist;
-
-    // Using a lower threshold (0.2) to not lose tracking during fast motion blur
     const thresh = 0.2;
 
     let hasRight = rightShoulder && rightElbow && rightWrist && rightShoulder.score > thresh && rightElbow.score > thresh && rightWrist.score > thresh;
     let hasLeft = leftShoulder && leftElbow && leftWrist && leftShoulder.score > thresh && leftElbow.score > thresh && leftWrist.score > thresh;
 
     if (hasLeft && hasRight) {
-        // Both visible, pick the hand that is higher up (smaller y)
         if (leftWrist.y < rightWrist.y) {
             activeShoulder = leftShoulder; activeElbow = leftElbow; activeWrist = leftWrist;
         }
@@ -285,7 +333,6 @@ function analyzePosture(keypoints, ballCenter) {
         elbowAngleEl.textContent = Math.round(elbowAngle) + '°';
     }
 
-    // UI update for knees contextually, optional now
     const rightHip = keypoints.find(k => k.name === 'right_hip');
     const rightKnee = keypoints.find(k => k.name === 'right_knee');
     const rightAnkle = keypoints.find(k => k.name === 'right_ankle');
@@ -295,20 +342,15 @@ function analyzePosture(keypoints, ballCenter) {
         kneeAngleEl.textContent = Math.round(kneeAngle) + '°';
     }
 
-    // Distance from wrist to ball (if tracked)
     let distBallWrist = null;
     if (ballCenter && activeWrist && activeWrist.score > thresh) {
         distBallWrist = Math.hypot(ballCenter.x - activeWrist.x, ballCenter.y - activeWrist.y);
     }
 
-    // Basic Shot Detection Logic & Feedback combining Arm angle and Ball tracking
     if (activeShoulder && activeWrist && activeElbow && elbowAngle > 0) {
         if (phase === 'idle') {
-            // Looser check: if wrist is above shoulder + 20px (accounting for chest shots)
-            // AND they are loosely holding the ball or the ball tracking is temporarily lost overhead
-            let holdingBall = distBallWrist === null || distBallWrist < 100;
-
-            if (activeWrist.y < activeShoulder.y + 30 && holdingBall) {
+            let holdingBall = distBallWrist === null || distBallWrist < 120;
+            if (activeWrist.y < activeShoulder.y + 40 && holdingBall) {
                 phase = 'shooting';
                 maxElbowAngleDuringShot = elbowAngle;
                 updateFeedbackUI('Going up...', true);
@@ -324,27 +366,28 @@ function analyzePosture(keypoints, ballCenter) {
             }
 
             let ballReleased = false;
-            // if the ball suddenly spikes in distance from wrist (ball goes up, wrist stops)
-            if (distBallWrist !== null && distBallWrist > 120 && ballCenter.y < activeWrist.y - 30) {
+            // The user wanted shot counting based on staying still/shooting, elbow angle, AND ball leaving wrist
+            if (distBallWrist !== null && distBallWrist > 150 && ballCenter.y < activeWrist.y - 30) {
                 ballReleased = true;
             }
 
-            // Has the arm come back down OR ball clearly released?
-            if (activeWrist.y > activeShoulder.y + 40 || ballReleased) {
-                if (maxElbowAngleDuringShot > 120 || ballReleased) {
+            if (activeWrist.y > activeShoulder.y + 50 || ballReleased) {
+                if (maxElbowAngleDuringShot > 115 || ballReleased) {
                     shotCount++;
                     shotCountEl.textContent = shotCount;
 
-                    if (maxElbowAngleDuringShot > 145) {
+                    if (maxElbowAngleDuringShot > 140) {
                         updateFeedbackUI(`Shot ${shotCount}! Excellent Follow-Through!`, true);
-                        speakFeedback(`Great shot. Excellent extension.`);
+                        speakFeedback(`Great shot.`);
+                        logTranscript(`Shot ${shotCount}: Score! Excellent arm extension (${Math.round(maxElbowAngleDuringShot)}°).`, 'success');
                     } else {
                         updateFeedbackUI(`Shot ${shotCount}. Extend your elbow more!`, false);
                         speakFeedback(`Shot ${shotCount}. Extend your elbow more.`);
+                        logTranscript(`Shot ${shotCount}: Missed. Poor extension (${Math.round(maxElbowAngleDuringShot)}°). Extend elbow fully!`, 'error');
                     }
                 } else {
                     updateFeedbackUI('Shot aborted (elbow not fully extended)', false);
-                    speakFeedback('Shot aborted.');
+                    logTranscript('Shot aborted. Bailed out before extension.', 'error');
                 }
 
                 phase = 'cooldown';
@@ -359,9 +402,7 @@ function analyzePosture(keypoints, ballCenter) {
     }
 }
 
-// Event Listeners
 startBtn.addEventListener('click', startCamera);
 stopBtn.addEventListener('click', stopCamera);
 
-// Initialize models on load
 init();
