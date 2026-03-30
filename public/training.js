@@ -122,18 +122,24 @@ async function startCamera() {
             // Setup Recording
             const canvasStream = canvas.captureStream(30);
             recordedChunks = [];
-            mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm' });
+            let mimeType = 'video/webm';
+            let ext = 'webm';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = 'video/mp4';
+                ext = 'mp4';
+            }
+            mediaRecorder = new MediaRecorder(canvasStream, { mimeType: mimeType });
             
             mediaRecorder.ondataavailable = (e) => {
                 if (e.data.size > 0) recordedChunks.push(e.data);
             };
             
             mediaRecorder.onstop = () => {
-                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const blob = new Blob(recordedChunks, { type: mimeType });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `courtstream_session_${Date.now()}.webm`;
+                a.download = `courtstream_session_${Date.now()}.${ext}`;
                 a.click();
                 URL.revokeObjectURL(url);
                 logTranscript('Session video downloaded.', 'success');
@@ -189,11 +195,12 @@ function stopCamera() {
     logTranscript('Session ended.', 'info');
 }
 
-switchCamBtn.addEventListener('click', () => {
+switchCamBtn.addEventListener('click', async () => {
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
     if (isPlaying) {
         stopCamera();
-        setTimeout(startCamera, 500);
+        // Await slightly if needed, but keeping it in the async chain maintains the gesture
+        await startCamera();
     }
 });
 
