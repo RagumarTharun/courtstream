@@ -117,11 +117,13 @@
         }
 
         #video {
-            visibility: hidden;
+            /* Crucial for Safari to decode frames: do not use display none or visibility hidden */
+            opacity: 0.01;
             position: absolute;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+            width: 1px;
+            height: 1px;
+            z-index: -1;
+            pointer-events: none;
         }
 
         #output {
@@ -315,7 +317,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
     <!-- Load our custom logic -->
-    <script src="training.js"></script>
+    <script src="training.js?v=3"></script>
 
 </body>
 
