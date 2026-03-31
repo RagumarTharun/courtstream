@@ -42,7 +42,7 @@ let phase = 'idle'; // idle, shooting, cooldown
 let maxElbowAngleDuringShot = 0;
 
 async function init() {
-    loader.style.display = 'block';
+    loader.style.display = 'flex'; // Full-screen overlay
     startBtn.disabled = true;
 
     try {
@@ -331,21 +331,32 @@ async function predictLoop() {
             }
         }
 
-        // Draw COCO-SSD Tracking Reticle if ball detected
+        // Draw COCO-SSD Tracking Reticle if ball detected, else draw search box
+        if (currentFacingMode === 'user') {
+            ctx.save();
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+        }
+
         if (asyncBallCenter) {
-            if (currentFacingMode === 'user') {
-                 ctx.save();
-                 ctx.translate(canvas.width, 0);
-                 ctx.scale(-1, 1);
-            }
             ctx.beginPath();
             ctx.arc(asyncBallCenter.x, asyncBallCenter.y, asyncBallCenter.radius || 20, 0, 2 * Math.PI);
+            ctx.fillStyle = "rgba(249, 115, 22, 0.4)"; // Thermal style glow
+            ctx.fill();
             ctx.strokeStyle = "#f97316";
             ctx.lineWidth = 4;
             ctx.stroke();
-            if (currentFacingMode === 'user') {
-                 ctx.restore();
-            }
+        } else if (globalActiveWrist) {
+            // Draw search ROI to visibly 'highlight' where it is looking for the ball
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(globalActiveWrist.x - 150, globalActiveWrist.y - 150, 300, 300);
+            ctx.setLineDash([]);
+        }
+
+        if (currentFacingMode === 'user') {
+            ctx.restore();
         }
 
         if (poses.length > 0) {

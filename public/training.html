@@ -277,6 +277,31 @@
             padding: 16px 24px;
             border-radius: 8px;
         }
+
+        .loader-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: var(--bg);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text);
+        }
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s infinite linear;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 
@@ -295,10 +320,15 @@
     </header>
 
     <div class="container">
+        <div id="loader" class="loader-overlay">
+            <div class="spinner"></div>
+            <h2>Loading AI Models...</h2>
+            <p style="color: var(--muted); margin-top:10px;">Please wait</p>
+        </div>
+
         <div class="video-section">
             <video id="video" playsinline></video>
             <canvas id="output"></canvas>
-            <div id="loader" class="loader">Loading AI Models...</div>
         </div>
 
         <button id="toggleDashboardBtn">
@@ -360,7 +390,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
     <!-- Load our custom logic -->
-    <script src="training.js?v=8"></script>
+    <script src="training.js?v=9"></script>
 
 </body>
 
