@@ -29,6 +29,13 @@ let recordedChunks = [];
 // Ball tracking
 let asyncBallCenter = null;
 let objDetectionInterval = null;
+let globalActiveWrist = null;
+
+// Regional Tracker Canvas
+const cropCanvas = document.createElement('canvas');
+cropCanvas.width = 300;
+cropCanvas.height = 300;
+const cropCtx = cropCanvas.getContext('2d');
 
 // Simple state machine for shot detection
 let phase = 'idle'; // idle, shooting, cooldown
@@ -156,18 +163,43 @@ async function startCamera() {
             // Async COCO-SSD Interval (every 100ms)
             objDetectionInterval = setInterval(async () => {
                 if (isPlaying && objDetector && video.readyState >= 2) {
-                    // Lower maxScore to 0.3 for very aggressive ball tracking
-                    const predictions = await objDetector.detect(video, 20, 0.3);
-                    // Just look for sports ball or any round object if needed. COCO-SSD uses 'sports ball'
-                    const ball = predictions.find(p => p.class === 'sports ball');
-                    if (ball) {
-                        const [x, y, w, h] = ball.bbox;
-                        asyncBallCenter = { x: x + w/2, y: y + h/2, radius: Math.max(w, h)/2 };
-                    } else {
-                        asyncBallCenter = null;
-                    }
+                    try {
+                        let searchSource = video;
+                        let offsetX = 0;
+                        let offsetY = 0;
+                        
+                        // If we have a wrist tracked, zoom in on the region to drastically improve ball tracking score
+                        if (globalActiveWrist) {
+                            offsetX = Math.max(0, globalActiveWrist.x - 150);
+                            offsetY = Math.max(0, globalActiveWrist.y - 150);
+                            
+                            // Ensure we don't go out of bounds
+                            if (offsetX + 300 > video.videoWidth) offsetX = video.videoWidth - 300;
+                            if (offsetY + 300 > video.videoHeight) offsetY = video.videoHeight - 300;
+
+                            cropCtx.clearRect(0, 0, 300, 300);
+                            cropCtx.drawImage(video, offsetX, offsetY, 300, 300, 0, 0, 300, 300);
+                            searchSource = cropCanvas;
+                        }
+
+                        // Detect aggressively via COCO
+                        const predictions = await objDetector.detect(searchSource, 20, 0.25);
+                        const ball = predictions.find(p => p.class === 'sports ball');
+                        
+                        if (ball) {
+                            const [x, y, w, h] = ball.bbox;
+                            asyncBallCenter = {
+                                x: (searchSource === cropCanvas ? x + offsetX : x) + w/2,
+                                y: (searchSource === cropCanvas ? y + offsetY : y) + h/2,
+                                radius: Math.max(w, h)/2
+                            };
+                        } else {
+                            // Fallback to wrist tracker if no ball found to still count shots manually
+                            asyncBallCenter = null;
+                        }
+                    } catch(e) {}
                 }
-            }, 100);
+            }, 150);
 
             predictLoop();
         };
@@ -296,7 +328,7 @@ async function predictLoop() {
                  ctx.restore();
             }
 
-            // Find active wrist
+            // Find active wrist for both the internal logic and the async ball tracker
             const lw = keypoints.find(k => k.name === 'left_wrist');
             const rw = keypoints.find(k => k.name === 'right_wrist');
             let activeWristRaw = null;
@@ -307,6 +339,19 @@ async function predictLoop() {
             } else if (rw && rw.score > 0.2) {
                 activeWristRaw = rw;
             }
+            
+            if (activeWristRaw) {
+                // Mirror the coordinate back to Raw video space since it was flipped for rendering
+                if (currentFacingMode === 'user') {
+                    globalActiveWrist = {
+                        x: canvas.width - activeWristRaw.x,
+                        y: activeWristRaw.y
+                    };
+                } else {
+                    globalActiveWrist = activeWristRaw;
+                }
+            }
+
             analyzePosture(keypoints, asyncBallCenter);
         } else {
             // Draw ball even if nobody is found
