@@ -459,8 +459,8 @@ function analyzePosture(keypoints, currentBallCenter) {
 
     if (activeShoulder && activeWrist && activeElbow && elbowAngle > 0) {
         if (phase === 'idle') {
-            // "dont strictly count shots if ball is absent" - so we fall back to generic arm kinematics if ball not tracked
-            let holdingBall = distBallWrist !== null ? (distBallWrist < 150) : true;
+            // Strictly require the ball to be present and near the wrist to count any shots!
+            let holdingBall = distBallWrist !== null && distBallWrist < 150;
             
             // Require arm to be physically 'bent' as a gather to prevent false shots while walking
             let isGathering = elbowAngle < 130 && activeWrist.y < activeShoulder.y + 40;
@@ -489,7 +489,7 @@ function analyzePosture(keypoints, currentBallCenter) {
             // A shot is registered if the Ball physically flies up OR if the user brings their arm completely back down
             if (activeWrist.y > activeShoulder.y + 60 || ballReleased) {
                 // Was it a real shot? The elbow must be cleanly extended during the upward motion!
-                if (maxElbowAngleDuringShot > 130 || ballReleased) {
+                if (maxElbowAngleDuringShot > 120 || ballReleased) {
                     shotCount++;
                     shotCountEl.textContent = shotCount;
 
