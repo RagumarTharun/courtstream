@@ -16,7 +16,7 @@ const feedbackMsg = document.getElementById('feedbackMsg');
 const transcriptBox = document.getElementById('transcriptBox');
 
 let detector;
-let objDetector;
+let objDetector; // Removed but safely null if not used
 let rafId;
 let isPlaying = false;
 let shotCount = 0;
@@ -49,9 +49,6 @@ async function init() {
         const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
         detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
         console.log("MoveNet loaded.");
-
-        objDetector = await cocoSsd.load();
-        console.log("COCO-SSD loaded.");
 
         loader.style.display = 'none';
         startBtn.disabled = false;
@@ -156,42 +153,6 @@ async function startCamera() {
 
             toggleBtn.style.display = 'flex';
 
-            // Async COCO-SSD Interval using crop-to-wrist technique
-            objDetectionInterval = setInterval(async () => {
-                if (isPlaying && objDetector && video.readyState >= 2) {
-                    try {
-                        let searchSource = video;
-                        let offsetX = 0;
-                        let offsetY = 0;
-                        
-                        if (globalActiveWrist) {
-                            offsetX = Math.max(0, globalActiveWrist.x - 150);
-                            offsetY = Math.max(0, globalActiveWrist.y - 150);
-                            if (offsetX + 300 > video.videoWidth) offsetX = video.videoWidth - 300;
-                            if (offsetY + 300 > video.videoHeight) offsetY = video.videoHeight - 300;
-
-                            cropCtx.clearRect(0, 0, 300, 300);
-                            cropCtx.drawImage(video, offsetX, offsetY, 300, 300, 0, 0, 300, 300);
-                            searchSource = cropCanvas;
-                        }
-
-                        const predictions = await objDetector.detect(searchSource, 20, 0.25);
-                        const ball = predictions.find(p => p.class === 'sports ball');
-                        
-                        if (ball) {
-                            const [x, y, w, h] = ball.bbox;
-                            asyncBallCenter = {
-                                x: (searchSource === cropCanvas ? x + offsetX : x) + w/2,
-                                y: (searchSource === cropCanvas ? y + offsetY : y) + h/2,
-                                radius: Math.max(w, h)/2
-                            };
-                        } else {
-                            asyncBallCenter = null;
-                        }
-                    } catch(e) {}
-                }
-            }, 150);
-
             predictLoop();
         };
     } catch (error) {
@@ -251,6 +212,90 @@ function calculateAngle(a, b, c) {
     let angle = Math.abs(radians * 180.0 / Math.PI);
     if (angle > 180.0) angle = 360 - angle;
     return angle;
+}
+
+let offscreenCanvas = null;
+let offCtx = null;
+
+function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    let max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, v = max;
+    let d = max - min;
+    s = max === 0 ? 0 : d / max;
+    if (max == min) {
+        h = 0;
+    } else {
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+    return [h, s, v];
+}
+
+// Advanced HSV tracker to strictly isolate saturated basketball orange and mathematically eliminate skin tones.
+function trackOrangeBallHSV(videoEl, width, height, wrist) {
+    if (!offscreenCanvas) {
+        offscreenCanvas = document.createElement('canvas');
+        offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (offscreenCanvas.width !== width) {
+        offscreenCanvas.width = width;
+        offscreenCanvas.height = height;
+    }
+
+    offCtx.drawImage(videoEl, 0, 0, width, height);
+    const imageData = offCtx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    let sumX = 0, sumY = 0, count = 0;
+    
+    ctx.fillStyle = 'rgba(249, 115, 22, 0.4)';
+
+    // Scan regionally around wrist only
+    let startX = 0, endX = width, startY = 0, endY = height;
+    if (wrist) {
+        startX = Math.max(0, Math.floor(wrist.x - 200));
+        endX = Math.min(width, Math.floor(wrist.x + 200));
+        startY = Math.max(0, Math.floor(wrist.y - 200));
+        endY = Math.min(height, Math.floor(wrist.y + 200));
+    }
+
+    for (let y = startY; y < endY; y += 4) {
+        for (let x = startX; x < endX; x += 4) {
+            const i = (y * width + x) * 4;
+            const r = data[i], g = data[i+1], b = data[i+2];
+            
+            // Convert RGB pixel to Hue, Saturation, Value
+            const [h, s, v] = rgbToHsv(r, g, b);
+
+            // HUE: Orange is ~0.02 to ~0.12
+            // SATURATION: Basketball is bold (> 0.50), Skin is dull (< 0.40)
+            // VALUE: Needs to be moderately bright (> 0.20)
+            if (h > 0.01 && h < 0.14 && s > 0.50 && v > 0.20) {
+                sumX += x;
+                sumY += y;
+                count++;
+                
+                // Paint tracking debug thermal dots
+                if (currentFacingMode === 'user') {
+                    ctx.save();
+                    ctx.translate(canvas.width, 0);
+                    ctx.scale(-1, 1);
+                    ctx.fillRect(x, y, 4, 4);
+                    ctx.restore();
+                } else {
+                    ctx.fillRect(x, y, 4, 4);
+                }
+            }
+        }
+    }
+    if (count > 5) {
+        return { x: sumX / count, y: sumY / count };
+    }
+    return null;
 }
 
 function drawSkeleton(keypoints) {
@@ -331,7 +376,10 @@ async function predictLoop() {
             }
         }
 
-        // Draw COCO-SSD Tracking Reticle if ball detected, else draw search box
+        // Run HSV visual tracking completely synchronously!
+        asyncBallCenter = trackOrangeBallHSV(video, canvas.width, canvas.height, globalActiveWrist);
+
+        // Highlight ball tracking bounds clearly
         if (currentFacingMode === 'user') {
             ctx.save();
             ctx.translate(canvas.width, 0);
@@ -340,18 +388,16 @@ async function predictLoop() {
 
         if (asyncBallCenter) {
             ctx.beginPath();
-            ctx.arc(asyncBallCenter.x, asyncBallCenter.y, asyncBallCenter.radius || 20, 0, 2 * Math.PI);
-            ctx.fillStyle = "rgba(249, 115, 22, 0.4)"; // Thermal style glow
-            ctx.fill();
+            ctx.arc(asyncBallCenter.x, asyncBallCenter.y, 25, 0, 2 * Math.PI);
             ctx.strokeStyle = "#f97316";
             ctx.lineWidth = 4;
             ctx.stroke();
         } else if (globalActiveWrist) {
-            // Draw search ROI to visibly 'highlight' where it is looking for the ball
+            // Trace search zone around wrist
             ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
             ctx.lineWidth = 2;
             ctx.setLineDash([5, 5]);
-            ctx.strokeRect(globalActiveWrist.x - 150, globalActiveWrist.y - 150, 300, 300);
+            ctx.strokeRect(globalActiveWrist.x - 200, globalActiveWrist.y - 200, 400, 400);
             ctx.setLineDash([]);
         }
 
