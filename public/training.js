@@ -208,6 +208,9 @@ switchCamBtn.addEventListener('click', async () => {
                 audio: false
             });
             video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                video.play();
+            };
             logTranscript(`Switched to ${currentFacingMode === 'user' ? 'Front' : 'Back'} Camera`, 'info');
         } catch (e) {
             console.error("Camera switch failed:", e);
