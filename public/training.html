@@ -133,10 +133,24 @@
             display: block;
         }
 
+        #toggleDashboardBtn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 20;
+            background: rgba(22, 25, 34, 0.8);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
         .dashboard {
             position: absolute;
             right: 20px;
-            top: 20px;
+            top: 60px; /* Moved down to make room for toggle button */
             width: 340px;
             display: flex;
             flex-direction: column;
@@ -159,8 +173,12 @@
         }
 
         @media(max-width: 768px) {
-            .dashboard {
+            #toggleDashboardBtn {
                 top: 10px;
+                right: 10px;
+            }
+            .dashboard {
+                top: 50px;
                 bottom: auto;
                 right: 10px;
                 width: 260px;
@@ -281,7 +299,9 @@
             <div id="loader" class="loader">Loading AI Models...</div>
         </div>
 
-        <div class="dashboard">
+        <button id="toggleDashboardBtn">👁️ Hide UI</button>
+
+        <div class="dashboard" id="dashboardPanel">
             <div class="card">
                 <h2>Controls</h2>
                 <div class="controls">
@@ -332,7 +352,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
     <!-- Load our custom logic -->
-    <script src="training.js?v=5"></script>
+    <script src="training.js?v=6"></script>
 
 </body>
 

@@ -7,6 +7,8 @@ const stopBtn = document.getElementById('stopBtn');
 const switchCamBtn = document.getElementById('switchCamBtn');
 const loader = document.getElementById('loader');
 
+const toggleBtn = document.getElementById('toggleDashboardBtn');
+const dashboardPanel = document.getElementById('dashboardPanel');
 const elbowAngleEl = document.getElementById('elbowAngle');
 const kneeAngleEl = document.getElementById('kneeAngle');
 const shotCountEl = document.getElementById('shotCount');
@@ -148,10 +150,14 @@ async function startCamera() {
             mediaRecorder.start();
             logTranscript('Recording started...', 'success');
 
+            // Show toggle button now that session has started
+            toggleBtn.style.display = 'block';
+
             // Async COCO-SSD Interval (every 100ms)
             objDetectionInterval = setInterval(async () => {
                 if (isPlaying && objDetector && video.readyState >= 2) {
-                    const predictions = await objDetector.detect(video);
+                    // Lower maxScore to 0.3 for very aggressive ball tracking
+                    const predictions = await objDetector.detect(video, 20, 0.3);
                     // Just look for sports ball or any round object if needed. COCO-SSD uses 'sports ball'
                     const ball = predictions.find(p => p.class === 'sports ball');
                     if (ball) {
@@ -371,8 +377,11 @@ function analyzePosture(keypoints, ballCenter) {
 
     if (activeShoulder && activeWrist && activeElbow && elbowAngle > 0) {
         if (phase === 'idle') {
-            let holdingBall = distBallWrist === null || distBallWrist < 120;
-            if (activeWrist.y < activeShoulder.y + 40 && holdingBall) {
+            // Strictly require ball to be near wrist to gather for a shot
+            let holdingBall = distBallWrist !== null && distBallWrist < 150;
+            // Require arm to be bent (gather) and wrist near shoulder to prevent walking triggers
+            let isGathering = elbowAngle < 120 && activeWrist.y < activeShoulder.y + 40;
+            if (isGathering && holdingBall) {
                 phase = 'shooting';
                 maxElbowAngleDuringShot = elbowAngle;
                 updateFeedbackUI('Going up...', true);
@@ -426,5 +435,15 @@ function analyzePosture(keypoints, ballCenter) {
 
 startBtn.addEventListener('click', startCamera);
 stopBtn.addEventListener('click', stopCamera);
+
+toggleBtn.addEventListener('click', () => {
+    if (dashboardPanel.style.display === 'none') {
+        dashboardPanel.style.display = 'flex';
+        toggleBtn.textContent = '👁️ Hide UI';
+    } else {
+        dashboardPanel.style.display = 'none';
+        toggleBtn.textContent = '👁️ Show UI';
+    }
+});
 
 init();
