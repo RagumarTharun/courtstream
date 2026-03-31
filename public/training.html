@@ -141,10 +141,12 @@
             background: rgba(22, 25, 34, 0.8);
             border: 1px solid rgba(255,255,255,0.2);
             color: #fff;
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 8px;
+            border-radius: 50%;
             cursor: pointer;
-            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .dashboard {
@@ -299,15 +301,22 @@
             <div id="loader" class="loader">Loading AI Models...</div>
         </div>
 
-        <button id="toggleDashboardBtn">👁️ Hide UI</button>
+        <button id="toggleDashboardBtn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
 
         <div class="dashboard" id="dashboardPanel">
             <div class="card">
-                <h2>Controls</h2>
-                <div class="controls">
-                    <button id="startBtn" class="primary">Start Session</button>
-                    <button id="stopBtn" class="danger" style="display:none;">Stop Session</button>
-                    <button id="switchCamBtn">Switch Camera</button>
+                <div class="controls" style="justify-content: space-around;">
+                    <button id="startBtn" class="primary" title="Start Session">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    </button>
+                    <button id="stopBtn" class="danger" style="display:none;" title="Stop Session">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><rect x="6" y="6" width="12" height="12"/></svg>
+                    </button>
+                    <button id="switchCamBtn" title="Switch Camera">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                    </button>
                 </div>
                 <p class="desktop-only" style="color:var(--muted); font-size:13px;">
                     Stand back so your full body is visible. Mimic a shooting motion to get real-time feedback. The session and AI overlays will be recorded.
@@ -315,18 +324,17 @@
             </div>
 
             <div class="card">
-                <h2>Live Statistics</h2>
-                <div class="metric">
-                    <span class="metric-label">Elbow Angle</span>
-                    <span class="metric-value" id="elbowAngle">--°</span>
+                <div class="angle-display">
+                    <span style="display:flex; align-items:center; gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Elbow</span>
+                    <span class="angle-value" id="elbowAngle">--°</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label">Knee Angle</span>
-                    <span class="metric-value" id="kneeAngle">--°</span>
+                <div class="angle-display">
+                    <span style="display:flex; align-items:center; gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16m-8-8h16"/></svg> Knees</span>
+                    <span class="angle-value" id="kneeAngle">--°</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label">Shots Detected</span>
-                    <span class="metric-value" id="shotCount">0</span>
+                <div class="angle-display" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+                    <span style="font-weight: bold; color: var(--green); display:flex; align-items:center; gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M5.4 5.4l13.2 13.2M18.6 5.4L5.4 18.6"/></svg> Shots</span>
+                    <span class="angle-value" id="shotCount" style="color: var(--green);">0</span>
                 </div>
 
                 <div class="feedback-box" id="feedbackMsg">
@@ -348,11 +356,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-    <!-- Load COCO-SSD for Generic Ball Tracking -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
-
     <!-- Load our custom logic -->
-    <script src="training.js?v=6"></script>
+    <script src="training.js?v=7"></script>
 
 </body>
 

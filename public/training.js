@@ -16,7 +16,6 @@ const feedbackMsg = document.getElementById('feedbackMsg');
 const transcriptBox = document.getElementById('transcriptBox');
 
 let detector;
-let objDetector;
 let rafId;
 let isPlaying = false;
 let shotCount = 0;
@@ -27,15 +26,8 @@ let mediaRecorder;
 let recordedChunks = [];
 
 // Ball tracking
-let asyncBallCenter = null;
-let objDetectionInterval = null;
+let ballCenter = null;
 let globalActiveWrist = null;
-
-// Regional Tracker Canvas
-const cropCanvas = document.createElement('canvas');
-cropCanvas.width = 300;
-cropCanvas.height = 300;
-const cropCtx = cropCanvas.getContext('2d');
 
 // Simple state machine for shot detection
 let phase = 'idle'; // idle, shooting, cooldown
@@ -49,10 +41,6 @@ async function init() {
         const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
         detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
         console.log("MoveNet loaded.");
-
-        // Load COCO-SSD generically
-        objDetector = await cocoSsd.load();
-        console.log("COCO-SSD loaded.");
 
         loader.style.display = 'none';
         startBtn.disabled = false;
@@ -123,7 +111,7 @@ async function startCamera() {
             isPlaying = true;
             
             startBtn.style.display = 'none';
-            stopBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'flex'; // SVG icon is flex
             
             transcriptBox.innerHTML = '';
             logTranscript(`Session started (${currentFacingMode === 'user' ? 'Front' : 'Back'} camera).`, 'info');
@@ -158,48 +146,7 @@ async function startCamera() {
             logTranscript('Recording started...', 'success');
 
             // Show toggle button now that session has started
-            toggleBtn.style.display = 'block';
-
-            // Async COCO-SSD Interval (every 100ms)
-            objDetectionInterval = setInterval(async () => {
-                if (isPlaying && objDetector && video.readyState >= 2) {
-                    try {
-                        let searchSource = video;
-                        let offsetX = 0;
-                        let offsetY = 0;
-                        
-                        // If we have a wrist tracked, zoom in on the region to drastically improve ball tracking score
-                        if (globalActiveWrist) {
-                            offsetX = Math.max(0, globalActiveWrist.x - 150);
-                            offsetY = Math.max(0, globalActiveWrist.y - 150);
-                            
-                            // Ensure we don't go out of bounds
-                            if (offsetX + 300 > video.videoWidth) offsetX = video.videoWidth - 300;
-                            if (offsetY + 300 > video.videoHeight) offsetY = video.videoHeight - 300;
-
-                            cropCtx.clearRect(0, 0, 300, 300);
-                            cropCtx.drawImage(video, offsetX, offsetY, 300, 300, 0, 0, 300, 300);
-                            searchSource = cropCanvas;
-                        }
-
-                        // Detect aggressively via COCO
-                        const predictions = await objDetector.detect(searchSource, 20, 0.25);
-                        const ball = predictions.find(p => p.class === 'sports ball');
-                        
-                        if (ball) {
-                            const [x, y, w, h] = ball.bbox;
-                            asyncBallCenter = {
-                                x: (searchSource === cropCanvas ? x + offsetX : x) + w/2,
-                                y: (searchSource === cropCanvas ? y + offsetY : y) + h/2,
-                                radius: Math.max(w, h)/2
-                            };
-                        } else {
-                            // Fallback to wrist tracker if no ball found to still count shots manually
-                            asyncBallCenter = null;
-                        }
-                    } catch(e) {}
-                }
-            }, 150);
+            toggleBtn.style.display = 'flex';
 
             predictLoop();
         };
@@ -211,8 +158,7 @@ async function startCamera() {
 
 function stopCamera() {
     isPlaying = false;
-    if (rafId) cancelAnimationFrame(rafId);
-    if (objDetectionInterval) clearInterval(objDetectionInterval);
+    if (rafId) cancelAnimationFrame(rafId);                 
 
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
@@ -223,8 +169,7 @@ function stopCamera() {
         video.srcObject = null;
     }
 
-    // Don't clear ctx, leave the last frame visible
-    startBtn.style.display = 'inline-block';
+    startBtn.style.display = 'flex';
     stopBtn.style.display = 'none';
 
     elbowAngleEl.textContent = '--°';
@@ -236,7 +181,6 @@ function stopCamera() {
 switchCamBtn.addEventListener('click', async () => {
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
     if (isPlaying) {
-        // Seamlessly hot-swap the video stream without stopping the MediaRecorder session
         if (video.srcObject) {
             video.srcObject.getTracks().forEach(track => track.stop());
         }
@@ -288,6 +232,68 @@ function drawSkeleton(keypoints) {
     });
 }
 
+let offscreenCanvas = null;
+let offCtx = null;
+
+// Custom fast-pixel color scanner explicitly for the basketball (with debug rendering enabled)
+function trackOrangeBallNearWrist(videoEl, width, height, wrist) {
+    if (!offscreenCanvas) {
+        offscreenCanvas = document.createElement('canvas');
+        offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (offscreenCanvas.width !== width) {
+        offscreenCanvas.width = width;
+        offscreenCanvas.height = height;
+    }
+
+    offCtx.drawImage(videoEl, 0, 0, width, height);
+    const imageData = offCtx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    let sumX = 0, sumY = 0, count = 0;
+    
+    // Draw thermal pixels representing matched color
+    ctx.fillStyle = 'rgba(249, 115, 22, 0.4)';
+
+    // Step size 4 for speed
+    for (let y = 0; y < height; y += 4) {
+        for (let x = 0; x < width; x += 4) {
+            // ONLY look intimately close to the wrist (e.g. 200 pixels radius) to avoid ANY background noise
+            if (wrist) {
+                if (Math.abs(x - wrist.x) > 200 || Math.abs(y - wrist.y) > 200) {
+                    continue;
+                }
+            }
+
+            const i = (y * width + x) * 4;
+            const r = data[i], g = data[i+1], b = data[i+2];
+            
+            // Forgiving Basketball Color Heuristic:
+            // Needs to be reasonably bright and mostly Red/Orange (Red must be notably higher than Green/Blue)
+            if (r > 60 && r > g + 15 && r > b + 15) {
+                sumX += x;
+                sumY += y;
+                count++;
+                
+                // THERMAL DEBUG: Visibly paint what is being tracked onto the screen
+                if (currentFacingMode === 'user') {
+                    // Coordinates back into mirrored space for painting on ctx
+                    ctx.save();
+                    ctx.translate(canvas.width, 0);
+                    ctx.scale(-1, 1);
+                    ctx.fillRect(x, y, 4, 4);
+                    ctx.restore();
+                } else {
+                    ctx.fillRect(x, y, 4, 4);
+                }
+            }
+        }
+    }
+    if (count > 5) {
+        return { x: sumX / count, y: sumY / count };
+    }
+    return null;
+}
+
 async function predictLoop() {
     if (!isPlaying) return;
 
@@ -306,6 +312,7 @@ async function predictLoop() {
 
         const poses = await detector.estimatePoses(video, { maxPoses: 1, flipHorizontal: false });
         
+        let activeWristRaw = null;
         if (poses.length > 0) {
             const keypoints = poses[0].keypoints;
             
@@ -315,23 +322,12 @@ async function predictLoop() {
                  ctx.scale(-1, 1);
             }
             drawSkeleton(keypoints);
-            
-            if (asyncBallCenter) {
-                ctx.beginPath();
-                ctx.arc(asyncBallCenter.x, asyncBallCenter.y, asyncBallCenter.radius || 20, 0, 2 * Math.PI);
-                ctx.strokeStyle = "#f97316";
-                ctx.lineWidth = 4;
-                ctx.stroke();
-            }
-
             if (currentFacingMode === 'user') {
                  ctx.restore();
             }
 
-            // Find active wrist for both the internal logic and the async ball tracker
             const lw = keypoints.find(k => k.name === 'left_wrist');
             const rw = keypoints.find(k => k.name === 'right_wrist');
-            let activeWristRaw = null;
             if (lw && rw && lw.score > 0.2 && rw.score > 0.2) {
                 activeWristRaw = lw.y < rw.y ? lw : rw;
             } else if (lw && lw.score > 0.2) {
@@ -341,42 +337,39 @@ async function predictLoop() {
             }
             
             if (activeWristRaw) {
-                // Mirror the coordinate back to Raw video space since it was flipped for rendering
-                if (currentFacingMode === 'user') {
-                    globalActiveWrist = {
-                        x: canvas.width - activeWristRaw.x,
-                        y: activeWristRaw.y
-                    };
-                } else {
-                    globalActiveWrist = activeWristRaw;
-                }
+                globalActiveWrist = activeWristRaw; // used in raw coordinates
             }
+        }
 
-            analyzePosture(keypoints, asyncBallCenter);
-        } else {
-            // Draw ball even if nobody is found
-            if (asyncBallCenter) {
-                if (currentFacingMode === 'user') {
-                     ctx.save();
-                     ctx.translate(canvas.width, 0);
-                     ctx.scale(-1, 1);
-                }
-                ctx.beginPath();
-                ctx.arc(asyncBallCenter.x, asyncBallCenter.y, asyncBallCenter.radius || 20, 0, 2 * Math.PI);
-                ctx.strokeStyle = "#f97316";
-                ctx.lineWidth = 4;
-                ctx.stroke();
-                if (currentFacingMode === 'user') {
-                     ctx.restore();
-                }
+        // Run the visual thermal tracker synchronously 
+        ballCenter = trackOrangeBallNearWrist(video, canvas.width, canvas.height, globalActiveWrist);
+
+        // Draw Tracking Reticle
+        if (ballCenter) {
+            if (currentFacingMode === 'user') {
+                 ctx.save();
+                 ctx.translate(canvas.width, 0);
+                 ctx.scale(-1, 1);
             }
+            ctx.beginPath();
+            ctx.arc(ballCenter.x, ballCenter.y, 25, 0, 2 * Math.PI);
+            ctx.strokeStyle = "#f97316";
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            if (currentFacingMode === 'user') {
+                 ctx.restore();
+            }
+        }
+
+        if (poses.length > 0) {
+            analyzePosture(poses[0].keypoints, ballCenter);
         }
     }
 
     rafId = requestAnimationFrame(predictLoop);
 }
 
-function analyzePosture(keypoints, ballCenter) {
+function analyzePosture(keypoints, currentBallCenter) {
     const rightShoulder = keypoints.find(k => k.name === 'right_shoulder');
     const rightElbow = keypoints.find(k => k.name === 'right_elbow');
     const rightWrist = keypoints.find(k => k.name === 'right_wrist');
@@ -416,16 +409,15 @@ function analyzePosture(keypoints, ballCenter) {
     }
 
     let distBallWrist = null;
-    if (ballCenter && activeWrist && activeWrist.score > thresh) {
-        distBallWrist = Math.hypot(ballCenter.x - activeWrist.x, ballCenter.y - activeWrist.y);
+    if (currentBallCenter && activeWrist && activeWrist.score > thresh) {
+        // currentBallCenter is in raw unmirrored coordinates, just like activeWrist
+        distBallWrist = Math.hypot(currentBallCenter.x - activeWrist.x, currentBallCenter.y - activeWrist.y);
     }
 
     if (activeShoulder && activeWrist && activeElbow && elbowAngle > 0) {
         if (phase === 'idle') {
-            // Strictly require ball to be near wrist to gather for a shot
             let holdingBall = distBallWrist !== null && distBallWrist < 150;
-            // Require arm to be bent (gather) and wrist near shoulder to prevent walking triggers
-            let isGathering = elbowAngle < 120 && activeWrist.y < activeShoulder.y + 40;
+            let isGathering = elbowAngle < 130 && activeWrist.y < activeShoulder.y + 40;
             if (isGathering && holdingBall) {
                 phase = 'shooting';
                 maxElbowAngleDuringShot = elbowAngle;
@@ -442,12 +434,12 @@ function analyzePosture(keypoints, ballCenter) {
             }
 
             let ballReleased = false;
-            // The user wanted shot counting based on staying still/shooting, elbow angle, AND ball leaving wrist
-            if (distBallWrist !== null && distBallWrist > 150 && ballCenter.y < activeWrist.y - 30) {
+            // Strict distance spike between ball and hand triggers release
+            if (distBallWrist !== null && distBallWrist > 150 && currentBallCenter.y < activeWrist.y - 30) {
                 ballReleased = true;
             }
 
-            if (activeWrist.y > activeShoulder.y + 50 || ballReleased) {
+            if (activeWrist.y > activeShoulder.y + 60 || ballReleased) {
                 if (maxElbowAngleDuringShot > 115 || ballReleased) {
                     shotCount++;
                     shotCountEl.textContent = shotCount;
@@ -482,12 +474,15 @@ startBtn.addEventListener('click', startCamera);
 stopBtn.addEventListener('click', stopCamera);
 
 toggleBtn.addEventListener('click', () => {
+    // We just toggle the visibility of dashboardPanel
     if (dashboardPanel.style.display === 'none') {
         dashboardPanel.style.display = 'flex';
-        toggleBtn.textContent = '👁️ Hide UI';
+        // Swap to 'Cross' icon
+        toggleBtn.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
     } else {
         dashboardPanel.style.display = 'none';
-        toggleBtn.textContent = '👁️ Show UI';
+        // Swap to 'Eye' icon
+        toggleBtn.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
     }
 });
 
