@@ -347,6 +347,10 @@
                     <button id="switchCamBtn" title="Switch Camera">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
                     </button>
+                    <input type="file" id="videoUpload" accept="video/*" style="display: none;">
+                    <button id="uploadBtn" title="Upload Video">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                    </button>
                 </div>
                 <p class="desktop-only" style="color:var(--muted); font-size:13px;">
                     Stand back so your full body is visible. Mimic a shooting motion to get real-time feedback. The session and AI overlays will be recorded.
@@ -388,7 +392,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
-    <script src="training.js?v=12"></script>
+    <script src="training.js?v=13"></script>
 
 </body>
 

@@ -5,6 +5,8 @@ const ctx = canvas.getContext('2d');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const switchCamBtn = document.getElementById('switchCamBtn');
+const uploadBtn = document.getElementById('uploadBtn');
+const videoUpload = document.getElementById('videoUpload');
 const loader = document.getElementById('loader');
 
 const toggleBtn = document.getElementById('toggleDashboardBtn');
@@ -224,6 +226,10 @@ function stopCamera() {
     if (video.srcObject) {
         video.srcObject.getTracks().forEach(track => track.stop());
         video.srcObject = null;
+    }
+    if (video.src) {
+        URL.revokeObjectURL(video.src);
+        video.src = "";
     }
 
     startBtn.style.display = 'flex';
@@ -489,6 +495,93 @@ function analyzePosture(keypoints, currentBallCenter) {
 
 startBtn.addEventListener('click', startCamera);
 stopBtn.addEventListener('click', stopCamera);
+
+// Handle Uploading the Video
+uploadBtn.addEventListener('click', () => {
+    videoUpload.click();
+});
+
+videoUpload.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file) {
+        // If there was an active session, stop it.
+        stopCamera();
+        
+        const objUrl = URL.createObjectURL(file);
+        video.srcObject = null;
+        video.src = objUrl;
+        
+        video.onloadedmetadata = () => {
+            video.play();
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            isPlaying = true;
+            
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'flex'; 
+            
+            transcriptBox.innerHTML = '';
+            logTranscript(`Analyzing uploaded video: ${file.name}`, 'info');
+
+            // We won't re-record uploaded videos to avoid infinite loops of downloads
+            mediaRecorder = null;
+            
+            toggleBtn.style.display = 'flex';
+
+            // Async COCO-SSD Interval using powerful general object bounding
+            objDetectionInterval = setInterval(async () => {
+                if (isPlaying && objDetector && video.readyState >= 2) {
+                    try {
+                        let searchSource = video;
+                        let offsetX = 0;
+                        let offsetY = 0;
+                        
+                        if (globalActiveWrist) {
+                            offsetX = Math.max(0, globalActiveWrist.x - 150);
+                            offsetY = Math.max(0, globalActiveWrist.y - 150);
+                            if (offsetX + 300 > video.videoWidth) offsetX = video.videoWidth - 300;
+                            if (offsetY + 300 > video.videoHeight) offsetY = video.videoHeight - 300;
+
+                            cropCtx.clearRect(0, 0, 300, 300);
+                            cropCtx.drawImage(video, offsetX, offsetY, 300, 300, 0, 0, 300, 300);
+                            searchSource = cropCanvas;
+                        }
+
+                        const predictions = await objDetector.detect(searchSource, 20, 0.25);
+                        
+                        let ball = predictions.find(p => p.class === 'sports ball' || p.class === 'orange' || p.class === 'apple' || p.class === 'bowl');
+                        
+                        if (!ball) {
+                            ball = predictions.find(p => {
+                                const [x, y, w, h] = p.bbox;
+                                const ratio = w / h;
+                                return ratio > 0.6 && ratio < 1.4 && w > 30; 
+                            });
+                        }
+                        
+                        if (ball) {
+                            const [x, y, w, h] = ball.bbox;
+                            asyncBallCenter = {
+                                x: (searchSource === cropCanvas ? x + offsetX : x) + w/2,
+                                y: (searchSource === cropCanvas ? y + offsetY : y) + h/2,
+                                radius: Math.max(w, h)/2
+                            };
+                        } else {
+                            asyncBallCenter = null;
+                        }
+                    } catch(e) {}
+                }
+            }, 150);
+
+            predictLoop();
+            
+            // Gracefully stop when uploaded video finishes
+            video.onended = () => {
+                stopCamera();
+            };
+        };
+    }
+});
 
 toggleBtn.addEventListener('click', () => {
     if (dashboardPanel.style.display === 'none') {
