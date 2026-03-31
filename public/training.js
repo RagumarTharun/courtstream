@@ -16,7 +16,7 @@ const feedbackMsg = document.getElementById('feedbackMsg');
 const transcriptBox = document.getElementById('transcriptBox');
 
 let detector;
-let objDetector; // Removed but safely null if not used
+let objDetector;
 let rafId;
 let isPlaying = false;
 let shotCount = 0;
@@ -42,13 +42,16 @@ let phase = 'idle'; // idle, shooting, cooldown
 let maxElbowAngleDuringShot = 0;
 
 async function init() {
-    loader.style.display = 'flex'; // Full-screen overlay
+    loader.style.display = 'flex'; 
     startBtn.disabled = true;
 
     try {
         const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
         detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
         console.log("MoveNet loaded.");
+
+        objDetector = await cocoSsd.load();
+        console.log("COCO-SSD loaded.");
 
         loader.style.display = 'none';
         startBtn.disabled = false;
@@ -153,6 +156,54 @@ async function startCamera() {
 
             toggleBtn.style.display = 'flex';
 
+            // Async COCO-SSD Interval using powerful general object bounding
+            objDetectionInterval = setInterval(async () => {
+                if (isPlaying && objDetector && video.readyState >= 2) {
+                    try {
+                        let searchSource = video;
+                        let offsetX = 0;
+                        let offsetY = 0;
+                        
+                        if (globalActiveWrist) {
+                            offsetX = Math.max(0, globalActiveWrist.x - 150);
+                            offsetY = Math.max(0, globalActiveWrist.y - 150);
+                            if (offsetX + 300 > video.videoWidth) offsetX = video.videoWidth - 300;
+                            if (offsetY + 300 > video.videoHeight) offsetY = video.videoHeight - 300;
+
+                            cropCtx.clearRect(0, 0, 300, 300);
+                            cropCtx.drawImage(video, offsetX, offsetY, 300, 300, 0, 0, 300, 300);
+                            searchSource = cropCanvas;
+                        }
+
+                        // Use generous threshold since we will filter geometrically
+                        const predictions = await objDetector.detect(searchSource, 20, 0.25);
+                        
+                        // First gracefully look for hardcoded ball/round classes
+                        let ball = predictions.find(p => p.class === 'sports ball' || p.class === 'orange' || p.class === 'apple' || p.class === 'bowl');
+                        
+                        // If no dedicated class, fallback to geometry: ANY object bounded as a relative square (w/h aspect close to 1:1)
+                        if (!ball) {
+                            ball = predictions.find(p => {
+                                const [x, y, w, h] = p.bbox;
+                                const ratio = w / h;
+                                return ratio > 0.6 && ratio < 1.4 && w > 30; // Exclude tiny noise specks
+                            });
+                        }
+                        
+                        if (ball) {
+                            const [x, y, w, h] = ball.bbox;
+                            asyncBallCenter = {
+                                x: (searchSource === cropCanvas ? x + offsetX : x) + w/2,
+                                y: (searchSource === cropCanvas ? y + offsetY : y) + h/2,
+                                radius: Math.max(w, h)/2
+                            };
+                        } else {
+                            asyncBallCenter = null;
+                        }
+                    } catch(e) {}
+                }
+            }, 150);
+
             predictLoop();
         };
     } catch (error) {
@@ -212,90 +263,6 @@ function calculateAngle(a, b, c) {
     let angle = Math.abs(radians * 180.0 / Math.PI);
     if (angle > 180.0) angle = 360 - angle;
     return angle;
-}
-
-let offscreenCanvas = null;
-let offCtx = null;
-
-function rgbToHsv(r, g, b) {
-    r /= 255; g /= 255; b /= 255;
-    let max = Math.max(r, g, b), min = Math.min(r, g, b);
-    let h, s, v = max;
-    let d = max - min;
-    s = max === 0 ? 0 : d / max;
-    if (max == min) {
-        h = 0;
-    } else {
-        switch (max) {
-            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-            case g: h = (b - r) / d + 2; break;
-            case b: h = (r - g) / d + 4; break;
-        }
-        h /= 6;
-    }
-    return [h, s, v];
-}
-
-// Advanced HSV tracker to strictly isolate saturated basketball orange and mathematically eliminate skin tones.
-function trackOrangeBallHSV(videoEl, width, height, wrist) {
-    if (!offscreenCanvas) {
-        offscreenCanvas = document.createElement('canvas');
-        offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
-    }
-    if (offscreenCanvas.width !== width) {
-        offscreenCanvas.width = width;
-        offscreenCanvas.height = height;
-    }
-
-    offCtx.drawImage(videoEl, 0, 0, width, height);
-    const imageData = offCtx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    let sumX = 0, sumY = 0, count = 0;
-    
-    ctx.fillStyle = 'rgba(249, 115, 22, 0.4)';
-
-    // Scan regionally around wrist only
-    let startX = 0, endX = width, startY = 0, endY = height;
-    if (wrist) {
-        startX = Math.max(0, Math.floor(wrist.x - 200));
-        endX = Math.min(width, Math.floor(wrist.x + 200));
-        startY = Math.max(0, Math.floor(wrist.y - 200));
-        endY = Math.min(height, Math.floor(wrist.y + 200));
-    }
-
-    for (let y = startY; y < endY; y += 4) {
-        for (let x = startX; x < endX; x += 4) {
-            const i = (y * width + x) * 4;
-            const r = data[i], g = data[i+1], b = data[i+2];
-            
-            // Convert RGB pixel to Hue, Saturation, Value
-            const [h, s, v] = rgbToHsv(r, g, b);
-
-            // HUE: Orange is ~0.02 to ~0.12
-            // SATURATION: Basketball is bold (> 0.50), Skin is dull (< 0.40)
-            // VALUE: Needs to be moderately bright (> 0.20)
-            if (h > 0.01 && h < 0.14 && s > 0.50 && v > 0.20) {
-                sumX += x;
-                sumY += y;
-                count++;
-                
-                // Paint tracking debug thermal dots
-                if (currentFacingMode === 'user') {
-                    ctx.save();
-                    ctx.translate(canvas.width, 0);
-                    ctx.scale(-1, 1);
-                    ctx.fillRect(x, y, 4, 4);
-                    ctx.restore();
-                } else {
-                    ctx.fillRect(x, y, 4, 4);
-                }
-            }
-        }
-    }
-    if (count > 5) {
-        return { x: sumX / count, y: sumY / count };
-    }
-    return null;
 }
 
 function drawSkeleton(keypoints) {
@@ -376,10 +343,6 @@ async function predictLoop() {
             }
         }
 
-        // Run HSV visual tracking completely synchronously!
-        asyncBallCenter = trackOrangeBallHSV(video, canvas.width, canvas.height, globalActiveWrist);
-
-        // Highlight ball tracking bounds clearly
         if (currentFacingMode === 'user') {
             ctx.save();
             ctx.translate(canvas.width, 0);
@@ -388,16 +351,27 @@ async function predictLoop() {
 
         if (asyncBallCenter) {
             ctx.beginPath();
-            ctx.arc(asyncBallCenter.x, asyncBallCenter.y, 25, 0, 2 * Math.PI);
+            ctx.arc(asyncBallCenter.x, asyncBallCenter.y, asyncBallCenter.radius || 25, 0, 2 * Math.PI);
+            ctx.fillStyle = "rgba(249, 115, 22, 0.4)";
+            ctx.fill();
             ctx.strokeStyle = "#f97316";
             ctx.lineWidth = 4;
             ctx.stroke();
+            
+            // Draw a crosshair so they know it's AI locked
+            ctx.beginPath();
+            ctx.moveTo(asyncBallCenter.x - 10, asyncBallCenter.y);
+            ctx.lineTo(asyncBallCenter.x + 10, asyncBallCenter.y);
+            ctx.moveTo(asyncBallCenter.x, asyncBallCenter.y - 10);
+            ctx.lineTo(asyncBallCenter.x, asyncBallCenter.y + 10);
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 2;
+            ctx.stroke();
         } else if (globalActiveWrist) {
-            // Trace search zone around wrist
             ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
             ctx.lineWidth = 2;
             ctx.setLineDash([5, 5]);
-            ctx.strokeRect(globalActiveWrist.x - 200, globalActiveWrist.y - 200, 400, 400);
+            ctx.strokeRect(globalActiveWrist.x - 150, globalActiveWrist.y - 150, 300, 300);
             ctx.setLineDash([]);
         }
 
@@ -459,10 +433,7 @@ function analyzePosture(keypoints, currentBallCenter) {
 
     if (activeShoulder && activeWrist && activeElbow && elbowAngle > 0) {
         if (phase === 'idle') {
-            // Strictly require the ball to be present and near the wrist to count any shots!
             let holdingBall = distBallWrist !== null && distBallWrist < 150;
-            
-            // Require arm to be physically 'bent' as a gather to prevent false shots while walking
             let isGathering = elbowAngle < 130 && activeWrist.y < activeShoulder.y + 40;
             
             if (isGathering && holdingBall) {
@@ -481,14 +452,11 @@ function analyzePosture(keypoints, currentBallCenter) {
             }
 
             let ballReleased = false;
-            // Strict distance spike between ball and hand triggers release if ball tracked
             if (distBallWrist !== null && distBallWrist > 150 && currentBallCenter.y < activeWrist.y - 30) {
                 ballReleased = true;
             }
 
-            // A shot is registered if the Ball physically flies up OR if the user brings their arm completely back down
             if (activeWrist.y > activeShoulder.y + 60 || ballReleased) {
-                // Was it a real shot? The elbow must be cleanly extended during the upward motion!
                 if (maxElbowAngleDuringShot > 120 || ballReleased) {
                     shotCount++;
                     shotCountEl.textContent = shotCount;
