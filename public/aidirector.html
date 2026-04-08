@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CourtStream - AI Streaming Director</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Orbitron:wght@500;700&display=swap');
+
+        :root {
+            --bg-color: #0a0a0c;
+            --panel-bg: rgba(20, 20, 25, 0.6);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --neon-orange: #ff5e00;
+            --cyan: #00f3ff;
+            --text-main: #f0f0f0;
+            --text-muted: #888;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            height: 60px;
+            background: rgba(10, 10, 15, 0.8);
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+
+        .brand {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn.primary {
+            background: var(--neon-orange);
+            border-color: var(--neon-orange);
+            color: #000;
+        }
+
+        .btn.primary:hover {
+            background: #ff7522;
+        }
+
+        .layout-container {
+            flex: 1;
+            display: flex;
+            padding: 16px;
+            gap: 16px;
+            height: calc(100vh - 60px);
+        }
+
+        /* PRIMARY VIEWFINDER */
+        .main-viewfinder {
+            flex: 1;
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-player {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .overlay-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        /* TELEMETRY PANEL */
+        .telemetry-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 250px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 10;
+        }
+
+        .telemetry-header {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            color: var(--cyan);
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stat-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: 800;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .stat-value.highlight {
+            color: var(--neon-orange);
+        }
+
+        /* COURT MAP */
+        .court-map {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 200px;
+            height: 120px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            z-index: 10;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .court-map-title {
+            font-size: 10px;
+            color: var(--cyan);
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .court-canvas-container {
+            flex: 1;
+            position: relative;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        #courtCanvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* LIVE SCOREBOARD */
+        .scoreboard {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--panel-bg);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            display: flex;
+            align-items: stretch;
+            height: 60px;
+            z-index: 10;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+        }
+
+        .team-block {
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 16px;
+        }
+
+        .team-name {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .team-score {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            font-size: 32px;
+        }
+
+        .score-divider {
+            background: rgba(255, 255, 255, 0.1);
+            width: 1px;
+            height: 100%;
+        }
+
+        .game-info {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 0 16px;
+            background: rgba(0, 0, 0, 0.3);
+            font-size: 12px;
+            color: var(--neon-orange);
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+        }
+
+        /* MULTI-CAM SIDEBAR */
+        .multi-cam-sidebar {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        /* Custom Scrollbar */
+        .multi-cam-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .multi-cam-sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .multi-cam-sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .cam-feed {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            height: 180px;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .cam-feed video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.7;
+        }
+
+        .cam-feed.active {
+            border-color: var(--neon-orange);
+            box-shadow: 0 0 15px rgba(255, 94, 0, 0.3), inset 0 0 10px rgba(255, 94, 0, 0.2);
+        }
+
+        .cam-feed.active video {
+            opacity: 1;
+        }
+
+        .cam-label {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+            backdrop-filter: blur(4px);
+        }
+
+        .distributed-indicator {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(0, 243, 255, 0.1);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            color: var(--cyan);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-family: 'Orbitron', sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 5px var(--cyan);
+            animation: pulse-cyan 2s infinite;
+        }
+
+        .active-label {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--neon-orange);
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            font-family: 'Orbitron', sans-serif;
+            display: none;
+            box-shadow: 0 0 8px var(--neon-orange);
+        }
+
+        .cam-feed.active .active-label {
+            display: block;
+        }
+
+        @keyframes pulse-cyan {
+            0% { box-shadow: 0 0 0 0 rgba(0, 243, 255, 0.7); }
+            70% { box-shadow: 0 0 0 6px rgba(0, 243, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 243, 255, 0); }
+        }
+
+        .welcome-upload {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            z-index: 15;
+            background: var(--panel-bg);
+            padding: 32px;
+            border-radius: 16px;
+            border: 1px solid var(--panel-border);
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .welcome-upload h2 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--cyan);
+            margin-bottom: 8px;
+        }
+
+        .welcome-upload p {
+            color: var(--text-muted);
+            font-size: 14px;
+            max-width: 300px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--neon-orange)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M2.5 12h19M12 2.5a14 14 0 0 1 0 19M12 2.5a14 14 0 0 0 0 19" opacity="0.5"></path>
+            </svg>
+            CourtStream | AI Director
+        </div>
+        <div class="header-controls">
+            <input type="file" id="videoUpload" accept="video/*" style="display: none;">
+            <button class="btn" id="uploadBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                Upload Test Video
+            </button>
+            <button class="btn primary" id="simulateBtn">
+                ▶ Auto-Pilot Mode
+            </button>
+        </div>
+    </header>
+
+    <div class="layout-container">
+        
+        <!-- MAIN VIEWFINDER -->
+        <div class="main-viewfinder">
+            
+            <div class="welcome-upload" id="welcomeBox">
+                <h2>No Signal</h2>
+                <p>Upload an MP4 match video to test the AI Director dashboard overlays.</p>
+                <button class="btn primary" onclick="document.getElementById('videoUpload').click()">Select Video</button>
+            </div>
+
+            <video id="mainVideo" class="video-player" playsinline muted loop></video>
+            <canvas id="mainCanvas" class="overlay-canvas"></canvas>
+
+            <!-- TELEMETRY PANEL OVERLAY -->
+            <div class="telemetry-panel">
+                <div class="telemetry-header">Live Telemetry</div>
+                <div class="stat-row">
+                    <div class="stat-label">Posture Status</div>
+                    <div class="stat-value" id="t-posture" style="color: var(--cyan);">Idle</div>
+                </div>
+                <div class="stat-row">
+                    <div class="stat-label">Shot Arc Angle</div>
+                    <div class="stat-value highlight" id="t-arc">--°</div>
+                </div>
+                <div class="stat-row">
+                    <div class="stat-label">Foot Plane</div>
+                    <div class="stat-value" id="t-plane">--</div>
+                </div>
+            </div>
+
+            <!-- COURT MAP OVERLAY -->
+            <div class="court-map">
+                <div class="court-map-title">Plane Fusion mapping</div>
+                <div class="court-canvas-container">
+                    <canvas id="courtCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- SCOREBOARD OVERLAY -->
+            <div class="scoreboard">
+                <div class="team-block" style="background: rgba(0,0,0,0.4);">
+                    <span class="team-name">HOME</span>
+                    <span class="team-score" id="scoreHome">104</span>
+                </div>
+                <div class="score-divider"></div>
+                <div class="game-info">
+                    <div style="color: white; font-size: 16px;">Q4</div>
+                    <div>02:15</div>
+                </div>
+                <div class="score-divider"></div>
+                <div class="team-block" style="background: rgba(255, 255, 255, 0.05);">
+                    <span class="team-score" id="scoreAway">98</span>
+                    <span class="team-name">AWAY</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- MULTI-CAM SIDEBAR -->
+        <div class="multi-cam-sidebar" id="camSidebar">
+            <!-- Sidebar feeds will be injected by JS -->
+        </div>
+
+    </div>
+
+    <!-- Load JS logic here -->
+    <script src="aidirector.js"></script>
+</body>
+</html>
