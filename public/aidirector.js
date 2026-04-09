@@ -43,6 +43,7 @@ const offC = document.createElement('canvas');
 const offCtx = offC.getContext('2d');
 let lastBallX = null;
 let lastBallY = null;
+let manualOverrideTimer = 0;
 
 const cameras = [
     { id: 'cam1', name: 'Baseline' },
@@ -181,11 +182,12 @@ async function predictLoop() {
         console.error("COCO Detect Error:", e);
     }
 
-    let ball = predictions.find(p => p.class === 'sports ball' || p.class === 'orange' || (p.class === 'apple' && p.score > 0.1));
+    let ballClasses = ['sports ball', 'orange', 'apple', 'frisbee', 'tennis ball', 'donut', 'bowl'];
+    let ball = predictions.find(p => ballClasses.includes(p.class) && p.bbox[2] < 100);
     let isShootingPhase = false;
 
     // Process Ball Trajectory
-    if (ball) {
+    if (ball && manualOverrideTimer <= 0) {
         const [bx, by, bw, bh] = ball.bbox;
         lastBallX = bx + bw/2;
         lastBallY = by + bh/2;
@@ -233,12 +235,14 @@ async function predictLoop() {
         ctx.shadowBlur = 0;
     } else {
         if(ballPath.length > 0 && tick % 5 === 0) ballPath.shift();
+        if(manualOverrideTimer > 0) manualOverrideTimer--;
     }
 
     // MULTIPLAYER MINIMAP TRACKING (USING UNLOCKED COCO-SSD)
     let currentPersonsOnMap = [];
     predictions.forEach(p => {
-        if (p.class === 'person' && p.score > 0.05) {
+        // Raised to 0.15 to filter out blurry fans in the audience while keeping sharp players
+        if (p.class === 'person' && p.score > 0.15) {
             const [bx, by, bw, bh] = p.bbox;
             // Focus mapping on the "feet" / bottom line of bounding box
             const bcX = bx + bw / 2;
@@ -481,6 +485,31 @@ videoUpload.addEventListener('change', (e) => {
             }
         };
     }
+});
+
+// Director Override Tracker: Click on any player to violently force the Telemetry Skeleton onto them!
+mainCanvas.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (!mainVideo.videoWidth) return;
+    
+    // Reverse scale the click back to the original video coordinates
+    const rect = mainCanvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    
+    lastBallX = clickX / (mainCanvas.width / mainVideo.videoWidth);
+    lastBallY = clickY / (mainCanvas.height / mainVideo.videoHeight);
+    
+    manualOverrideTimer = 300; // Ignore automated ball detection for exactly 5 seconds
+    
+    // Draw an immediate director ping
+    let ping = document.createElement('div');
+    ping.style.position = 'absolute'; ping.style.left = e.clientX - 25 + 'px'; ping.style.top = e.clientY - 25 + 'px';
+    ping.style.width = '50px'; ping.style.height = '50px'; ping.style.border = '2px solid #00f3ff'; ping.style.borderRadius = '50%';
+    ping.style.transform = 'scale(0.1)'; ping.style.transition = 'all 0.5s ease-out'; ping.style.boxShadow = '0 0 20px #00f3ff'; ping.style.pointerEvents = 'none'; ping.style.zIndex='1000';
+    document.body.appendChild(ping);
+    setTimeout(() => { ping.style.transform = 'scale(1.5)'; ping.style.opacity = '0'; }, 10);
+    setTimeout(() => ping.remove(), 500);
 });
 
 simulateBtn.addEventListener('click', () => {
