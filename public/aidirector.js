@@ -64,7 +64,7 @@ async function initModels() {
         msg = "Loading Skeleton Telemetry (MoveNet)...";
         aiLoaderText.innerHTML = msg; console.log(msg);
         
-        const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
+        const detectorConfig = { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING };
         poseDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
         
         console.log("All systems online!");
@@ -215,38 +215,10 @@ async function predictLoop() {
     // Send all mapped footprints to tracking engine
     trackPlayers(currentPersonsOnMap);
 
-    // 2. Pose Estimation (Telemetry & Motion Logic on Primary Players via Smart Cropping)
+    // 2. Pose Estimation (Multi-Player Native Render Matrix!)
     let poses = [];
     try {
-        if (lastBallX !== null) {
-            // Create a dynamic bounding box crop proportionally sized to the video height
-            let cw = Math.floor(vH * 0.75);
-            let ch = Math.floor(vH * 0.75);
-            
-            if (offC.width !== cw) { offC.width = cw; offC.height = ch; }
-
-            // Center horizontally on ball, shift vertically up since ball is low to the ground
-            let sx = lastBallX - (cw / 2);
-            let sy = lastBallY - (ch * 0.75); 
-
-            // Clamp crop coordinates strictly within the physical video layout
-            sx = Math.max(0, Math.min(sx, vW - cw));
-            sy = Math.max(0, Math.min(sy, vH - ch));
-
-            offCtx.drawImage(mainVideo, sx, sy, cw, ch, 0, 0, cw, ch);
-            poses = await poseDetector.estimatePoses(offC);
-
-            // Transpose the regional output coordinates back onto the global coordinate frame!
-            for (let pose of poses) {
-                for (let pt of pose.keypoints) {
-                    pt.x += sx;
-                    pt.y += sy;
-                }
-            }
-        } else {
-            // First frames without ball data fallback
-            poses = await poseDetector.estimatePoses(mainVideo); 
-        }
+        poses = await poseDetector.estimatePoses(mainVideo);
     } catch (e) {
         console.error("Pose Error", e);
     }
@@ -261,16 +233,22 @@ async function predictLoop() {
         const activeAnk = (lAnk && lAnk.score > 0.05) ? lAnk : (rAnk && rAnk.score > 0.05 ? rAnk : null);
 
         // BESPOKE HEURISTIC BALL TRACKER: Find Hands if COCO lost the ball entirely
-        const lw = points.find(k => k.name === 'left_wrist');
-        const rw = points.find(k => k.name === 'right_wrist');
-        if (!ball && lw && rw && lw.score > 0.1 && rw.score > 0.1) {
-            skeletonBallX = (lw.x + rw.x) / 2;
-            skeletonBallY = Math.max(lw.y, rw.y) + 15; // Basketball inherently rests below hands during dribbling
-            foundSkeletonBall = true;
-            // Update physical crop anchor to smoothly guide the tracking system forward!
-            if (manualOverrideTimer <= 0) {
-                lastBallX = skeletonBallX;
-                lastBallY = skeletonBallY;
+        // Because there are multiple skeletons, we ONLY extract hands from the skeleton standing structurally closest to the active Ball Coordinates!
+        if (!ball && !foundOpticalBall && lastBallX !== null) {
+            let lHip = points.find(k=>k.name==='left_hip');
+            let rHip = points.find(k=>k.name==='right_hip');
+            if (lHip && rHip) {
+                let hX = (lHip.x + rHip.x)/2; let hY = (lHip.y + rHip.y)/2;
+                if (Math.hypot(hX - lastBallX, hY - lastBallY) < 150) { // Skeleton matches the physical Tracker bounds
+                    const lw = points.find(k => k.name === 'left_wrist');
+                    const rw = points.find(k => k.name === 'right_wrist');
+                    if (lw && rw && lw.score > 0.1 && rw.score > 0.1) {
+                        skeletonBallX = (lw.x + rw.x) / 2;
+                        skeletonBallY = Math.max(lw.y, rw.y) + 15; 
+                        foundSkeletonBall = true;
+                        if (manualOverrideTimer <= 0) { lastBallX = skeletonBallX; lastBallY = skeletonBallY; }
+                    }
+                }
             }
         }
 
