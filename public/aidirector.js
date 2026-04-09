@@ -51,11 +51,17 @@ async function initModels() {
         aiLoaderText.innerHTML = msg; console.log(msg);
         objDetector = await cocoSsd.load();
 
-        msg = "Loading Multipose Detection (MoveNet)...";
+        msg = "Loading Multipose Detection (PoseNet)...";
         aiLoaderText.innerHTML = msg; console.log(msg);
-        // Switch to MULTIPOSE allowing detection of multiple players simultaneously
-        const detectorConfig = { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableTracking: true };
-        poseDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
+        
+        // PoseNet supports custom higher input resolutions allowing it to see smaller players!
+        const detectorConfig = { 
+            architecture: 'MobileNetV1', 
+            outputStride: 16, 
+            inputResolution: { width: 800, height: 600 }, 
+            multiplier: 0.75 
+        };
+        poseDetector = await poseDetection.createDetector(poseDetection.SupportedModels.PoseNet, detectorConfig);
 
         msg = "Initializing OCR Engine (Tesseract)...<br><span style='font-size:12px;color:rgba(255,255,255,0.5)'>Downloading language data...</span>";
         aiLoaderText.innerHTML = msg; console.log(msg);
@@ -170,6 +176,7 @@ async function predictLoop() {
     let ball = predictions.find(p => p.class === 'sports ball' || p.class === 'orange' || (p.class === 'apple' && p.score > 0.4));
     let isShootingPhase = false;
 
+    // Process Ball Trajectory
     if (ball) {
         const [bx, by, bw, bh] = ball.bbox;
         const cx = (bx + bw/2) * scaleX;
@@ -200,70 +207,66 @@ async function predictLoop() {
         if(ballPath.length > 0 && tick % 5 === 0) ballPath.shift();
     }
 
-    // MULTIPLAYER MINIMAP TRACKING (PIVOTED TO COCO FOR EXTREME ROBUSTNESS ON WIDE SHOTS)
-    let currentPersonsOnMap = [];
-    predictions.forEach(p => {
-        if (p.class === 'person' && p.score > 0.25) {
-            const [bx, by, bw, bh] = p.bbox;
-            // Map the bottom-center of their bounding box (approx placement of feet on court plane)
-            const bcX = bx + bw / 2;
-            const bcY = by + bh;
-            let mapOut = mapToCourt(bcX, bcY, vW, vH);
-            currentPersonsOnMap.push({
-                X: mapOut.X, Y: mapOut.Y,
-                bbox: { x: bx, y: by, w: bw, h: bh }
-            });
-            
-            // Interactive UI Box outlining the person
-            ctx.strokeStyle = "rgba(0, 243, 255, 0.2)";
-            ctx.lineWidth = 1;
-            ctx.strokeRect(bx * scaleX, by * scaleY, bw * scaleX, bh * scaleY);
-        }
-    });
-
-    // Send all mapped footprints to tracking engine
-    trackPlayers(currentPersonsOnMap);
-
-    // 2. Pose Estimation (Telemetry & Motion Logic on Primary Players)
+    // 2. Pose Estimation with High-Res PoseNet for MULTI-PERSON mapping
     let poses = [];
     try {
-        poses = await poseDetector.estimatePoses(mainVideo, { maxPoses: 2 }); // Focus skeleton on main ball handler visually
+        poses = await poseDetector.estimatePoses(mainVideo); 
     } catch (e) {}
+
+    let currentPersonsOnMap = [];
+    let currentAnkles = [];
 
     for (let pose of poses) {
         const points = pose.keypoints;
+        const lAnk = points.find(p=>p.name==='left_ankle');
+        const rAnk = points.find(p=>p.name==='right_ankle');
+        const activeAnk = (lAnk && lAnk.score > 0.1) ? lAnk : (rAnk && rAnk.score > 0.1 ? rAnk : null);
+
+        if (activeAnk) {
+            let mapOut = mapToCourt(activeAnk.x, activeAnk.y, vW, vH);
+            currentAnkles.push(activeAnk);
+            
+            // Re-harvest these for the minimap engine tracker instead of COCO!
+            currentPersonsOnMap.push({
+                X: mapOut.X, Y: mapOut.Y,
+                bbox: { x: activeAnk.x - 30, y: activeAnk.y - 120, w: 60, h: 140 } // Estimation for OCR crop based on ankle pos
+            });
+
+            // If it's near the ball, label as shooter
+            if (isShootingPhase && ball) {
+                let bDist = Math.hypot((activeAnk.x * scaleX) - ballPath[ballPath.length-1].x, (activeAnk.y * scaleY) - ballPath[ballPath.length-1].y);
+                if(bDist < 300) {
+                    tPosture.innerText = "Shooting detected!";
+                    tPlane.innerText = classifyShot(mapOut.X, mapOut.Y);
+                    tArc.innerText = (40 + Math.random() * 20).toFixed(1) + "°";
+                }
+            }
+        }
+
+        // Draw Skeleton for visual feedback
         ctx.fillStyle = '#00f3ff';
         points.forEach(p => {
-            if (p.score > 0.3) {
+            if (p.score > 0.15) {
                 ctx.beginPath();
                 ctx.arc(p.x * scaleX, p.y * scaleY, 4, 0, Math.PI * 2);
                 ctx.fill();
             }
         });
         
-        const adj = poseDetection.util.getAdjacentPairs(poseDetection.SupportedModels.MoveNet);
-        ctx.strokeStyle = '#00f3ff'; ctx.lineWidth = 2;
-        adj.forEach(([i, j]) => {
-            const kp1 = points[i], kp2 = points[j];
-            if (kp1.score > 0.3 && kp2.score > 0.3) {
-                ctx.beginPath(); ctx.moveTo(kp1.x*scaleX, kp1.y*scaleY); ctx.lineTo(kp2.x*scaleX, kp2.y*scaleY); ctx.stroke();
-            }
-        });
-
-        const lAnk = points.find(p=>p.name==='left_ankle');
-        const rAnk = points.find(p=>p.name==='right_ankle');
-        const activeAnk = (lAnk && lAnk.score > 0.3) ? lAnk : (rAnk && rAnk.score > 0.3 ? rAnk : null);
-        
-        if (activeAnk && isShootingPhase && ball) {
-            let bDist = Math.hypot((activeAnk.x * scaleX) - ballPath[ballPath.length-1].x, (activeAnk.y * scaleY) - ballPath[ballPath.length-1].y);
-            if(bDist < 300) {
-                let m = mapToCourt(activeAnk.x, activeAnk.y, vW, vH);
-                tPosture.innerText = "Shooting detected!";
-                tPlane.innerText = classifyShot(m.X, m.Y);
-                tArc.innerText = (40 + Math.random() * 20).toFixed(1) + "°";
-            }
-        }
+        try {
+            const adj = poseDetection.util.getAdjacentPairs(poseDetection.SupportedModels.PoseNet);
+            ctx.strokeStyle = '#00f3ff'; ctx.lineWidth = 2;
+            adj.forEach(([i, j]) => {
+                const kp1 = points[i], kp2 = points[j];
+                if (kp1.score > 0.15 && kp2.score > 0.15) {
+                    ctx.beginPath(); ctx.moveTo(kp1.x*scaleX, kp1.y*scaleY); ctx.lineTo(kp2.x*scaleX, kp2.y*scaleY); ctx.stroke();
+                }
+            });
+        } catch(e) {}
     }
+
+    // Send all mapped footprints back to the mapping engine!
+    trackPlayers(currentPersonsOnMap);
 
     if (!isShootingPhase && ballPath.length < 5) tPosture.innerText = "Active / Passing";
 
