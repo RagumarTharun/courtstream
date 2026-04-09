@@ -38,6 +38,12 @@ let scoreHome = 104;
 let trackedPlayers = [];
 let nextPlayerId = 1;
 
+// Smart Crop Logic for Ball Handler Isolation
+const offC = document.createElement('canvas');
+const offCtx = offC.getContext('2d');
+let lastBallX = null;
+let lastBallY = null;
+
 const cameras = [
     { id: 'cam1', name: 'Baseline' },
     { id: 'cam2', name: 'Side-Court' },
@@ -181,8 +187,11 @@ async function predictLoop() {
     // Process Ball Trajectory
     if (ball) {
         const [bx, by, bw, bh] = ball.bbox;
-        const cx = (bx + bw/2) * scaleX;
-        const cy = (by + bh/2) * scaleY;
+        lastBallX = bx + bw/2;
+        lastBallY = by + bh/2;
+        
+        const cx = lastBallX * scaleX;
+        const cy = lastBallY * scaleY;
         
         ballPath.push({x: cx, y: cy});
         if(ballPath.length > 50) ballPath.shift();
@@ -233,10 +242,38 @@ async function predictLoop() {
     // Send all mapped footprints to tracking engine
     trackPlayers(currentPersonsOnMap);
 
-    // 2. Pose Estimation (Telemetry & Motion Logic on Primary Players)
+    // 2. Pose Estimation (Telemetry & Motion Logic on Primary Players via Smart Cropping)
     let poses = [];
     try {
-        poses = await poseDetector.estimatePoses(mainVideo); // MoveNet handles up to 6 intelligently
+        if (lastBallX !== null) {
+            // Create a dynamic bounding box crop proportionally sized to the video height
+            let cw = Math.floor(vH * 0.75);
+            let ch = Math.floor(vH * 0.75);
+            
+            if (offC.width !== cw) { offC.width = cw; offC.height = ch; }
+
+            // Center horizontally on ball, shift vertically up since ball is low to the ground
+            let sx = lastBallX - (cw / 2);
+            let sy = lastBallY - (ch * 0.75); 
+
+            // Clamp crop coordinates strictly within the physical video layout
+            sx = Math.max(0, Math.min(sx, vW - cw));
+            sy = Math.max(0, Math.min(sy, vH - ch));
+
+            offCtx.drawImage(mainVideo, sx, sy, cw, ch, 0, 0, cw, ch);
+            poses = await poseDetector.estimatePoses(offC);
+
+            // Transpose the regional output coordinates back onto the global coordinate frame!
+            for (let pose of poses) {
+                for (let pt of pose.keypoints) {
+                    pt.x += sx;
+                    pt.y += sy;
+                }
+            }
+        } else {
+            // First frames without ball data fallback
+            poses = await poseDetector.estimatePoses(mainVideo); 
+        }
     } catch (e) {
         console.error("Pose Error", e);
     }
