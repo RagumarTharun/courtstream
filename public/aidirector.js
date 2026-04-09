@@ -210,10 +210,27 @@ async function predictLoop() {
             ctx.stroke();
         }
 
-        ctx.beginPath(); ctx.fillStyle = '#ff5e00';
-        ctx.arc(cx, cy, 10, 0, Math.PI*2); ctx.fill();
-        ctx.shadowBlur = 10; ctx.shadowColor = '#ff5e00';
-        ctx.arc(cx, cy, 10, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+        // Draw High-Visibility Futuristic Targeting Bracket Over Ball
+        ctx.strokeStyle = '#ffb300';
+        ctx.lineWidth = 3;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#ffb300';
+        let pD = 10; // pad distance
+        let tS = 15; // corner tick size
+
+        let cxX = bx * scaleX; let cyY = by * scaleY;
+        let cWW = bw * scaleX; let cHH = bh * scaleY;
+
+        ctx.beginPath();
+        ctx.moveTo(cxX - pD, cyY - pD + tS); ctx.lineTo(cxX - pD, cyY - pD); ctx.lineTo(cxX - pD + tS, cyY - pD);
+        ctx.moveTo(cxX + cWW + pD - tS, cyY - pD); ctx.lineTo(cxX + cWW + pD, cyY - pD); ctx.lineTo(cxX + cWW + pD, cyY - pD + tS);
+        ctx.moveTo(cxX + cWW + pD, cyY + cHH + pD - tS); ctx.lineTo(cxX + cWW + pD, cyY + cHH + pD); ctx.lineTo(cxX + cWW + pD - tS, cyY + cHH + pD);
+        ctx.moveTo(cxX - pD + tS, cyY + cHH + pD); ctx.lineTo(cxX - pD, cyY + cHH + pD); ctx.lineTo(cxX - pD, cyY + cHH + pD - tS);
+        ctx.stroke();
+
+        ctx.beginPath(); ctx.fillStyle = '#ffffff';
+        ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
     } else {
         if(ballPath.length > 0 && tick % 5 === 0) ballPath.shift();
     }
