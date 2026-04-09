@@ -151,7 +151,13 @@ function trackPlayers(currentAnkles) {
 // ----------------------------------------------------
 
 async function predictLoop() {
-    if (!isRunning || !mainVideo.videoWidth) return;
+    if (!isRunning) return;
+
+    // Spin passively until browser correctly loads video dimensions, preventing permanent framework deadlock
+    if (!mainVideo.videoWidth) {
+        rafId = requestAnimationFrame(predictLoop);
+        return;
+    }
 
     if (!mainCanvas.width) resizeCanvas();
 
