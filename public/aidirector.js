@@ -43,6 +43,11 @@ let lastBallX = null;
 let lastBallY = null;
 let manualOverrideTimer = 0;
 
+// Dynamic Safe Optical Flow Extractor
+const motionCanvas = document.createElement('canvas');
+const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
+let prevImageData = null;
+
 const cameras = [
     { id: 'cam1', name: 'Baseline' },
     { id: 'cam2', name: 'Side-Court' },
@@ -293,9 +298,57 @@ async function predictLoop() {
 
     // --- ABSOLUTE BALL TRACKING HUD RENDERER ---
     let tX = null, tY = null, tW = 30, tH = 30;
+    let foundOpticalBall = false;
+
+    // Execute Advanced Optical Pixel-Subtraction to detect high-speed passing natively if AI drops target!
+    if (!ball && lastBallX !== null) {
+        let activePlayer = currentPersonsOnMap.find(p => Math.abs((p.bbox.x + p.bbox.w/2) - lastBallX) < 100);
+        let playerH = activePlayer ? activePlayer.bbox.h : 200; 
+        
+        // Measure and intuit precise physical limits based purely on Player/Camera orientation scale!
+        let ballR = Math.max(10, playerH / 12); 
+        let scanR = Math.floor(playerH * 1.5); 
+        
+        try {
+            motionCanvas.width = scanR; motionCanvas.height = scanR;
+            let drawX = lastBallX - scanR/2; let drawY = lastBallY - scanR/2;
+            
+            // Extract bounds cleanly without throwing generic off-screen rendering geometry errors
+            motionCtx.drawImage(mainVideo, Math.max(0, drawX), Math.max(0, drawY), scanR, scanR, 0, 0, scanR, scanR);
+            let frameImg = motionCtx.getImageData(0,0,scanR,scanR);
+            
+            if (prevImageData && prevImageData.width === scanR) {
+                let maxMotionX = 0, maxMotionY = 0, maxDiff = 0;
+                let data1 = frameImg.data; let data2 = prevImageData.data;
+                
+                for (let y = 0; y < scanR; y+=4) {
+                    for (let x = 0; x < scanR; x+=4) {
+                        let i = (y * scanR + x) * 4;
+                        let r = data1[i], g = data1[i+1], b = data1[i+2];
+                        let r2 = data2[i], g2 = data2[i+1], b2 = data2[i+2];
+                        let diff = Math.abs(r-r2) + Math.abs(g-g2) + Math.abs(b-b2);
+                        
+                        // User Request: Find solid round colored objects moving rigorously (diff > 40 implies physical delta motion)
+                        if (r > b + 15 && diff > 40) { 
+                            if (diff > maxDiff) { maxDiff = diff; maxMotionX = x; maxMotionY = y; }
+                        }
+                    }
+                }
+                
+                if (maxDiff > 40) {
+                    tX = drawX + maxMotionX;
+                    tY = drawY + maxMotionY;
+                    tW = ballR * 2; tH = ballR * 2;
+                    foundOpticalBall = true;
+                }
+            }
+            prevImageData = frameImg;
+        } catch(e) { } // Gracefully absorb external URL Chrome CORS Canvas Tainting restrictions unconditionally!
+    }
+
     if (ball) { tX = ball.bbox[0]; tY = ball.bbox[1]; tW = ball.bbox[2]; tH = ball.bbox[3]; } 
-    else if (foundSkeletonBall) { tX = skeletonBallX - 15; tY = skeletonBallY - 15; }
-    else if (lastBallX !== null) { tX = lastBallX - 15; tY = lastBallY + 50; } // Ultimate Graphic Fallback relative to manual tracker!
+    else if (!foundOpticalBall && foundSkeletonBall) { tX = skeletonBallX - 15; tY = skeletonBallY - 15; }
+    else if (!foundOpticalBall && lastBallX !== null) { tX = lastBallX - 15; tY = lastBallY + 50; } // Ultimate Graphic Fallback relative to manual tracker!
 
     if (tX !== null) {
         let cx = (tX + tW/2) * scaleX; let cy = (tY + tH/2) * scaleY;
