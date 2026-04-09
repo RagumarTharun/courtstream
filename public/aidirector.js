@@ -45,11 +45,6 @@ let lastBallX = null;
 let lastBallY = null;
 let manualOverrideTimer = 0;
 
-// Optical Flow Ball Tracker Fallback
-const motionCanvas = document.createElement('canvas');
-const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
-let prevImageData = null;
-
 const cameras = [
     { id: 'cam1', name: 'Baseline' },
     { id: 'cam2', name: 'Side-Court' },
@@ -187,128 +182,18 @@ async function predictLoop() {
         console.error("COCO Detect Error:", e);
     }
 
-    let ballClasses = ['sports ball', 'orange', 'apple', 'frisbee', 'tennis ball', 'donut', 'bowl'];
+    let ballClasses = ['sports ball', 'orange', 'apple', 'frisbee', 'tennis ball', 'donut', 'bowl', 'backpack'];
     let ball = predictions.find(p => ballClasses.includes(p.class) && p.bbox[2] < 100);
     
-    // BESPOKE OPTICAL FLOW BALL TRACKER (Requested by User)
-    // If COCO entirely fails, execute high-speed color/motion background subtraction scaled intuitively to the player's detected skeleton
-    if (!ball) {
-        let assumedBallRadius = 15; // default intuition target size
-        if (poses.length > 0 && poses[0].keypoints) {
-            let ptTop = poses[0].keypoints.find(k=>k.name==='nose');
-            let ptBot = poses[0].keypoints.find(k=>k.name==='left_ankle');
-            if (ptTop && ptBot && ptTop.score > 0.1 && ptBot.score > 0.1) {
-                let playerHeight = Math.abs(ptBot.y*scaleY - ptTop.y*scaleY);
-                assumedBallRadius = Math.max(5, playerHeight / 15); // Intuition for pixel size of ball based on skeleton
-            }
-        }
-        
-        let mW = 320; let mH = 180; // High speed scan res
-        if (motionCanvas.width !== mW) { motionCanvas.width = mW; motionCanvas.height = mH; }
-        motionCtx.drawImage(mainVideo, 0, 0, mW, mH);
-        let currImg = motionCtx.getImageData(0, 0, mW, mH);
-        let data = currImg.data;
-        
-        let bestX = 0, bestY = 0, bestScore = 0;
-        
-        if (prevImageData) {
-            let pData = prevImageData.data;
-            let grid = new Int32Array((mW>>3) * (mH>>3));
-            
-            // Scan for rigourously moving orange/dark-yellow pixels (dribbling/passing signature)
-            for (let i = 0; i < data.length; i += 4) {
-                let r = data[i], g = data[i+1], b = data[i+2];
-                // Check general basketball warmth limits broadly to catch desaturated lighting
-                if (r > 80 && r > b + 10 && g > b) {
-                    if (Math.abs(r - pData[i]) > 10 || Math.abs(g - pData[i+1]) > 10) {
-                        let px = (i / 4) % mW; let py = Math.floor((i / 4) / mW);
-                        grid[(py >> 3) * (mW>>3) + (px >> 3)]++;
-                    }
-                }
-            }
-            // Find highest concentration matching ball structure
-            for(let gy=0; gy < (mH>>3); gy++) {
-                for(let gx=0; gx < (mW>>3); gx++) {
-                    let score = grid[gy * (mW>>3) + gx];
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestX = (gx << 3) + 4; bestY = (gy << 3) + 4;
-                    }
-                }
-            }
-            if (bestScore > 2) {
-                let bx = (bestX / mW) * vW - assumedBallRadius;
-                let by = (bestY / mH) * vH - assumedBallRadius;
-                ball = { bbox: [bx, by, assumedBallRadius*2, assumedBallRadius*2] };
-            }
-        }
-        prevImageData = currImg;
-    }
-
     let isShootingPhase = false;
 
-    // Process Ball Trajectory and Render Bracket Unconditionally
+    // Process Explicit COCO Target (Heuristic Skeletal Tracker handles Fallback later)
     if (ball) {
         const [bx, by, bw, bh] = ball.bbox;
-        
-        // ONLY move the anchor computationally if manual override is inactive
         if (manualOverrideTimer <= 0) {
             lastBallX = bx + bw/2;
             lastBallY = by + bh/2;
         }
-
-        const cx = (bx + bw/2) * scaleX;
-        const cy = (by + bh/2) * scaleY;
-        
-        ballPath.push({x: cx, y: cy});
-        if(ballPath.length > 50) ballPath.shift();
-
-        if (ballPath.length > 5) {
-            let dy = ballPath[ballPath.length-1].y - ballPath[ballPath.length-5].y;
-            if (dy < -5) { isShootingPhase = true; }
-        }
-
-        if (ballPath.length > 1) {
-            ctx.beginPath(); ctx.strokeStyle = 'rgba(255, 94, 0, 0.6)'; ctx.lineWidth = 4;
-            ctx.moveTo(ballPath[0].x, ballPath[0].y);
-            for (let i = 1; i<ballPath.length; i++) ctx.lineTo(ballPath[i].x, ballPath[i].y);
-            ctx.stroke();
-        }
-
-        // Draw High-Visibility Futuristic Targeting Bracket Over Ball
-        ctx.strokeStyle = '#ffb300';
-        ctx.lineWidth = 3;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#ffb300';
-        let pD = 10; let tS = 15; 
-        let cxX = bx * scaleX; let cyY = by * scaleY;
-        let cWW = bw * scaleX; let cHH = bh * scaleY;
-
-        ctx.beginPath();
-        ctx.moveTo(cxX - pD, cyY - pD + tS); ctx.lineTo(cxX - pD, cyY - pD); ctx.lineTo(cxX - pD + tS, cyY - pD);
-        ctx.moveTo(cxX + cWW + pD - tS, cyY - pD); ctx.lineTo(cxX + cWW + pD, cyY - pD); ctx.lineTo(cxX + cWW + pD, cyY - pD + tS);
-        ctx.moveTo(cxX + cWW + pD, cyY + cHH + pD - tS); ctx.lineTo(cxX + cWW + pD, cyY + cHH + pD); ctx.lineTo(cxX + cWW + pD - tS, cyY + cHH + pD);
-        ctx.moveTo(cxX - pD + tS, cyY + cHH + pD); ctx.lineTo(cxX - pD, cyY + cHH + pD); ctx.lineTo(cxX - pD, cyY + cHH + pD - tS);
-        ctx.stroke();
-
-        ctx.beginPath(); ctx.fillStyle = '#ffffff';
-        ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill();
-        ctx.shadowBlur = 0;
-    } else {
-        if(ballPath.length > 0 && tick % 5 === 0) ballPath.shift();
-    }
-    
-    // Explicit graphics showing exactly where the Director Click Anchor is currently localized
-    if (manualOverrideTimer > 0) {
-        manualOverrideTimer--;
-        ctx.strokeStyle = 'var(--cyan)'; ctx.lineWidth = 2; ctx.shadowBlur = 10; ctx.shadowColor = 'var(--cyan)';
-        let mx = lastBallX * scaleX; let my = lastBallY * scaleY;
-        ctx.beginPath();
-        ctx.moveTo(mx - 30, my - 20); ctx.lineTo(mx - 40, my - 20); ctx.lineTo(mx - 40, my - 10);
-        ctx.moveTo(mx + 30, my - 20); ctx.lineTo(mx + 40, my - 20); ctx.lineTo(mx + 40, my - 10);
-        ctx.moveTo(mx + 30, my + 20); ctx.lineTo(mx + 40, my + 20); ctx.lineTo(mx + 40, my + 10);
-        ctx.moveTo(mx - 30, my + 20); ctx.lineTo(mx - 40, my + 20); ctx.lineTo(mx - 40, my + 10);
-        ctx.stroke(); ctx.shadowBlur = 0;
     }
 
     // MULTIPLAYER MINIMAP TRACKING (USING UNLOCKED COCO-SSD)
@@ -372,17 +257,34 @@ async function predictLoop() {
         console.error("Pose Error", e);
     }
 
+    let foundSkeletonBall = false;
+    let skeletonBallX = 0; let skeletonBallY = 0;
+
     for (let pose of poses) {
         const points = pose.keypoints;
         const lAnk = points.find(p=>p.name==='left_ankle');
         const rAnk = points.find(p=>p.name==='right_ankle');
         const activeAnk = (lAnk && lAnk.score > 0.05) ? lAnk : (rAnk && rAnk.score > 0.05 ? rAnk : null);
 
+        // BESPOKE HEURISTIC BALL TRACKER: Find Hands if COCO lost the ball entirely
+        const lw = points.find(k => k.name === 'left_wrist');
+        const rw = points.find(k => k.name === 'right_wrist');
+        if (!ball && lw && rw && lw.score > 0.1 && rw.score > 0.1) {
+            skeletonBallX = (lw.x + rw.x) / 2;
+            skeletonBallY = Math.max(lw.y, rw.y) + 15; // Basketball inherently rests below hands during dribbling
+            foundSkeletonBall = true;
+            // Update physical crop anchor to smoothly guide the tracking system forward!
+            if (manualOverrideTimer <= 0) {
+                lastBallX = skeletonBallX;
+                lastBallY = skeletonBallY;
+            }
+        }
+
         if (activeAnk) {
             let mapOut = mapToCourt(activeAnk.x, activeAnk.y, vW, vH);
             
-            // If it's near the ball, label as shooter
-            if (isShootingPhase && ball) {
+            // If it's near the ball trajectory, label as shooter
+            if (isShootingPhase && ballPath.length > 0) {
                 let bDist = Math.hypot((activeAnk.x * scaleX) - ballPath[ballPath.length-1].x, (activeAnk.y * scaleY) - ballPath[ballPath.length-1].y);
                 if(bDist < 300) {
                     tPosture.innerText = "Shooting detected!";
@@ -392,14 +294,10 @@ async function predictLoop() {
             }
         }
 
-        // Draw Skeleton for visual feedback
+        // Draw Skeleton natively
         ctx.fillStyle = '#00f3ff';
         points.forEach(p => {
-            if (p.score > 0.05) {
-                ctx.beginPath();
-                ctx.arc(p.x * scaleX, p.y * scaleY, 4, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            if (p.score > 0.05) { ctx.beginPath(); ctx.arc(p.x * scaleX, p.y * scaleY, 4, 0, Math.PI * 2); ctx.fill(); }
         });
         
         try {
@@ -412,6 +310,48 @@ async function predictLoop() {
                 }
             });
         } catch(e) {}
+    }
+
+    // --- ABSOLUTE BALL TRACKING HUD RENDERER ---
+    let tX = null, tY = null, tW = 30, tH = 30;
+    if (ball) { tX = ball.bbox[0]; tY = ball.bbox[1]; tW = ball.bbox[2]; tH = ball.bbox[3]; } 
+    else if (foundSkeletonBall) { tX = skeletonBallX - 15; tY = skeletonBallY - 15; }
+
+    if (tX !== null) {
+        let cx = (tX + tW/2) * scaleX; let cy = (tY + tH/2) * scaleY;
+        
+        ballPath.push({x: cx, y: cy}); if(ballPath.length > 50) ballPath.shift();
+
+        if (ballPath.length > 5) { let dy = ballPath[ballPath.length-1].y - ballPath[ballPath.length-5].y; if (dy < -5) { isShootingPhase = true; } }
+
+        if (ballPath.length > 1) {
+            ctx.beginPath(); ctx.strokeStyle = 'rgba(255, 94, 0, 0.6)'; ctx.lineWidth = 4; ctx.moveTo(ballPath[0].x, ballPath[0].y);
+            for (let i = 1; i<ballPath.length; i++) ctx.lineTo(ballPath[i].x, ballPath[i].y); ctx.stroke();
+        }
+
+        ctx.strokeStyle = '#ffb300'; ctx.lineWidth = 3; ctx.shadowBlur = 15; ctx.shadowColor = '#ffb300';
+        let pD = 10; let tS = 15; let cxX = tX * scaleX; let cyY = tY * scaleY; let cWW = tW * scaleX; let cHH = tH * scaleY;
+        ctx.beginPath();
+        ctx.moveTo(cxX - pD, cyY - pD + tS); ctx.lineTo(cxX - pD, cyY - pD); ctx.lineTo(cxX - pD + tS, cyY - pD);
+        ctx.moveTo(cxX + cWW + pD - tS, cyY - pD); ctx.lineTo(cxX + cWW + pD, cyY - pD); ctx.lineTo(cxX + cWW + pD, cyY - pD + tS);
+        ctx.moveTo(cxX + cWW + pD, cyY + cHH + pD - tS); ctx.lineTo(cxX + cWW + pD, cyY + cHH + pD); ctx.lineTo(cxX + cWW + pD - tS, cyY + cHH + pD);
+        ctx.moveTo(cxX - pD + tS, cyY + cHH + pD); ctx.lineTo(cxX - pD, cyY + cHH + pD); ctx.lineTo(cxX - pD, cyY + cHH + pD - tS);
+        ctx.stroke(); ctx.beginPath(); ctx.fillStyle = '#ffffff'; ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+    } else {
+        if(ballPath.length > 0 && tick % 5 === 0) ballPath.shift();
+    }
+
+    // Explicit Director graphic showing exactly where the manual tracking anchor is active
+    if (manualOverrideTimer > 0) {
+        manualOverrideTimer--;
+        ctx.strokeStyle = 'var(--cyan)'; ctx.lineWidth = 2; ctx.shadowBlur = 10; ctx.shadowColor = 'var(--cyan)';
+        let mx = lastBallX * scaleX; let my = lastBallY * scaleY;
+        ctx.beginPath();
+        ctx.moveTo(mx - 30, my - 20); ctx.lineTo(mx - 40, my - 20); ctx.lineTo(mx - 40, my - 10);
+        ctx.moveTo(mx + 30, my - 20); ctx.lineTo(mx + 40, my - 20); ctx.lineTo(mx + 40, my - 10);
+        ctx.moveTo(mx + 30, my + 20); ctx.lineTo(mx + 40, my + 20); ctx.lineTo(mx + 40, my + 10);
+        ctx.moveTo(mx - 30, my + 20); ctx.lineTo(mx - 40, my + 20); ctx.lineTo(mx - 40, my + 10);
+        ctx.stroke(); ctx.shadowBlur = 0;
     }
 
     if (!isShootingPhase && ballPath.length < 5) tPosture.innerText = "Active / Passing";
@@ -605,6 +545,7 @@ const seekBar = document.getElementById('seekBar');
 const seekFill = document.getElementById('seekFill');
 
 playPauseBtn.addEventListener('click', () => {
+    if(!mainVideo.src) return;
     if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
     else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
 });
@@ -612,6 +553,16 @@ playPauseBtn.addEventListener('click', () => {
 document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
         e.preventDefault(); // Stop page scrolling
+        if(!mainVideo.src) return;
+        if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
+        else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
+    }
+});
+
+// Also bind strictly to the window DOM to prevent iframe sandbox key drops
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        e.preventDefault(); 
         if(!mainVideo.src) return;
         if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
         else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
