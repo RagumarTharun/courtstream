@@ -45,6 +45,11 @@ let lastBallX = null;
 let lastBallY = null;
 let manualOverrideTimer = 0;
 
+// Optical Flow Ball Tracker Fallback
+const motionCanvas = document.createElement('canvas');
+const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
+let prevImageData = null;
+
 const cameras = [
     { id: 'cam1', name: 'Baseline' },
     { id: 'cam2', name: 'Side-Court' },
@@ -184,6 +189,62 @@ async function predictLoop() {
 
     let ballClasses = ['sports ball', 'orange', 'apple', 'frisbee', 'tennis ball', 'donut', 'bowl'];
     let ball = predictions.find(p => ballClasses.includes(p.class) && p.bbox[2] < 100);
+    
+    // BESPOKE OPTICAL FLOW BALL TRACKER (Requested by User)
+    // If COCO entirely fails, execute high-speed color/motion background subtraction scaled intuitively to the player's detected skeleton
+    if (!ball) {
+        let assumedBallRadius = 15; // default intuition target size
+        if (poses.length > 0 && poses[0].keypoints) {
+            let ptTop = poses[0].keypoints.find(k=>k.name==='nose');
+            let ptBot = poses[0].keypoints.find(k=>k.name==='left_ankle');
+            if (ptTop && ptBot && ptTop.score > 0.1 && ptBot.score > 0.1) {
+                let playerHeight = Math.abs(ptBot.y*scaleY - ptTop.y*scaleY);
+                assumedBallRadius = Math.max(5, playerHeight / 15); // Intuition for pixel size of ball based on skeleton
+            }
+        }
+        
+        let mW = 320; let mH = 180; // High speed scan res
+        if (motionCanvas.width !== mW) { motionCanvas.width = mW; motionCanvas.height = mH; }
+        motionCtx.drawImage(mainVideo, 0, 0, mW, mH);
+        let currImg = motionCtx.getImageData(0, 0, mW, mH);
+        let data = currImg.data;
+        
+        let bestX = 0, bestY = 0, bestScore = 0;
+        
+        if (prevImageData) {
+            let pData = prevImageData.data;
+            let grid = new Int32Array((mW>>3) * (mH>>3));
+            
+            // Scan for rigourously moving orange/dark-yellow pixels (dribbling/passing signature)
+            for (let i = 0; i < data.length; i += 4) {
+                let r = data[i], g = data[i+1], b = data[i+2];
+                // Check basketball solid round edge colors intuitively
+                if (r > 90 && g > 40 && b < 100 && r > g && g > b) {
+                    if (Math.abs(r - pData[i]) > 15 || Math.abs(g - pData[i+1]) > 15) {
+                        let px = (i / 4) % mW; let py = Math.floor((i / 4) / mW);
+                        grid[(py >> 3) * (mW>>3) + (px >> 3)]++;
+                    }
+                }
+            }
+            // Find highest concentration matching ball structure
+            for(let gy=0; gy < (mH>>3); gy++) {
+                for(let gx=0; gx < (mW>>3); gx++) {
+                    let score = grid[gy * (mW>>3) + gx];
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestX = (gx << 3) + 4; bestY = (gy << 3) + 4;
+                    }
+                }
+            }
+            if (bestScore > 2) {
+                let bx = (bestX / mW) * vW - assumedBallRadius;
+                let by = (bestY / mH) * vH - assumedBallRadius;
+                ball = { bbox: [bx, by, assumedBallRadius*2, assumedBallRadius*2] };
+            }
+        }
+        prevImageData = currImg;
+    }
+
     let isShootingPhase = false;
 
     // Process Ball Trajectory
@@ -523,6 +584,37 @@ simulateBtn.addEventListener('click', () => {
     flash.style.position = 'absolute'; flash.style.top = '0'; flash.style.left = '0'; flash.style.width = '100%'; flash.style.height = '100%'; flash.style.background = 'rgba(255, 94, 0, 0.4)'; flash.style.zIndex = '999'; flash.style.pointerEvents = 'none'; flash.style.transition = 'opacity 0.5s';
     document.querySelector('.main-viewfinder').appendChild(flash);
     setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 500); }, 100);
+});
+
+// Custom Video Controls UI Integration
+const playPauseBtn = document.getElementById('playPauseBtn');
+const timeDisplay = document.getElementById('timeDisplay');
+const seekBar = document.getElementById('seekBar');
+const seekFill = document.getElementById('seekFill');
+
+playPauseBtn.addEventListener('click', () => {
+    if(!mainVideo.src) return;
+    if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
+    else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
+});
+
+mainVideo.addEventListener('timeupdate', () => {
+    if(!mainVideo.duration) return;
+    let pct = (mainVideo.currentTime / mainVideo.duration) * 100;
+    seekFill.style.width = pct + '%';
+    
+    let curM = Math.floor(mainVideo.currentTime / 60);
+    let curS = Math.floor(mainVideo.currentTime % 60).toString().padStart(2, '0');
+    let totM = Math.floor(mainVideo.duration / 60) || 0;
+    let totS = Math.floor(mainVideo.duration % 60 || 0).toString().padStart(2, '0');
+    timeDisplay.innerText = `${curM}:${curS} / ${totM}:${totS}`;
+});
+
+seekBar.addEventListener('click', (e) => {
+    if(!mainVideo.duration) return;
+    const rect = seekBar.getBoundingClientRect();
+    const pos = (e.clientX - rect.left) / rect.width;
+    mainVideo.currentTime = pos * mainVideo.duration;
 });
 
 // Kick off AI
