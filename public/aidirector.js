@@ -32,11 +32,11 @@ let poseDetector = null;
 let tesseractWorker = null;
 
 let ballPath = [];
-let playersMap = [];
-let detectedJerseys = {};
-
-// Default scoreboard
 let scoreHome = 104;
+
+// Multipose Tracking Object
+let trackedPlayers = [];
+let nextPlayerId = 1;
 
 const cameras = [
     { id: 'cam1', name: 'Baseline' },
@@ -47,22 +47,25 @@ const cameras = [
 
 async function initModels() {
     try {
-        aiLoaderText.innerText = "Loading Object Detection (COCO-SSD)...";
+        let msg = "Loading Object Detection (COCO-SSD)...";
+        aiLoaderText.innerHTML = msg; console.log(msg);
         objDetector = await cocoSsd.load();
 
-        aiLoaderText.innerText = "Loading Posture Detection (Pose)...";
-        // To be safe regarding tf.js WebGL backend load, use MoveNet or setup bodyPix/movenet under pose-detection
-        const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
+        msg = "Loading Multipose Detection (MoveNet)...";
+        aiLoaderText.innerHTML = msg; console.log(msg);
+        // Switch to MULTIPOSE allowing detection of multiple players simultaneously
+        const detectorConfig = { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableTracking: true };
         poseDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
 
-        aiLoaderText.innerText = "Initializing OCR Engine...";
+        msg = "Initializing OCR Engine (Tesseract)...<br><span style='font-size:12px;color:rgba(255,255,255,0.5)'>Downloading language data...</span>";
+        aiLoaderText.innerHTML = msg; console.log(msg);
         tesseractWorker = await Tesseract.createWorker({
-            logger: m => {} // suppress massive logs
+            logger: m => console.log(m)
         });
         await tesseractWorker.loadLanguage('eng');
         await tesseractWorker.initialize('eng');
         
-        // Hide loader
+        console.log("All systems online!");
         aiLoader.style.transform = 'translateY(-100%)';
         aiLoader.style.transition = 'transform 0.5s ease-in-out';
         setTimeout(() => aiLoader.style.display = 'none', 500);
@@ -70,7 +73,7 @@ async function initModels() {
         initSidebar();
     } catch (e) {
         console.error("AI Init Error:", e);
-        aiLoaderText.innerText = "Error loading AI. See console.";
+        aiLoaderText.innerText = "Error loading AI: " + e.message;
         aiLoaderText.style.color = "var(--neon-orange)";
     }
 }
@@ -78,17 +81,9 @@ async function initModels() {
 // ----------------------------------------------------
 // HOMOGRAPHY & COURT MAPPING
 // ----------------------------------------------------
-// We use a simplified projection instead of a full 3x3 matrix multiplication for speed in JS
-// Assumes input is a typical side-court standard broadcast angle.
 function mapToCourt(x, y, vW, vH) {
-    // A simplified interpolation trick
-    // Top of key is further back (smaller y in video)
-    // Bottom of screen is sideline
     let percentY = (y / vH); 
-    // restrict mapping perspective purely for demonstration of homography plane logic
     let mapY = Math.max(0, Math.min(percentY * courtCanvas.height * 1.5 - 20, courtCanvas.height));
-    
-    // X gets wider as we approach the bottom
     let centerDist = (x / vW) - 0.5;
     let widthSpread = 1.0 + (percentY * 0.5);
     let mapX = courtCanvas.width * (0.5 + (centerDist / widthSpread));
@@ -97,14 +92,58 @@ function mapToCourt(x, y, vW, vH) {
 }
 
 function classifyShot(mapX, mapY) {
-    // Calculate distance from rim (assuming rim is at center top of minimap: courtCanvas.width/2, 0)
     let rimX = courtCanvas.width / 2;
     let rimY = 0;
     let dist = Math.hypot(mapX - rimX, mapY - rimY);
-    
-    // 3PT radius typically mapped to 60px on this minimal canvas
     if (dist > 60) return "3-POINT";
     return "2-POINT";
+}
+
+// Tracker Association Engine
+function trackPlayers(currentAnkles) {
+    const MAX_DIST = 50; 
+    const newTracked = [];
+    
+    // Attempt to match each detected ankle pair to an existing tracked entity
+    currentAnkles.forEach(p => {
+        let bestDist = Infinity;
+        let match = null;
+        let matchIdx = -1;
+
+        trackedPlayers.forEach((tp, i) => {
+            const d = Math.hypot(p.X - tp.mapX, p.Y - tp.mapY);
+            if (d < bestDist && d < MAX_DIST) {
+                bestDist = d;
+                match = tp;
+                matchIdx = i;
+            }
+        });
+
+        if (match) {
+            match.mapX = p.X;
+            match.mapY = p.Y;
+            match.lastSeen = tick;
+            newTracked.push(match);
+            trackedPlayers.splice(matchIdx, 1); 
+        } else {
+            newTracked.push({
+                id: nextPlayerId++,
+                mapX: p.X,
+                mapY: p.Y,
+                jerseyNum: null,
+                lastSeen: tick
+            });
+        }
+    });
+
+    // Carry over older tracked entities that were lost but haven't expired
+    trackedPlayers.forEach(tp => {
+        if (tick - tp.lastSeen < 60) {
+            newTracked.push(tp);
+        }
+    });
+
+    trackedPlayers = newTracked;
 }
 
 // ----------------------------------------------------
@@ -128,7 +167,7 @@ async function predictLoop() {
         predictions = await objDetector.detect(mainVideo);
     } catch (e) {}
 
-    let ball = predictions.find(p => p.class === 'sports ball' || p.class === 'orange');
+    let ball = predictions.find(p => p.class === 'sports ball' || p.class === 'orange' || (p.class === 'apple' && p.score > 0.4));
     
     let isShootingPhase = false;
 
@@ -140,7 +179,6 @@ async function predictLoop() {
         ballPath.push({x: cx, y: cy});
         if(ballPath.length > 50) ballPath.shift();
 
-        // Check motion arc based on Y velocity derivative
         if (ballPath.length > 5) {
             let dy = ballPath[ballPath.length-1].y - ballPath[ballPath.length-5].y;
             if (dy < -5) {
@@ -148,38 +186,32 @@ async function predictLoop() {
             }
         }
 
-        // Draw Arc
         if (ballPath.length > 1) {
-            ctx.beginPath();
-            ctx.strokeStyle = 'rgba(255, 94, 0, 0.6)';
-            ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.strokeStyle = 'rgba(255, 94, 0, 0.6)'; ctx.lineWidth = 4;
             ctx.moveTo(ballPath[0].x, ballPath[0].y);
             for (let i = 1; i<ballPath.length; i++) ctx.lineTo(ballPath[i].x, ballPath[i].y);
             ctx.stroke();
         }
 
-        // Trace Ball
         ctx.beginPath(); ctx.fillStyle = '#ff5e00';
-        ctx.arc(cx, cy, 10, 0, Math.PI*2);
-        ctx.fill();
+        ctx.arc(cx, cy, 10, 0, Math.PI*2); ctx.fill();
         ctx.shadowBlur = 10; ctx.shadowColor = '#ff5e00';
         ctx.arc(cx, cy, 10, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
     } else {
         if(ballPath.length > 0 && tick % 5 === 0) ballPath.shift();
     }
 
-    // 2. Pose Estimation
+    // 2. Pose Estimation (Multipose)
     let poses = [];
     try {
         poses = await poseDetector.estimatePoses(mainVideo);
     } catch (e) {}
 
-    playersMap = [];
+    let currentAnkles = [];
     
     for (let pose of poses) {
         if (pose.score < 0.2) continue;
 
-        // Draw skeleton
         const points = pose.keypoints;
         ctx.fillStyle = '#00f3ff';
         points.forEach(p => {
@@ -190,7 +222,6 @@ async function predictLoop() {
             }
         });
         
-        // Link lines
         const adj = poseDetection.util.getAdjacentPairs(poseDetection.SupportedModels.MoveNet);
         ctx.strokeStyle = '#00f3ff'; ctx.lineWidth = 2;
         adj.forEach(([i, j]) => {
@@ -203,52 +234,73 @@ async function predictLoop() {
             }
         });
 
-        // Homography Mapping Point (Ankles)
         const lAnkle = points.find(p=>p.name==='left_ankle');
         const rAnkle = points.find(p=>p.name==='right_ankle');
+        const activeAnk = (lAnkle && lAnkle.score > 0.2) ? lAnkle : (rAnkle && rAnkle.score > 0.2 ? rAnkle : null);
         
-        if (lAnkle && lAnkle.score > 0.2) {
-            let mapOut = mapToCourt(lAnkle.x, lAnkle.y, vW, vH);
-            playersMap.push(mapOut);
+        if (activeAnk) {
+            let mapOut = mapToCourt(activeAnk.x, activeAnk.y, vW, vH);
+            currentAnkles.push(mapOut);
             
-            // Telemetry calculations
-            if (isShootingPhase) {
-                tPosture.innerText = "Shooting detected!";
-                let shotType = classifyShot(mapOut.X, mapOut.Y);
-                tPlane.innerText = shotType;
-                tArc.innerText = (40 + Math.random() * 20).toFixed(1) + "°";
+            // Check for shooter proximity
+            if (isShootingPhase && ball) {
+                let ballToAnkDist = Math.hypot((activeAnk.x * scaleX) - ballPath[ballPath.length-1].x, (activeAnk.y * scaleY) - ballPath[ballPath.length-1].y);
+                if(ballToAnkDist < 300) {
+                    tPosture.innerText = "Shooting detected!";
+                    let shotType = classifyShot(mapOut.X, mapOut.Y);
+                    tPlane.innerText = shotType;
+                    tArc.innerText = (40 + Math.random() * 20).toFixed(1) + "°";
+                }
             }
         }
     }
 
+    // Process all ankles into stable tracked IDs
+    trackPlayers(currentAnkles);
+
     if (!isShootingPhase && ballPath.length < 5) {
-        tPosture.innerText = "Active / Dribbling";
+        tPosture.innerText = "Active / Passing";
     }
 
-    // 3. OCR periodically on a "person" bounding box (expensive)
+    // 3. OCR periodically
     if (tick % 60 === 0 && predictions.length > 0) {
-        const p = predictions.find(pr => pr.class === 'person' && pr.score > 0.5);
-        if (p) {
+        const persons = predictions.filter(pr => pr.class === 'person' && pr.score > 0.5);
+        for (let p of persons) {
             const [x,y,w,h] = p.bbox;
-            // Draw a temporary hidden canvas for OCR extraction
-            const cropC = document.createElement('canvas');
-            cropC.width = w; cropC.height = h;
-            const cropCtx = cropC.getContext('2d');
-            cropCtx.drawImage(mainVideo, x, y, w, h, 0, 0, w, h);
-            
-            tesseractWorker.recognize(cropC).then(({data: { text }}) => {
-                let num = text.match(/\d{1,2}/);
-                if (num) {
-                    console.log("[Director AI] Target Jersey Identified:", num[0]);
-                    ctx.font = "20px Orbitron";
-                    ctx.fillStyle = "white";
-                    ctx.fillText("#" + num[0], x*scaleX, y*scaleY - 10);
+            // Only examine decently sized subjects to ensure OCR has enough pixels
+            if (w < 40 || h < 80) continue;
+
+            const bcX = x + w/2;
+            const bcY = y + h;
+            let bboxMap = mapToCourt(bcX, bcY, vW, vH);
+
+            let bestDist = Infinity;
+            let match = null;
+            trackedPlayers.forEach(tp => {
+                const d = Math.hypot(bboxMap.X - tp.mapX, bboxMap.Y - tp.mapY);
+                if (d < bestDist && d < 30) {
+                    bestDist = d;
+                    match = tp;
                 }
             });
+
+            if (match && !match.jerseyNum) {
+                const cropC = document.createElement('canvas');
+                cropC.width = w; cropC.height = h;
+                const cropCtx = cropC.getContext('2d');
+                cropCtx.drawImage(mainVideo, x, y, w, h, 0, 0, w, h);
+                
+                tesseractWorker.recognize(cropC).then(({data: { text }}) => {
+                    let num = text.match(/\b([1-9]|[1-9][0-9])\b/);
+                    if (num) {
+                        console.log(`[Director AI] Tracked ID ${match.id} maps to Jersey #${num[0]}`);
+                        match.jerseyNum = num[0];
+                    }
+                });
+            }
         }
     }
 
-    // Interactive switch every few seconds
     if (tick % 200 === 0) {
         let activeCamIndex = Math.floor(Math.random() * cameras.length);
         document.querySelectorAll('.cam-feed').forEach((feed, idx) => {
@@ -258,6 +310,24 @@ async function predictLoop() {
     }
 
     updateCourtMap();
+
+    // Draw Jersey popups on main view based on current associations
+    for (let p of poses) {
+        const points = p.keypoints;
+        const ank = points.find(k=>k.name==='left_ankle') || points.find(k=>k.name==='right_ankle');
+        const face = points.find(k=>k.name==='nose');
+        if (ank && ank.score > 0.2 && face && face.score > 0.2) {
+            let mOut = mapToCourt(ank.x, ank.y, vW, vH);
+            let closest = trackedPlayers.find(tp => Math.hypot(tp.mapX - mOut.X, tp.mapY - mOut.Y) < 30);
+            if (closest && closest.jerseyNum) {
+                ctx.font = "bold 16px Orbitron";
+                ctx.fillStyle = "rgba(0,0,0,0.7)";
+                ctx.fillRect(face.x*scaleX - 15, face.y*scaleY - 45, 30, 20);
+                ctx.fillStyle = "var(--neon-orange)";
+                ctx.fillText("#" + closest.jerseyNum, face.x*scaleX - 12, face.y*scaleY - 30);
+            }
+        }
+    }
 
     tick++;
     rafId = requestAnimationFrame(predictLoop);
@@ -277,19 +347,33 @@ function updateCourtMap() {
     courtCtx.strokeRect(w/2 - 20, 0, 40, h/2);
     courtCtx.beginPath(); courtCtx.arc(w/2, 0, 60, 0, Math.PI); courtCtx.stroke();
 
-    // Map Players
-    courtCtx.fillStyle = '#00f3ff';
-    for (let pm of playersMap) {
-        courtCtx.beginPath(); courtCtx.arc(pm.X, pm.Y, 4, 0, Math.PI*2); courtCtx.fill();
+    // Map Tracked Players Iterating on the unique IDs
+    for (let tp of trackedPlayers) {
+        if (tp.jerseyNum) {
+            // Draw larger glowing dot for identified players
+            courtCtx.beginPath();
+            courtCtx.arc(tp.mapX, tp.mapY, 10, 0, Math.PI*2);
+            courtCtx.fillStyle = '#00f3ff';
+            courtCtx.fill();
+            courtCtx.shadowBlur = 8; courtCtx.shadowColor = '#00f3ff';
+            courtCtx.stroke(); courtCtx.shadowBlur = 0;
+            
+            courtCtx.font = "bold 10px Inter";
+            courtCtx.fillStyle = "#000";
+            courtCtx.fillText(tp.jerseyNum, tp.mapX - 5, tp.mapY + 4);
+        } else {
+            // Standard dot
+            courtCtx.fillStyle = 'rgba(0, 243, 255, 0.5)';
+            courtCtx.beginPath(); courtCtx.arc(tp.mapX, tp.mapY, 4, 0, Math.PI*2); courtCtx.fill();
+        }
     }
 
-    // Map Ball if possible (simple heuristic off last ball tracking point)
     if (ballPath.length > 0) {
         let lx = ballPath[ballPath.length-1].x;
         let ly = ballPath[ballPath.length-1].y;
         let bmap = mapToCourt(lx / (mainCanvas.width / mainVideo.videoWidth), ly / (mainCanvas.height / mainVideo.videoHeight), mainVideo.videoWidth, mainVideo.videoHeight);
         courtCtx.fillStyle = '#ff5e00';
-        courtCtx.beginPath(); courtCtx.arc(bmap.X, bmap.Y, 3, 0, Math.PI*2); courtCtx.fill();
+        courtCtx.beginPath(); courtCtx.arc(bmap.X, bmap.Y, 5, 0, Math.PI*2); courtCtx.fill();
     }
 }
 
@@ -339,7 +423,6 @@ videoUpload.addEventListener('change', (e) => {
 simulateBtn.addEventListener('click', () => {
     if (!mainVideo.src) return alert("Please upload a test video first!");
     
-    // Simulate a scored point based on current active mapping distance context
     let pointsToAdd = tPlane.innerText === '3-POINT' ? 3 : 2;
     scoreHome += pointsToAdd;
     scoreHomeEl.innerText = scoreHome;
