@@ -204,14 +204,15 @@ async function predictLoop() {
     // 2. Pose Estimation (Multipose)
     let poses = [];
     try {
-        poses = await poseDetector.estimatePoses(mainVideo);
+        poses = await poseDetector.estimatePoses(mainVideo, { maxPoses: 6 });
     } catch (e) {}
 
     let currentAnkles = [];
     
     for (let pose of poses) {
-        if (pose.score < 0.2) continue;
-
+        // We removed the overarching pose.score filter because background players naturally have lower holistic scores
+        // We will rely purely on individual keypoint confidence.
+        
         const points = pose.keypoints;
         ctx.fillStyle = '#00f3ff';
         points.forEach(p => {
