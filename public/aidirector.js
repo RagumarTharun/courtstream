@@ -174,23 +174,6 @@ async function predictLoop() {
 
     let ball = predictions.find(p => p.class === 'sports ball' && p.score > 0.15 && p.bbox[2] < 80);
     
-    // CINEMATOGRAPHY / CLOSE-UP GATEKEEPER
-    // Accurate logic: Instead of counting people or checking height strictly, check total frame AREA consumed!
-    let maxArea = 0;
-    predictions.forEach(p => {
-        if (p.class === 'person') {
-            let area = p.bbox[2] * p.bbox[3];
-            if (area > maxArea) maxArea = area;
-        }
-    });
-
-    // If a single person occupies more than 30% of the entire video pixel area natively, it's unequivocally a close-up tracking shot!
-    if (maxArea > (vW * vH * 0.30)) {
-        tick++;
-        courtCtx.clearRect(0, 0, courtCanvas.width, courtCanvas.height);
-        return rafId = requestAnimationFrame(predictLoop);
-    }
-
     let isShootingPhase = false;
 
     // Process Explicit COCO Target (Heuristic Skeletal Tracker handles Fallback later)
