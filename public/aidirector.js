@@ -218,9 +218,9 @@ async function predictLoop() {
             // Scan for rigourously moving orange/dark-yellow pixels (dribbling/passing signature)
             for (let i = 0; i < data.length; i += 4) {
                 let r = data[i], g = data[i+1], b = data[i+2];
-                // Check basketball solid round edge colors intuitively
-                if (r > 90 && g > 40 && b < 100 && r > g && g > b) {
-                    if (Math.abs(r - pData[i]) > 15 || Math.abs(g - pData[i+1]) > 15) {
+                // Check general basketball warmth limits broadly to catch desaturated lighting
+                if (r > 80 && r > b + 10 && g > b) {
+                    if (Math.abs(r - pData[i]) > 10 || Math.abs(g - pData[i+1]) > 10) {
                         let px = (i / 4) % mW; let py = Math.floor((i / 4) / mW);
                         grid[(py >> 3) * (mW>>3) + (px >> 3)]++;
                     }
@@ -247,23 +247,25 @@ async function predictLoop() {
 
     let isShootingPhase = false;
 
-    // Process Ball Trajectory
-    if (ball && manualOverrideTimer <= 0) {
+    // Process Ball Trajectory and Render Bracket Unconditionally
+    if (ball) {
         const [bx, by, bw, bh] = ball.bbox;
-        lastBallX = bx + bw/2;
-        lastBallY = by + bh/2;
         
-        const cx = lastBallX * scaleX;
-        const cy = lastBallY * scaleY;
+        // ONLY move the anchor computationally if manual override is inactive
+        if (manualOverrideTimer <= 0) {
+            lastBallX = bx + bw/2;
+            lastBallY = by + bh/2;
+        }
+
+        const cx = (bx + bw/2) * scaleX;
+        const cy = (by + bh/2) * scaleY;
         
         ballPath.push({x: cx, y: cy});
         if(ballPath.length > 50) ballPath.shift();
 
         if (ballPath.length > 5) {
             let dy = ballPath[ballPath.length-1].y - ballPath[ballPath.length-5].y;
-            if (dy < -5) {
-                isShootingPhase = true; 
-            }
+            if (dy < -5) { isShootingPhase = true; }
         }
 
         if (ballPath.length > 1) {
@@ -278,9 +280,7 @@ async function predictLoop() {
         ctx.lineWidth = 3;
         ctx.shadowBlur = 15;
         ctx.shadowColor = '#ffb300';
-        let pD = 10; // pad distance
-        let tS = 15; // corner tick size
-
+        let pD = 10; let tS = 15; 
         let cxX = bx * scaleX; let cyY = by * scaleY;
         let cWW = bw * scaleX; let cHH = bh * scaleY;
 
@@ -296,7 +296,19 @@ async function predictLoop() {
         ctx.shadowBlur = 0;
     } else {
         if(ballPath.length > 0 && tick % 5 === 0) ballPath.shift();
-        if(manualOverrideTimer > 0) manualOverrideTimer--;
+    }
+    
+    // Explicit graphics showing exactly where the Director Click Anchor is currently localized
+    if (manualOverrideTimer > 0) {
+        manualOverrideTimer--;
+        ctx.strokeStyle = 'var(--cyan)'; ctx.lineWidth = 2; ctx.shadowBlur = 10; ctx.shadowColor = 'var(--cyan)';
+        let mx = lastBallX * scaleX; let my = lastBallY * scaleY;
+        ctx.beginPath();
+        ctx.moveTo(mx - 30, my - 20); ctx.lineTo(mx - 40, my - 20); ctx.lineTo(mx - 40, my - 10);
+        ctx.moveTo(mx + 30, my - 20); ctx.lineTo(mx + 40, my - 20); ctx.lineTo(mx + 40, my - 10);
+        ctx.moveTo(mx + 30, my + 20); ctx.lineTo(mx + 40, my + 20); ctx.lineTo(mx + 40, my + 10);
+        ctx.moveTo(mx - 30, my + 20); ctx.lineTo(mx - 40, my + 20); ctx.lineTo(mx - 40, my + 10);
+        ctx.stroke(); ctx.shadowBlur = 0;
     }
 
     // MULTIPLAYER MINIMAP TRACKING (USING UNLOCKED COCO-SSD)
@@ -593,7 +605,6 @@ const seekBar = document.getElementById('seekBar');
 const seekFill = document.getElementById('seekFill');
 
 playPauseBtn.addEventListener('click', () => {
-    if(!mainVideo.src) return;
     if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
     else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
 });
