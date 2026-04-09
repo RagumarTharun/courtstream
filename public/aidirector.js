@@ -173,8 +173,7 @@ async function predictLoop() {
         console.error("COCO Detect Error:", e);
     }
 
-    let ballClasses = ['sports ball', 'orange', 'apple', 'frisbee', 'tennis ball', 'donut', 'bowl', 'backpack'];
-    let ball = predictions.find(p => ballClasses.includes(p.class) && p.bbox[2] < 100);
+    let ball = predictions.find(p => p.class === 'sports ball' && p.score > 0.15 && p.bbox[2] < 80);
     
     let isShootingPhase = false;
 
