@@ -215,6 +215,13 @@ async function predictLoop() {
     // Send all mapped footprints to tracking engine
     trackPlayers(currentPersonsOnMap);
 
+    // Autonomous Hardware Kickstart: If track coordinate engine drops completely at stream genesis, natively force structural tracking grid to initialize on the first detected physical entity!
+    if (lastBallX === null && currentPersonsOnMap.length > 0) {
+        let rootAnchor = currentPersonsOnMap[0].bbox;
+        lastBallX = rootAnchor.x + rootAnchor.w / 2;
+        lastBallY = rootAnchor.y + rootAnchor.h / 2;
+    }
+
     // 2. Pose Estimation (Telemetry & Motion Logic on Primary Players via Smart Cropping)
     let poses = [];
     try {
