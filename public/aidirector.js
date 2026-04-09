@@ -326,12 +326,6 @@ async function predictLoop() {
                     tY = drawY + maxMotionY;
                     tW = ballR * 2; tH = ballR * 2;
                     foundOpticalBall = true;
-                    
-                    // User Request: Force the physical Ball to dictate the AI crop tracking system natively!
-                    if (manualOverrideTimer <= 0) {
-                        lastBallX = tX + tW/2;
-                        lastBallY = tY + tH/2;
-                    }
                 }
             }
             prevImageData = frameImg;
