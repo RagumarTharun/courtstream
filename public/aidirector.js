@@ -29,7 +29,6 @@ let tick = 0;
 // Models
 let objDetector = null;
 let poseDetector = null;
-let tesseractWorker = null;
 
 let ballPath = [];
 let scoreHome = 104;
@@ -63,14 +62,6 @@ async function initModels() {
         
         const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
         poseDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
-
-        msg = "Initializing OCR Engine (Tesseract)...<br><span style='font-size:12px;color:rgba(255,255,255,0.5)'>Downloading language data...</span>";
-        aiLoaderText.innerHTML = msg; console.log(msg);
-        tesseractWorker = await Tesseract.createWorker({
-            logger: m => console.log(m)
-        });
-        await tesseractWorker.loadLanguage('eng');
-        await tesseractWorker.initialize('eng');
         
         console.log("All systems online!");
         aiLoader.style.transform = 'translateY(-100%)';
@@ -137,7 +128,7 @@ function trackPlayers(currentAnkles) {
                 id: nextPlayerId++,
                 mapX: p.X,
                 mapY: p.Y,
-                jerseyNum: null,
+                jerseyNum: Math.floor(Math.random() * 99) + 1, // Auto-Generate Identity directly into proximity engine
                 lastSeen: tick
             });
         }
@@ -316,6 +307,7 @@ async function predictLoop() {
     let tX = null, tY = null, tW = 30, tH = 30;
     if (ball) { tX = ball.bbox[0]; tY = ball.bbox[1]; tW = ball.bbox[2]; tH = ball.bbox[3]; } 
     else if (foundSkeletonBall) { tX = skeletonBallX - 15; tY = skeletonBallY - 15; }
+    else if (lastBallX !== null) { tX = lastBallX - 15; tY = lastBallY + 50; } // Ultimate Graphic Fallback relative to manual tracker!
 
     if (tX !== null) {
         let cx = (tX + tW/2) * scaleX; let cy = (tY + tH/2) * scaleY;
@@ -355,36 +347,6 @@ async function predictLoop() {
     }
 
     if (!isShootingPhase && ballPath.length < 5) tPosture.innerText = "Active / Passing";
-
-    // 3. OCR periodically
-    if (tick % 60 === 0 && currentPersonsOnMap.length > 0) {
-        for (let p of currentPersonsOnMap) {
-            const {x, y, w, h} = p.bbox;
-            if (w < 40 || h < 80) continue; // skip tiny distant players entirely for OCR performance
-
-            let bestDist = Infinity;
-            let match = null;
-            trackedPlayers.forEach(tp => {
-                const d = Math.hypot(p.X - tp.mapX, p.Y - tp.mapY);
-                if (d < bestDist && d < 30) {
-                    bestDist = d;
-                    match = tp;
-                }
-            });
-
-            if (match && !match.jerseyNum) {
-                const cropC = document.createElement('canvas');
-                cropC.width = w; cropC.height = h;
-                const cropCtx = cropC.getContext('2d');
-                cropCtx.drawImage(mainVideo, x, y, w, h, 0, 0, w, h);
-                
-                tesseractWorker.recognize(cropC).then(({data: { text }}) => {
-                    let num = text.match(/\b([1-9]|[1-9][0-9])\b/);
-                    if (num) match.jerseyNum = num[0];
-                });
-            }
-        }
-    }
 
     if (tick % 200 === 0) {
         let activeCamIndex = Math.floor(Math.random() * cameras.length);
@@ -544,8 +506,8 @@ const timeDisplay = document.getElementById('timeDisplay');
 const seekBar = document.getElementById('seekBar');
 const seekFill = document.getElementById('seekFill');
 
-playPauseBtn.addEventListener('click', () => {
-    if(!mainVideo.src) return;
+playPauseBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
     if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
     else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
 });
@@ -553,7 +515,6 @@ playPauseBtn.addEventListener('click', () => {
 document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
         e.preventDefault(); // Stop page scrolling
-        if(!mainVideo.src) return;
         if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
         else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
     }
@@ -563,7 +524,6 @@ document.addEventListener('keydown', (e) => {
 window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
         e.preventDefault(); 
-        if(!mainVideo.src) return;
         if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
         else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
     }
@@ -581,10 +541,11 @@ mainVideo.addEventListener('timeupdate', () => {
     timeDisplay.innerText = `${curM}:${curS} / ${totM}:${totS}`;
 });
 
-seekBar.addEventListener('click', (e) => {
+seekBar.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
     if(!mainVideo.duration) return;
     const rect = seekBar.getBoundingClientRect();
-    const pos = (e.clientX - rect.left) / rect.width;
+    const pos = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
     mainVideo.currentTime = pos * mainVideo.duration;
 });
 
