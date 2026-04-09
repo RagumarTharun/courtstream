@@ -30,7 +30,6 @@ let tick = 0;
 let objDetector = null;
 let poseDetector = null;
 
-let ballPath = [];
 let scoreHome = 104;
 
 // Multipose Tracking Object
@@ -175,6 +174,22 @@ async function predictLoop() {
 
     let ball = predictions.find(p => p.class === 'sports ball' && p.score > 0.15 && p.bbox[2] < 80);
     
+    // CINEMATOGRAPHY / CLOSE-UP GATEKEEPER
+    // If a human entity fills an abnormal vertical percentage of the frame, the broadcast is aggressively zoomed in!
+    let maxPersonHeightPct = 0;
+    predictions.forEach(p => {
+        if (p.class === 'person' && (p.bbox[3] / vH) > maxPersonHeightPct) {
+            maxPersonHeightPct = p.bbox[3] / vH;
+        }
+    });
+
+    if (maxPersonHeightPct > 0.45) {
+        // Suspend all telemetry, AI computations, and Graphics Layers instantly to yield screen space
+        tick++;
+        courtCtx.clearRect(0, 0, courtCanvas.width, courtCanvas.height);
+        return rafId = requestAnimationFrame(predictLoop);
+    }
+
     let isShootingPhase = false;
 
     // Process Explicit COCO Target (Heuristic Skeletal Tracker handles Fallback later)
@@ -272,16 +287,6 @@ async function predictLoop() {
 
         if (activeAnk) {
             let mapOut = mapToCourt(activeAnk.x, activeAnk.y, vW, vH);
-            
-            // If it's near the ball trajectory, label as shooter
-            if (isShootingPhase && ballPath.length > 0) {
-                let bDist = Math.hypot((activeAnk.x * scaleX) - ballPath[ballPath.length-1].x, (activeAnk.y * scaleY) - ballPath[ballPath.length-1].y);
-                if(bDist < 300) {
-                    tPosture.innerText = "Shooting detected!";
-                    tPlane.innerText = classifyShot(mapOut.X, mapOut.Y);
-                    tArc.innerText = (40 + Math.random() * 20).toFixed(1) + "°";
-                }
-            }
         }
 
         // Draw Skeleton natively
@@ -311,25 +316,15 @@ async function predictLoop() {
     if (tX !== null) {
         let cx = (tX + tW/2) * scaleX; let cy = (tY + tH/2) * scaleY;
         
-        ballPath.push({x: cx, y: cy}); if(ballPath.length > 50) ballPath.shift();
-
-        if (ballPath.length > 5) { let dy = ballPath[ballPath.length-1].y - ballPath[ballPath.length-5].y; if (dy < -5) { isShootingPhase = true; } }
-
-        if (ballPath.length > 1) {
-            ctx.beginPath(); ctx.strokeStyle = 'rgba(255, 94, 0, 0.6)'; ctx.lineWidth = 4; ctx.moveTo(ballPath[0].x, ballPath[0].y);
-            for (let i = 1; i<ballPath.length; i++) ctx.lineTo(ballPath[i].x, ballPath[i].y); ctx.stroke();
-        }
-
-        ctx.strokeStyle = '#ffb300'; ctx.lineWidth = 3; ctx.shadowBlur = 15; ctx.shadowColor = '#ffb300';
-        let pD = 10; let tS = 15; let cxX = tX * scaleX; let cyY = tY * scaleY; let cWW = tW * scaleX; let cHH = tH * scaleY;
         ctx.beginPath();
-        ctx.moveTo(cxX - pD, cyY - pD + tS); ctx.lineTo(cxX - pD, cyY - pD); ctx.lineTo(cxX - pD + tS, cyY - pD);
-        ctx.moveTo(cxX + cWW + pD - tS, cyY - pD); ctx.lineTo(cxX + cWW + pD, cyY - pD); ctx.lineTo(cxX + cWW + pD, cyY - pD + tS);
-        ctx.moveTo(cxX + cWW + pD, cyY + cHH + pD - tS); ctx.lineTo(cxX + cWW + pD, cyY + cHH + pD); ctx.lineTo(cxX + cWW + pD - tS, cyY + cHH + pD);
-        ctx.moveTo(cxX - pD + tS, cyY + cHH + pD); ctx.lineTo(cxX - pD, cyY + cHH + pD); ctx.lineTo(cxX - pD, cyY + cHH + pD - tS);
-        ctx.stroke(); ctx.beginPath(); ctx.fillStyle = '#ffffff'; ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
-    } else {
-        if(ballPath.length > 0 && tick % 5 === 0) ballPath.shift();
+        ctx.fillStyle = 'rgba(255, 94, 0, 0.6)';
+        ctx.arc(cx, cy, (tW * scaleX) + 8, 0, Math.PI*2);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ffb300';
+        ctx.stroke();
+        
+        ctx.beginPath(); ctx.fillStyle = '#ffffff'; ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill(); 
     }
 
     // Explicit Director graphic showing exactly where the manual tracking anchor is active
@@ -345,7 +340,8 @@ async function predictLoop() {
         ctx.stroke(); ctx.shadowBlur = 0;
     }
 
-    if (!isShootingPhase && ballPath.length < 5) tPosture.innerText = "Active / Passing";
+    // Clean generic readout
+    tPosture.innerText = "Active Player Tracking";
 
     if (tick % 200 === 0) {
         let activeCamIndex = Math.floor(Math.random() * cameras.length);
@@ -407,14 +403,6 @@ function updateCourtMap() {
             courtCtx.fillStyle = 'rgba(0, 243, 255, 0.5)';
             courtCtx.beginPath(); courtCtx.arc(tp.mapX, tp.mapY, 4, 0, Math.PI*2); courtCtx.fill();
         }
-    }
-
-    if (ballPath.length > 0) {
-        let lx = ballPath[ballPath.length-1].x;
-        let ly = ballPath[ballPath.length-1].y;
-        let bmap = mapToCourt(lx / (mainCanvas.width / mainVideo.videoWidth), ly / (mainCanvas.height / mainVideo.videoHeight), mainVideo.videoWidth, mainVideo.videoHeight);
-        courtCtx.fillStyle = '#ff5e00';
-        courtCtx.beginPath(); courtCtx.arc(bmap.X, bmap.Y, 5, 0, Math.PI*2); courtCtx.fill();
     }
 }
 
@@ -501,9 +489,21 @@ simulateBtn.addEventListener('click', () => {
 
 // Custom Video Controls UI Integration
 const playPauseBtn = document.getElementById('playPauseBtn');
+const speedBtn = document.getElementById('speedBtn');
 const timeDisplay = document.getElementById('timeDisplay');
 const seekBar = document.getElementById('seekBar');
 const seekFill = document.getElementById('seekFill');
+
+let speedVals = [1.0, 0.5, 0.25];
+let currSpeedIdx = 0;
+
+speedBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if(!mainVideo.src) return;
+    currSpeedIdx = (currSpeedIdx + 1) % speedVals.length;
+    mainVideo.playbackRate = speedVals[currSpeedIdx];
+    speedBtn.innerText = speedVals[currSpeedIdx] + 'x';
+});
 
 playPauseBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
