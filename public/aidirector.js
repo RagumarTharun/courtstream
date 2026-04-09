@@ -175,16 +175,12 @@ async function predictLoop() {
     let ball = predictions.find(p => p.class === 'sports ball' && p.score > 0.15 && p.bbox[2] < 80);
     
     // CINEMATOGRAPHY / CLOSE-UP GATEKEEPER
-    // If a human entity fills an abnormal vertical percentage of the frame, the broadcast is aggressively zoomed in!
-    let maxPersonHeightPct = 0;
-    predictions.forEach(p => {
-        if (p.class === 'person' && (p.bbox[3] / vH) > maxPersonHeightPct) {
-            maxPersonHeightPct = p.bbox[3] / vH;
-        }
-    });
-
-    if (maxPersonHeightPct > 0.45) {
-        // Suspend all telemetry, AI computations, and Graphics Layers instantly to yield screen space
+    // If the broadcast camera tightly zooms in on a player's face/reaction, the total visible body count drops massively.
+    let peopleCount = predictions.filter(p => p.class === 'person' && p.score > 0.15).length;
+    
+    // Standard wide-shots always contain 10 players + 3 refs minimum. Tight shots usually contain 1-4 people.
+    if (peopleCount < 5) {
+        // Suspend tracking and overlay renderers to yield cinematic screen space for the close-up
         tick++;
         courtCtx.clearRect(0, 0, courtCanvas.width, courtCanvas.height);
         return rafId = requestAnimationFrame(predictLoop);
