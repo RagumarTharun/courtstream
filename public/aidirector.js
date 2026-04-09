@@ -561,17 +561,17 @@ videoUpload.addEventListener('change', (e) => {
 });
 
 // Director Override Tracker: Click on any player to violently force the Telemetry Skeleton onto them!
-mainCanvas.addEventListener('mousedown', (e) => {
+mainCanvas.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (!mainVideo.videoWidth) return;
     
-    // Reverse scale the click back to the original video coordinates
     const rect = mainCanvas.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
     
-    lastBallX = clickX / (mainCanvas.width / mainVideo.videoWidth);
-    lastBallY = clickY / (mainCanvas.height / mainVideo.videoHeight);
+    // CRITICAL FIX: Convert visual layout CSS clicks directly mapping to 1080p native video coordinates
+    lastBallX = (clickX / rect.width) * mainVideo.videoWidth;
+    lastBallY = (clickY / rect.height) * mainVideo.videoHeight;
     
     manualOverrideTimer = 300; // Ignore automated ball detection for exactly 5 seconds
     
@@ -607,6 +607,15 @@ const seekFill = document.getElementById('seekFill');
 playPauseBtn.addEventListener('click', () => {
     if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
     else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        e.preventDefault(); // Stop page scrolling
+        if(!mainVideo.src) return;
+        if(mainVideo.paused) { mainVideo.play(); playPauseBtn.innerText = '⏸'; }
+        else { mainVideo.pause(); playPauseBtn.innerText = '▶'; }
+    }
 });
 
 mainVideo.addEventListener('timeupdate', () => {
