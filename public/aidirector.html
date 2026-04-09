@@ -514,6 +514,24 @@
 
     </div>
 
+    <!-- AI Model Loaders overlay -->
+    <div id="aiLoader" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:var(--bg-color); z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 6v6l4 2"></path>
+        </svg>
+        <h2 style="font-family:'Orbitron', sans-serif; color:var(--cyan); margin-top:20px;" id="aiLoaderText">Initializing AI Director...</h2>
+        <p style="color:var(--text-muted);">Loading MediaPipe Pose, COCO-SSD, and OCR...</p>
+    </div>
+
+    <!-- AI Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
     <!-- Load JS logic here -->
     <script src="aidirector.js"></script>
 </body>
