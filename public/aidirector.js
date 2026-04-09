@@ -51,10 +51,10 @@ async function initModels() {
         aiLoaderText.innerHTML = msg; console.log(msg);
         objDetector = await cocoSsd.load();
 
-        msg = "Loading Multipose Detection (MoveNet)...";
+        msg = "Loading Skeleton Telemetry (MoveNet)...";
         aiLoaderText.innerHTML = msg; console.log(msg);
         
-        const detectorConfig = { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableTracking: true };
+        const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
         poseDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
 
         msg = "Initializing OCR Engine (Tesseract)...<br><span style='font-size:12px;color:rgba(255,255,255,0.5)'>Downloading language data...</span>";
@@ -167,15 +167,15 @@ async function predictLoop() {
     const scaleX = mainCanvas.width / vW;
     const scaleY = mainCanvas.height / vH;
 
-    // 1. Detect Ball & Persons via COCO (Unlocking maxBoxes to 50, lowering minScore default from 0.5 to 0.2 to catch tiny background players!)
+    // 1. Detect Ball & Persons via COCO (Deep Scan to catch severely downscaled players at extreme 0.05 margin)
     let predictions = [];
     try {
-        predictions = await objDetector.detect(mainVideo, 50, 0.2);
+        predictions = await objDetector.detect(mainVideo, 50, 0.05);
     } catch (e) {
         console.error("COCO Detect Error:", e);
     }
 
-    let ball = predictions.find(p => p.class === 'sports ball' || p.class === 'orange' || (p.class === 'apple' && p.score > 0.4));
+    let ball = predictions.find(p => p.class === 'sports ball' || p.class === 'orange' || (p.class === 'apple' && p.score > 0.1));
     let isShootingPhase = false;
 
     // Process Ball Trajectory
@@ -212,7 +212,7 @@ async function predictLoop() {
     // MULTIPLAYER MINIMAP TRACKING (USING UNLOCKED COCO-SSD)
     let currentPersonsOnMap = [];
     predictions.forEach(p => {
-        if (p.class === 'person' && p.score > 0.2) {
+        if (p.class === 'person' && p.score > 0.05) {
             const [bx, by, bw, bh] = p.bbox;
             // Focus mapping on the "feet" / bottom line of bounding box
             const bcX = bx + bw / 2;
@@ -245,7 +245,7 @@ async function predictLoop() {
         const points = pose.keypoints;
         const lAnk = points.find(p=>p.name==='left_ankle');
         const rAnk = points.find(p=>p.name==='right_ankle');
-        const activeAnk = (lAnk && lAnk.score > 0.2) ? lAnk : (rAnk && rAnk.score > 0.2 ? rAnk : null);
+        const activeAnk = (lAnk && lAnk.score > 0.05) ? lAnk : (rAnk && rAnk.score > 0.05 ? rAnk : null);
 
         if (activeAnk) {
             let mapOut = mapToCourt(activeAnk.x, activeAnk.y, vW, vH);
@@ -264,7 +264,7 @@ async function predictLoop() {
         // Draw Skeleton for visual feedback
         ctx.fillStyle = '#00f3ff';
         points.forEach(p => {
-            if (p.score > 0.2) {
+            if (p.score > 0.05) {
                 ctx.beginPath();
                 ctx.arc(p.x * scaleX, p.y * scaleY, 4, 0, Math.PI * 2);
                 ctx.fill();
@@ -276,7 +276,7 @@ async function predictLoop() {
             ctx.strokeStyle = '#00f3ff'; ctx.lineWidth = 2;
             adj.forEach(([i, j]) => {
                 const kp1 = points[i], kp2 = points[j];
-                if (kp1.score > 0.2 && kp2.score > 0.2) {
+                if (kp1.score > 0.05 && kp2.score > 0.05) {
                     ctx.beginPath(); ctx.moveTo(kp1.x*scaleX, kp1.y*scaleY); ctx.lineTo(kp2.x*scaleX, kp2.y*scaleY); ctx.stroke();
                 }
             });
