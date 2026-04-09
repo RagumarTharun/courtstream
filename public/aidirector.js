@@ -168,7 +168,6 @@ async function predictLoop() {
     } catch (e) {}
 
     let ball = predictions.find(p => p.class === 'sports ball' || p.class === 'orange' || (p.class === 'apple' && p.score > 0.4));
-    
     let isShootingPhase = false;
 
     if (ball) {
@@ -201,18 +200,37 @@ async function predictLoop() {
         if(ballPath.length > 0 && tick % 5 === 0) ballPath.shift();
     }
 
-    // 2. Pose Estimation (Multipose)
+    // MULTIPLAYER MINIMAP TRACKING (PIVOTED TO COCO FOR EXTREME ROBUSTNESS ON WIDE SHOTS)
+    let currentPersonsOnMap = [];
+    predictions.forEach(p => {
+        if (p.class === 'person' && p.score > 0.25) {
+            const [bx, by, bw, bh] = p.bbox;
+            // Map the bottom-center of their bounding box (approx placement of feet on court plane)
+            const bcX = bx + bw / 2;
+            const bcY = by + bh;
+            let mapOut = mapToCourt(bcX, bcY, vW, vH);
+            currentPersonsOnMap.push({
+                X: mapOut.X, Y: mapOut.Y,
+                bbox: { x: bx, y: by, w: bw, h: bh }
+            });
+            
+            // Interactive UI Box outlining the person
+            ctx.strokeStyle = "rgba(0, 243, 255, 0.2)";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(bx * scaleX, by * scaleY, bw * scaleX, bh * scaleY);
+        }
+    });
+
+    // Send all mapped footprints to tracking engine
+    trackPlayers(currentPersonsOnMap);
+
+    // 2. Pose Estimation (Telemetry & Motion Logic on Primary Players)
     let poses = [];
     try {
-        poses = await poseDetector.estimatePoses(mainVideo, { maxPoses: 6 });
+        poses = await poseDetector.estimatePoses(mainVideo, { maxPoses: 2 }); // Focus skeleton on main ball handler visually
     } catch (e) {}
 
-    let currentAnkles = [];
-    
     for (let pose of poses) {
-        // We removed the overarching pose.score filter because background players naturally have lower holistic scores
-        // We will rely purely on individual keypoint confidence.
-        
         const points = pose.keypoints;
         ctx.fillStyle = '#00f3ff';
         points.forEach(p => {
@@ -228,57 +246,37 @@ async function predictLoop() {
         adj.forEach(([i, j]) => {
             const kp1 = points[i], kp2 = points[j];
             if (kp1.score > 0.3 && kp2.score > 0.3) {
-                ctx.beginPath();
-                ctx.moveTo(kp1.x*scaleX, kp1.y*scaleY);
-                ctx.lineTo(kp2.x*scaleX, kp2.y*scaleY);
-                ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(kp1.x*scaleX, kp1.y*scaleY); ctx.lineTo(kp2.x*scaleX, kp2.y*scaleY); ctx.stroke();
             }
         });
 
-        const lAnkle = points.find(p=>p.name==='left_ankle');
-        const rAnkle = points.find(p=>p.name==='right_ankle');
-        const activeAnk = (lAnkle && lAnkle.score > 0.2) ? lAnkle : (rAnkle && rAnkle.score > 0.2 ? rAnkle : null);
+        const lAnk = points.find(p=>p.name==='left_ankle');
+        const rAnk = points.find(p=>p.name==='right_ankle');
+        const activeAnk = (lAnk && lAnk.score > 0.3) ? lAnk : (rAnk && rAnk.score > 0.3 ? rAnk : null);
         
-        if (activeAnk) {
-            let mapOut = mapToCourt(activeAnk.x, activeAnk.y, vW, vH);
-            currentAnkles.push(mapOut);
-            
-            // Check for shooter proximity
-            if (isShootingPhase && ball) {
-                let ballToAnkDist = Math.hypot((activeAnk.x * scaleX) - ballPath[ballPath.length-1].x, (activeAnk.y * scaleY) - ballPath[ballPath.length-1].y);
-                if(ballToAnkDist < 300) {
-                    tPosture.innerText = "Shooting detected!";
-                    let shotType = classifyShot(mapOut.X, mapOut.Y);
-                    tPlane.innerText = shotType;
-                    tArc.innerText = (40 + Math.random() * 20).toFixed(1) + "°";
-                }
+        if (activeAnk && isShootingPhase && ball) {
+            let bDist = Math.hypot((activeAnk.x * scaleX) - ballPath[ballPath.length-1].x, (activeAnk.y * scaleY) - ballPath[ballPath.length-1].y);
+            if(bDist < 300) {
+                let m = mapToCourt(activeAnk.x, activeAnk.y, vW, vH);
+                tPosture.innerText = "Shooting detected!";
+                tPlane.innerText = classifyShot(m.X, m.Y);
+                tArc.innerText = (40 + Math.random() * 20).toFixed(1) + "°";
             }
         }
     }
 
-    // Process all ankles into stable tracked IDs
-    trackPlayers(currentAnkles);
-
-    if (!isShootingPhase && ballPath.length < 5) {
-        tPosture.innerText = "Active / Passing";
-    }
+    if (!isShootingPhase && ballPath.length < 5) tPosture.innerText = "Active / Passing";
 
     // 3. OCR periodically
-    if (tick % 60 === 0 && predictions.length > 0) {
-        const persons = predictions.filter(pr => pr.class === 'person' && pr.score > 0.5);
-        for (let p of persons) {
-            const [x,y,w,h] = p.bbox;
-            // Only examine decently sized subjects to ensure OCR has enough pixels
-            if (w < 40 || h < 80) continue;
-
-            const bcX = x + w/2;
-            const bcY = y + h;
-            let bboxMap = mapToCourt(bcX, bcY, vW, vH);
+    if (tick % 60 === 0 && currentPersonsOnMap.length > 0) {
+        for (let p of currentPersonsOnMap) {
+            const {x, y, w, h} = p.bbox;
+            if (w < 40 || h < 80) continue; // skip tiny distant players entirely for OCR performance
 
             let bestDist = Infinity;
             let match = null;
             trackedPlayers.forEach(tp => {
-                const d = Math.hypot(bboxMap.X - tp.mapX, bboxMap.Y - tp.mapY);
+                const d = Math.hypot(p.X - tp.mapX, p.Y - tp.mapY);
                 if (d < bestDist && d < 30) {
                     bestDist = d;
                     match = tp;
@@ -293,10 +291,7 @@ async function predictLoop() {
                 
                 tesseractWorker.recognize(cropC).then(({data: { text }}) => {
                     let num = text.match(/\b([1-9]|[1-9][0-9])\b/);
-                    if (num) {
-                        console.log(`[Director AI] Tracked ID ${match.id} maps to Jersey #${num[0]}`);
-                        match.jerseyNum = num[0];
-                    }
+                    if (num) match.jerseyNum = num[0];
                 });
             }
         }
@@ -313,20 +308,15 @@ async function predictLoop() {
     updateCourtMap();
 
     // Draw Jersey popups on main view based on current associations
-    for (let p of poses) {
-        const points = p.keypoints;
-        const ank = points.find(k=>k.name==='left_ankle') || points.find(k=>k.name==='right_ankle');
-        const face = points.find(k=>k.name==='nose');
-        if (ank && ank.score > 0.2 && face && face.score > 0.2) {
-            let mOut = mapToCourt(ank.x, ank.y, vW, vH);
-            let closest = trackedPlayers.find(tp => Math.hypot(tp.mapX - mOut.X, tp.mapY - mOut.Y) < 30);
-            if (closest && closest.jerseyNum) {
-                ctx.font = "bold 16px Orbitron";
-                ctx.fillStyle = "rgba(0,0,0,0.7)";
-                ctx.fillRect(face.x*scaleX - 15, face.y*scaleY - 45, 30, 20);
-                ctx.fillStyle = "var(--neon-orange)";
-                ctx.fillText("#" + closest.jerseyNum, face.x*scaleX - 12, face.y*scaleY - 30);
-            }
+    for (let p of currentPersonsOnMap) {
+        const {x, y, w, h} = p.bbox;
+        let closest = trackedPlayers.find(tp => Math.hypot(tp.mapX - p.X, tp.mapY - p.Y) < 30);
+        if (closest && closest.jerseyNum) {
+            ctx.font = "bold 16px Orbitron";
+            ctx.fillStyle = "rgba(0,0,0,0.7)";
+            ctx.fillRect(x*scaleX + w*scaleX/2 - 15, y*scaleY - 25, 30, 20);
+            ctx.fillStyle = "var(--neon-orange)";
+            ctx.fillText("#" + closest.jerseyNum, x*scaleX + w*scaleX/2 - 12, y*scaleY - 10);
         }
     }
 
