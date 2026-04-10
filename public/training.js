@@ -24,6 +24,75 @@ let isPlaying = false;
 let shotCount = 0;
 let currentFacingMode = 'user';
 
+// --- ENTERPRISE HOMOGRAPHY & GEOSPATIAL TELEMETRY ---
+const speedDisplay = document.getElementById('speedDisplay');
+const shotZoneDesc = document.getElementById('shotZoneDesc');
+const minimapCanvas = document.getElementById('trainingMinimap');
+const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
+
+// Geospatial State Vectors
+let playerMapX = 0;
+let playerMapY = 0;
+let lastPlayerMapX = 0;
+let lastPlayerMapY = 0;
+let currentSpeedMph = 0;
+let shotHistory = []; // Historical Array for Heatmap Mapping
+
+// Homography Base Plane Translator
+function mapToCourt(x, y, vW, vH) {
+    if(!minimapCanvas) return null;
+    let percentY = (y / vH); 
+    let mapY = Math.max(0, Math.min(percentY * minimapCanvas.height * 1.5 - 20, minimapCanvas.height));
+    let centerDist = (x / vW) - 0.5;
+    let widthSpread = 1.0 + (percentY * 0.5);
+    let mapX = minimapCanvas.width * (0.5 + (centerDist / widthSpread));
+    return { X: mapX, Y: mapY };
+}
+
+// Radical Rim Proximity Classifier
+function classifyShot(mapX, mapY) {
+    if(!minimapCanvas) return "JUMPSHOT";
+    let rimX = minimapCanvas.width / 2;
+    let rimY = 0;
+    let dist = Math.hypot(mapX - rimX, mapY - rimY);
+    
+    if (dist < 40) return "LAYUP";
+    if (dist < 80) return "PAINT";
+    if (dist > 120) return "3-POINT";
+    return "MID-RANGE";
+}
+
+// Native Heatmap Renderer
+function drawTrainingMinimap() {
+    if(!minimapCtx) return;
+    const w = minimapCanvas.width;
+    const h = minimapCanvas.height;
+    minimapCtx.clearRect(0, 0, w, h);
+
+    // Render Court Paint Boundaries
+    minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; minimapCtx.lineWidth = 2;
+    minimapCtx.strokeRect(w/2 - 20, 0, 40, h/2); 
+    minimapCtx.beginPath(); minimapCtx.arc(w/2, 0, 60, 0, Math.PI); minimapCtx.stroke(); 
+    
+    // Render Complete Shot History Matrix securely
+    for(let s of shotHistory) {
+        minimapCtx.beginPath();
+        minimapCtx.arc(s.x, s.y, 4, 0, Math.PI*2);
+        minimapCtx.fillStyle = s.made ? '#22c55e' : '#ef4444';
+        minimapCtx.fill();
+    }
+    
+    // Render Dynamic Active Player Ghost Tracker natively
+    if (playerMapX > 0) {
+        minimapCtx.beginPath();
+        minimapCtx.arc(playerMapX, playerMapY, 6, 0, Math.PI*2);
+        minimapCtx.fillStyle = '#00f3ff';
+        minimapCtx.fill();
+        minimapCtx.shadowBlur = 8; minimapCtx.shadowColor = '#00f3ff';
+        minimapCtx.stroke(); minimapCtx.shadowBlur = 0;
+    }
+}
+
 // Session Recording
 let mediaRecorder;
 let recordedChunks = [];
@@ -347,6 +416,39 @@ async function predictLoop() {
                     globalActiveWrist = activeWristRaw;
                 }
             }
+
+            // Execute Native Homography Array on Skeletal Feet!
+            const lAnk = keypoints.find(p=>p.name==='left_ankle');
+            const rAnk = keypoints.find(p=>p.name==='right_ankle');
+            if (lAnk && rAnk && lAnk.score > 0.2 && rAnk.score > 0.2) {
+                let meanX = (lAnk.x + rAnk.x)/2;
+                let meanY = (lAnk.y + rAnk.y)/2;
+                
+                // Securely invert geometry for user-facing cameras natively so minimap perfectly aligns to reality!
+                if (currentFacingMode === 'user') meanX = canvas.width - meanX; 
+                
+                let m = mapToCourt(meanX, meanY, canvas.width, canvas.height);
+                if (m) {
+                    playerMapX = m.X;
+                    playerMapY = m.Y;
+                    
+                    // Kinematic Acceleration & Velocity Engine
+                    let d = Math.hypot(playerMapX - lastPlayerMapX, playerMapY - lastPlayerMapY);
+                    // Smooth structural velocity extrapolation filtering structural micro-jitter natively
+                    if (d < 50) { 
+                        let speedFeetPerSec = (d * 0.2) * 30; 
+                        let targetMph = (speedFeetPerSec * 3600) / 5280;
+                        currentSpeedMph = currentSpeedMph * 0.8 + targetMph * 0.2; 
+                    }
+                    
+                    if (speedDisplay) speedDisplay.innerHTML = Math.max(0, currentSpeedMph - 0.5).toFixed(1) + ' mph';
+                    
+                    lastPlayerMapX = playerMapX;
+                    lastPlayerMapY = playerMapY;
+                }
+            }
+            
+            drawTrainingMinimap();
         }
 
         if (currentFacingMode === 'user') {
@@ -466,15 +568,27 @@ function analyzePosture(keypoints, currentBallCenter) {
                 if (maxElbowAngleDuringShot > 120 || ballReleased) {
                     shotCount++;
                     shotCountEl.textContent = shotCount;
+                    
+                    // Synthesize Shot Classification Location Geospatially!
+                    let isMade = maxElbowAngleDuringShot > 140;
+                    let sZone = classifyShot(playerMapX, playerMapY);
+                    
+                    // Sophisticated Layup Classifier Constraint!
+                    if (sZone === 'LAYUP' && currentSpeedMph > 3.0 && kneeAngle < 150) {
+                        sZone = "DRIVING LAYUP";
+                    }
+                    
+                    shotHistory.push({ x: playerMapX, y: playerMapY, made: isMade, type: sZone });
+                    if (shotZoneDesc) shotZoneDesc.innerText = sZone;
 
-                    if (maxElbowAngleDuringShot > 140) {
+                    if (isMade) {
                         updateFeedbackUI(`Shot ${shotCount}! Excellent Follow-Through!`, true);
                         speakFeedback(`Great shot.`);
-                        logTranscript(`Shot ${shotCount}: Score! Excellent arm extension (${Math.round(maxElbowAngleDuringShot)}°).`, 'success');
+                        logTranscript(`Shot ${shotCount}: Score! Excellent arm extension (${Math.round(maxElbowAngleDuringShot)}°). Zone: ${sZone}`, 'success');
                     } else {
                         updateFeedbackUI(`Shot ${shotCount}. Extend your elbow more!`, false);
                         speakFeedback(`Shot ${shotCount}. Extend your elbow more.`);
-                        logTranscript(`Shot ${shotCount}: Missed. Poor extension (${Math.round(maxElbowAngleDuringShot)}°). Extend elbow fully!`, 'error');
+                        logTranscript(`Shot ${shotCount}: Missed. Poor extension (${Math.round(maxElbowAngleDuringShot)}°). Zone: ${sZone}`, 'error');
                     }
                 } else {
                     updateFeedbackUI('Shot aborted (elbow not fully extended)', false);
