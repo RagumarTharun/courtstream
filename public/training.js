@@ -69,10 +69,10 @@ function drawTrainingMinimap() {
     const h = minimapCanvas.height;
     minimapCtx.clearRect(0, 0, w, h);
 
-    // Render Court Paint Boundaries
+    // Render Court Paint Boundaries (Strict Geometry)
     minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; minimapCtx.lineWidth = 2;
-    minimapCtx.strokeRect(w/2 - 20, 0, 40, h/2); 
-    minimapCtx.beginPath(); minimapCtx.arc(w/2, 0, 60, 0, Math.PI); minimapCtx.stroke(); 
+    minimapCtx.strokeRect(w/2 - 25, 0, 50, 55); 
+    minimapCtx.beginPath(); minimapCtx.arc(w/2, 0, 65, 0, Math.PI); minimapCtx.stroke(); 
     
     // Render Complete Shot History Matrix securely
     for(let s of shotHistory) {
@@ -149,13 +149,7 @@ function logTranscript(msg, type = 'info') {
 }
 
 function speakFeedback(text) {
-    if ('speechSynthesis' in window) {
-        if (!window.speechSynthesis.speaking) {
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.rate = 1.1; 
-            window.speechSynthesis.speak(msg);
-        }
-    }
+    // Audio synthesizer manually disabled per user specification.
 }
 
 function updateFeedbackUI(text, isGood = true) {
@@ -535,20 +529,28 @@ function analyzePosture(keypoints, currentBallCenter) {
     }
 
     let distBallWrist = null;
-    if (currentBallCenter && activeWrist && activeWrist.score > thresh) {
-        distBallWrist = Math.hypot(currentBallCenter.x - activeWrist.x, currentBallCenter.y - activeWrist.y);
+    let ballAscendingObjectTracker = false;
+    
+    if (currentBallCenter) {
+        if (activeWrist && activeWrist.score > thresh) {
+            distBallWrist = Math.hypot(currentBallCenter.x - activeWrist.x, currentBallCenter.y - activeWrist.y);
+        }
+        // Native Object Detection Vertical Action Constraint:
+        // If the ball's Y pixel coordinate is violently HIGHER on screen (lower Y value) than the player's literal shoulder coordinate!
+        if (activeShoulder && currentBallCenter.y < (activeShoulder.y - 40)) {
+            ballAscendingObjectTracker = true;
+        }
     }
 
-    if (activeShoulder && activeWrist && activeElbow && elbowAngle > 0) {
+    if (activeShoulder && activeElbow && elbowAngle > 0) {
         if (phase === 'idle') {
             let holdingBall = distBallWrist !== null && distBallWrist < 150;
-            let isGathering = elbowAngle < 130 && activeWrist.y < activeShoulder.y + 40;
+            let isGathering = activeWrist && (activeWrist.y < activeShoulder.y + 40);
             
-            if (isGathering && holdingBall) {
+            if ((isGathering && holdingBall) || ballAscendingObjectTracker) {
                 phase = 'shooting';
                 maxElbowAngleDuringShot = elbowAngle;
                 updateFeedbackUI('Going up...', true);
-                speakFeedback('Shooting');
             } else if (kneeAngle && kneeAngle > 0 && kneeAngle < 160) {
                 updateFeedbackUI('Good, bending knees...', true);
             } else {
@@ -559,40 +561,38 @@ function analyzePosture(keypoints, currentBallCenter) {
                 maxElbowAngleDuringShot = elbowAngle;
             }
 
+            // A primary shot is executed if EITHER the elbow fully extends natively OR the literal Object (Ball) flies high above the head natively!
+            let shotExecuted = false;
             let ballReleased = false;
             if (distBallWrist !== null && distBallWrist > 150 && currentBallCenter.y < activeWrist.y - 30) {
                 ballReleased = true;
             }
+            if ((activeWrist && activeWrist.y < activeShoulder.y - 50) && (ballAscendingObjectTracker || ballReleased || maxElbowAngleDuringShot > 110)) {
+                shotExecuted = true;
+            }
 
-            if (activeWrist.y > activeShoulder.y + 60 || ballReleased) {
-                if (maxElbowAngleDuringShot > 120 || ballReleased) {
-                    shotCount++;
-                    shotCountEl.textContent = shotCount;
-                    
-                    // Synthesize Shot Classification Location Geospatially!
-                    let isMade = maxElbowAngleDuringShot > 140;
-                    let sZone = classifyShot(playerMapX, playerMapY);
-                    
-                    // Sophisticated Layup Classifier Constraint!
-                    if (sZone === 'LAYUP' && currentSpeedMph > 3.0 && kneeAngle < 150) {
-                        sZone = "DRIVING LAYUP";
-                    }
-                    
-                    shotHistory.push({ x: playerMapX, y: playerMapY, made: isMade, type: sZone });
-                    if (shotZoneDesc) shotZoneDesc.innerText = sZone;
+            if (shotExecuted) {
+                shotCount++;
+                shotCountEl.textContent = shotCount;
+                
+                // Synthesize Shot Classification Location Geospatially!
+                let isMade = maxElbowAngleDuringShot > 140; // Maintain angle as heuristic for perfect 'follow-through' make prediction
+                let sZone = classifyShot(playerMapX, playerMapY);
+                
+                // Sophisticated Layup Classifier Constraint!
+                if (sZone === 'LAYUP' && currentSpeedMph > 3.0 && kneeAngle < 150) {
+                    sZone = "DRIVING LAYUP";
+                }
+                
+                shotHistory.push({ x: playerMapX, y: playerMapY, made: isMade, type: sZone });
+                if (shotZoneDesc) shotZoneDesc.innerText = sZone;
 
-                    if (isMade) {
-                        updateFeedbackUI(`Shot ${shotCount}! Excellent Follow-Through!`, true);
-                        speakFeedback(`Great shot.`);
-                        logTranscript(`Shot ${shotCount}: Score! Excellent arm extension (${Math.round(maxElbowAngleDuringShot)}°). Zone: ${sZone}`, 'success');
-                    } else {
-                        updateFeedbackUI(`Shot ${shotCount}. Extend your elbow more!`, false);
-                        speakFeedback(`Shot ${shotCount}. Extend your elbow more.`);
-                        logTranscript(`Shot ${shotCount}: Missed. Poor extension (${Math.round(maxElbowAngleDuringShot)}°). Zone: ${sZone}`, 'error');
-                    }
+                if (isMade) {
+                    updateFeedbackUI(`Shot ${shotCount}! Validated via Object Tracker!`, true);
+                    logTranscript(`Shot ${shotCount}: Score! Validated object launch height + Structural Extension. Zone: ${sZone}`, 'success');
                 } else {
-                    updateFeedbackUI('Shot aborted (elbow not fully extended)', false);
-                    logTranscript('Shot aborted. Bailed out before extension.', 'error');
+                    updateFeedbackUI(`Shot ${shotCount}. Follow-Through was short!`, false);
+                    logTranscript(`Shot ${shotCount}: Taken! Object launched but Structural Mechanics were short (${Math.round(maxElbowAngleDuringShot)}°). Zone: ${sZone}`, 'error');
                 }
 
                 phase = 'cooldown';
@@ -601,9 +601,12 @@ function analyzePosture(keypoints, currentBallCenter) {
                         phase = 'idle';
                         updateFeedbackUI('Waiting for next shot...', true);
                     }
-                }, 1000);
+                }, 1500);
             }
         }
+    } else {
+        // Graceful Fail-safe if no Skeleton is fully framed!
+        if (phase === 'idle') updateFeedbackUI('Stand back! Skeleton Obscured.', false);
     }
 }
 
