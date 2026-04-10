@@ -45,6 +45,20 @@ let targetBallX = null; // 3-Frame Hysteresis Anchor
 let targetBallY = null;
 let manualOverrideTimer = 0;
 
+// Enterprise Possession State Machine
+let isTransitMode = false;
+let activePossessionBox = null;
+let possessionGraceTimer = 0;
+
+// Trigonometric Vector Functions
+function getBoneAngle(p1, p2, p3) {
+    if (!p1 || !p2 || !p3 || p1.score < 0.1 || p2.score < 0.1 || p3.score < 0.1) return -1;
+    let a = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    let b = Math.hypot(p2.x - p3.x, p2.y - p3.y);
+    let c = Math.hypot(p3.x - p1.x, p3.y - p1.y);
+    return Math.acos((a*a + b*b - c*c) / (2 * a * b)) * (180 / Math.PI);
+}
+
 // Dynamic Safe Optical Flow Extractor
 const motionCanvas = document.createElement('canvas');
 const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
@@ -187,13 +201,14 @@ async function predictLoop() {
         return true;
     });
 
-    // FIX 2: Temporal Momentum Vector Glitch Filter
+    // FIX 2: Temporal Momentum Vector Filter (Transit Mode)
+    isTransitMode = false;
     if (ball && lastBallX !== null) {
         let bx = ball.bbox[0] + ball.bbox[2]/2;
         let by = ball.bbox[1] + ball.bbox[3]/2;
         let pDist = Math.hypot(bx - lastBallX, by - lastBallY);
-        // If the ball teleports more than 400 scaled pixels in 16ms (60 FPS), it's physically breaking the speed of sound! Reject it natively.
-        if (pDist > 400) ball = null; 
+        if (pDist > 400) ball = null; // Teleportation Glitch Guard
+        else if (pDist > 40) isTransitMode = true; // Transit Mode: Ball is physically flying! Disable strict skeletal proximity locks!
     }
     
     let isShootingPhase = false;
@@ -282,34 +297,52 @@ async function predictLoop() {
     }
 
     let foundSkeletonBall = false;
-    let foundOpticalBall = false;
     let skeletonBallX = 0; let skeletonBallY = 0;
+    
+    // Enterprise TIER 1: Aggregate and Score all structural skeletons natively in the frame!
+    let possessionCandidates = [];
 
     for (let pose of poses) {
         const points = pose.keypoints;
         const lAnk = points.find(p=>p.name==='left_ankle');
         const rAnk = points.find(p=>p.name==='right_ankle');
-        const activeAnk = (lAnk && lAnk.score > 0.05) ? lAnk : (rAnk && rAnk.score > 0.05 ? rAnk : null);
+        const lWrist = points.find(k => k.name === 'left_wrist');
+        const rWrist = points.find(k => k.name === 'right_wrist');
+        const lElb = points.find(k => k.name === 'left_elbow');
+        const rElb = points.find(k => k.name === 'right_elbow');
+        const lShol = points.find(k => k.name === 'left_shoulder');
+        const rShol = points.find(k => k.name === 'right_shoulder');
+        
+        let pScore = 1.0;
+        let cX = null; let cY = null;
+        let isEligible = false;
 
-        // FIX 1: Tighten Proximity Radius (Wrist Euclidean Constraint)
-        const lw = points.find(k => k.name === 'left_wrist');
-        const rw = points.find(k => k.name === 'right_wrist');
-        if (!ball && !foundOpticalBall && lw && rw && lw.score > 0.1 && rw.score > 0.1) {
-            let cx = (lw.x + rw.x) / 2;
-            let cy = Math.max(lw.y, rw.y) + 15; 
-            
-            // Mathematically refuse to lock onto wrists gracefully if they are physically further than 2-Feet natively scaled from the Ball's last verified Velocity Vector!
-            let eDist = lastBallX ? Math.hypot(cx - lastBallX, cy - lastBallY) : 0;
-            if (eDist < 200) { 
-                skeletonBallX = cx;
-                skeletonBallY = cy; 
-                foundSkeletonBall = true;
-                if (manualOverrideTimer <= 0) { targetBallX = skeletonBallX; targetBallY = skeletonBallY; }
+        // Base structural validation internally
+        if (!ball && !foundOpticalBall && lastBallX !== null && !isTransitMode) {
+            if (lWrist && rWrist && lWrist.score > 0.1 && rWrist.score > 0.1) {
+                cX = (lWrist.x + rWrist.x) / 2;
+                cY = Math.max(lWrist.y, rWrist.y) + 15; 
+                let eDist = Math.hypot(cX - lastBallX, cY - lastBallY);
+                if (eDist < 200) isEligible = true;
             }
         }
+        
+        if (isEligible) {
+            // FIX 3: Pose Masking (Elbow Angle Validation)
+            let L_Angle = getBoneAngle(lShol, lElb, lWrist);
+            let R_Angle = getBoneAngle(rShol, rElb, rWrist);
+            // If the arms are bent into a cradle/dribbling structural array (90-130 degrees), massively multiply possession likelihood!
+            if ((L_Angle > 70 && L_Angle < 140) || (R_Angle > 70 && R_Angle < 140)) pScore *= 2.0;
+            // If arms are dead straight (~180 degrees), penalize severely (defender swiping or blocking)
+            if ((L_Angle > 160) || (R_Angle > 160)) pScore *= 0.2;
+            
+            // FIX 5: Z-Index Depth Sorting (Closer to Camera wins structural occlusion limits)
+            let zFootprint = Math.max((lAnk ? lAnk.y : 0), (rAnk ? rAnk.y : 0));
 
-        if (activeAnk) {
-            let mapOut = mapToCourt(activeAnk.x, activeAnk.y, vW, vH);
+            possessionCandidates.push({
+                score: pScore, zIndex: zFootprint,
+                cX: cX, cY: cY
+            });
         }
 
         // Draw Skeleton natively
@@ -328,6 +361,19 @@ async function predictLoop() {
                 }
             });
         } catch(e) {}
+    }
+
+    // Evaluate Structural Possession Hierarchy
+    if (possessionCandidates.length > 0) {
+        // Sort explicitly by calculated Possession Score natively, using Z-depth foreground as a mathematical tie-breaker constraint!
+        possessionCandidates.sort((a, b) => b.score - a.score || b.zIndex - a.zIndex);
+        let victor = possessionCandidates[0];
+        if (victor.score >= 0.5) { // Minimum threshold to claim tracking natively 
+            skeletonBallX = victor.cX;
+            skeletonBallY = victor.cY;
+            foundSkeletonBall = true;
+            if (manualOverrideTimer <= 0) { targetBallX = skeletonBallX; targetBallY = skeletonBallY; }
+        }
     }
 
     // --- ABSOLUTE BALL TRACKING HUD RENDERER ---
