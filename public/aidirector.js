@@ -41,6 +41,8 @@ const offC = document.createElement('canvas');
 const offCtx = offC.getContext('2d');
 let lastBallX = null;
 let lastBallY = null;
+let targetBallX = null; // 3-Frame Hysteresis Anchor
+let targetBallY = null;
 let manualOverrideTimer = 0;
 
 // Dynamic Safe Optical Flow Extractor
@@ -177,7 +179,22 @@ async function predictLoop() {
         console.error("COCO Detect Error:", e);
     }
 
-    let ball = predictions.find(p => p.class === 'sports ball' && p.score > 0.15 && p.bbox[2] < 80);
+    // FIX 3: Square Aspect Ratio Geometry Filter (Discards elongated limbs/shoes misclassified as a ball natively)
+    let ball = predictions.find(p => {
+        if (p.class !== 'sports ball' || p.score < 0.15 || p.bbox[2] > 100) return false;
+        let aspectRatio = p.bbox[2] / p.bbox[3]; // W / H
+        if (aspectRatio < 0.6 || Math.abs(aspectRatio) > 1.6) return false; // Genuine basketballs natively rest near 1.0!
+        return true;
+    });
+
+    // FIX 2: Temporal Momentum Vector Glitch Filter
+    if (ball && lastBallX !== null) {
+        let bx = ball.bbox[0] + ball.bbox[2]/2;
+        let by = ball.bbox[1] + ball.bbox[3]/2;
+        let pDist = Math.hypot(bx - lastBallX, by - lastBallY);
+        // If the ball teleports more than 400 scaled pixels in 16ms (60 FPS), it's physically breaking the speed of sound! Reject it natively.
+        if (pDist > 400) ball = null; 
+    }
     
     let isShootingPhase = false;
 
@@ -185,8 +202,18 @@ async function predictLoop() {
     if (ball) {
         const [bx, by, bw, bh] = ball.bbox;
         if (manualOverrideTimer <= 0) {
-            lastBallX = bx + bw/2;
-            lastBallY = by + bh/2;
+            targetBallX = bx + bw/2;
+            targetBallY = by + bh/2;
+        }
+    }
+
+    // FIX 5: Hysteresis Buffer Array
+    // Natively Lerp (Linear Interpolate) `lastBallX` toward `targetBallX` over 3 frames to smooth out raw tracking jitter!
+    if (targetBallX !== null) {
+        if (lastBallX === null) { lastBallX = targetBallX; lastBallY = targetBallY; }
+        else {
+            lastBallX += (targetBallX - lastBallX) * 0.3; // 30% Hysteresis friction per frame
+            lastBallY += (targetBallY - lastBallY) * 0.3;
         }
     }
 
@@ -196,15 +223,21 @@ async function predictLoop() {
         // Raised to 0.15 to filter out blurry fans in the audience while keeping sharp players
         if (p.class === 'person' && p.score > 0.15) {
             const [bx, by, bw, bh] = p.bbox;
-            // Focus mapping on the "feet" / bottom line of bounding box
             const bcX = bx + bw / 2;
             const bcY = by + bh;
             let mapOut = mapToCourt(bcX, bcY, vW, vH);
             
-            currentPersonsOnMap.push({
-                X: mapOut.X, Y: mapOut.Y,
-                bbox: { x: bx, y: by, w: bw, h: bh }
-            });
+            // FIX 4: Center-Weighted Noise Gate
+            // If we have an active Ball Handler, penalize any random "person" detected natively more than 800 pixels away!
+            let distToPlay = lastBallX ? Math.hypot(bcX - lastBallX, bcY - lastBallY) : 0;
+            if (distToPlay > 800) { p.score *= 0.5; } // Artificially cut confidence natively if radically outside the Action Zone!
+            
+            if (mapOut && p.score > 0.15) {
+                currentPersonsOnMap.push({
+                    X: mapOut.X, Y: mapOut.Y,
+                    bbox: { x: bx, y: by, w: bw, h: bh }
+                });
+            }
             
             ctx.strokeStyle = "rgba(0, 243, 255, 0.3)";
             ctx.lineWidth = 1;
@@ -258,14 +291,21 @@ async function predictLoop() {
         const rAnk = points.find(p=>p.name==='right_ankle');
         const activeAnk = (lAnk && lAnk.score > 0.05) ? lAnk : (rAnk && rAnk.score > 0.05 ? rAnk : null);
 
-        // BESPOKE HEURISTIC BALL TRACKER: Find Hands if COCO lost the ball entirely
+        // FIX 1: Tighten Proximity Radius (Wrist Euclidean Constraint)
         const lw = points.find(k => k.name === 'left_wrist');
         const rw = points.find(k => k.name === 'right_wrist');
         if (!ball && !foundOpticalBall && lw && rw && lw.score > 0.1 && rw.score > 0.1) {
-            skeletonBallX = (lw.x + rw.x) / 2;
-            skeletonBallY = Math.max(lw.y, rw.y) + 15; // Basketball inherently rests below hands during dribbling
-            foundSkeletonBall = true;
-            if (manualOverrideTimer <= 0) { lastBallX = skeletonBallX; lastBallY = skeletonBallY; }
+            let cx = (lw.x + rw.x) / 2;
+            let cy = Math.max(lw.y, rw.y) + 15; 
+            
+            // Mathematically refuse to lock onto wrists gracefully if they are physically further than 2-Feet natively scaled from the Ball's last verified Velocity Vector!
+            let eDist = lastBallX ? Math.hypot(cx - lastBallX, cy - lastBallY) : 0;
+            if (eDist < 200) { 
+                skeletonBallX = cx;
+                skeletonBallY = cy; 
+                foundSkeletonBall = true;
+                if (manualOverrideTimer <= 0) { targetBallX = skeletonBallX; targetBallY = skeletonBallY; }
+            }
         }
 
         if (activeAnk) {
