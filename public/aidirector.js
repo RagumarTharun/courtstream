@@ -249,6 +249,7 @@ async function predictLoop() {
     }
 
     let foundSkeletonBall = false;
+    let foundOpticalBall = false;
     let skeletonBallX = 0; let skeletonBallY = 0;
 
     for (let pose of poses) {
@@ -291,7 +292,6 @@ async function predictLoop() {
 
     // --- ABSOLUTE BALL TRACKING HUD RENDERER ---
     let tX = null, tY = null, tW = 30, tH = 30;
-    let foundOpticalBall = false;
 
     // Execute Advanced Optical Pixel-Subtraction to detect high-speed passing natively if AI drops target!
     if (!ball && lastBallX !== null) {
