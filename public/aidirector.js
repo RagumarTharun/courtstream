@@ -297,6 +297,7 @@ async function predictLoop() {
     }
 
     let foundSkeletonBall = false;
+    let foundOpticalBall = false;
     let skeletonBallX = 0; let skeletonBallY = 0;
     
     // Enterprise TIER 1: Aggregate and Score all structural skeletons natively in the frame!
