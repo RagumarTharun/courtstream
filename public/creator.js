@@ -16,6 +16,7 @@ let isModelsLoaded = false;
 let isPlaying = false;
 let isExporting = false;
 let ballPositions = []; // Store past {x, y} for trail
+let activeWaves = []; // Store active ripple animations
 let renderingLoopId = null;
 let mediaRecorder = null;
 let exportChunks = [];
@@ -64,6 +65,7 @@ videoUpload.addEventListener("change", (e) => {
     video.src = url;
     video.load();
     video.muted = true; // Required for autoplay without DOM exception if needed
+    video.play();
 });
 
 video.addEventListener("loadedmetadata", () => {
@@ -85,6 +87,8 @@ video.addEventListener("ended", () => {
     if (isExporting) {
         finishExport();
     } else {
+        ballPositions = [];
+        activeWaves = [];
         video.currentTime = 0;
         video.play();
     }
@@ -123,10 +127,26 @@ function startRenderLoop() {
                         const [x, y, w, h] = ball.bbox;
                         const centerX = x + w / 2;
                         const centerY = y + h / 2;
-                        ballPositions.push({ x: centerX, y: centerY });
+                        ballPositions.push({ x: centerX, y: centerY, r: h / 2 });
+                        
+                        if (ballPositions.length >= 3) {
+                            const p0 = ballPositions[ballPositions.length - 3];
+                            const p1 = ballPositions[ballPositions.length - 2];
+                            const p2 = ballPositions[ballPositions.length - 1];
+                            
+                            // Check if p1 is a local maximum in Y (lowest point on screen)
+                            if (p1.y - p0.y > 5 && p1.y - p2.y > 5) {
+                                const lastBounce = activeWaves.length > 0 ? activeWaves[activeWaves.length - 1].videoTime : -1;
+                                if (video.currentTime - lastBounce > 0.3) {
+                                    activeWaves.push({ x: p1.x, y: p1.y + p1.r, radius: 0, opacity: 1, videoTime: video.currentTime });
+                                }
+                            }
+                        }
+
                         if (ballPositions.length > 30) ballPositions.shift(); // Trail length
                     }
                     drawBallTrail();
+                    drawWaves();
                 }
 
             } catch (err) {
@@ -228,6 +248,28 @@ function drawBallTrail() {
     ctx.stroke();
 }
 
+function drawWaves() {
+    for (let i = activeWaves.length - 1; i >= 0; i--) {
+        let wave = activeWaves[i];
+        
+        // Expand and fade
+        wave.radius += 5; // adjust speed of wave
+        wave.opacity -= 0.03; // adjust fade time
+        
+        if (wave.opacity <= 0) {
+            activeWaves.splice(i, 1);
+            continue;
+        }
+        
+        ctx.beginPath();
+        // Use an ellipse to simulate a 3D floor plane effect
+        ctx.ellipse(wave.x, wave.y, wave.radius, wave.radius * 0.35, 0, 0, 2 * Math.PI);
+        ctx.strokeStyle = `rgba(249, 115, 22, ${wave.opacity})`;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+    }
+}
+
 /* --- EXPORT LOGIC --- */
 const exportProgressPanel = document.getElementById("exportProgressPanel");
 const exportProgressFill = document.getElementById("exportProgressFill");
@@ -242,6 +284,7 @@ function startExport() {
     isExporting = true;
     exportChunks = [];
     ballPositions = []; // Reset trail
+    activeWaves = []; // Reset waves
     
     exportBtn.innerText = "Exporting...";
     exportBtn.style.opacity = "0.5";
