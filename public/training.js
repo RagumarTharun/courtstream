@@ -23,6 +23,7 @@ let rafId;
 let isPlaying = false;
 let shotCount = 0;
 let currentFacingMode = 'user';
+let isUploadedVideo = false;
 
 // --- ENTERPRISE HOMOGRAPHY & GEOSPATIAL TELEMETRY ---
 const speedDisplay = document.getElementById('speedDisplay');
@@ -166,6 +167,15 @@ function updateFeedbackUI(text, isGood = true) {
 }
 
 async function startCamera() {
+    isUploadedVideo = false;
+    video.controls = false;
+    video.style.opacity = '0.01';
+    video.style.position = 'absolute';
+    video.style.width = '1px';
+    video.style.height = '1px';
+    video.style.zIndex = '-1';
+    video.style.pointerEvents = 'none';
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         alert("Camera API not available in this browser.");
         return;
@@ -364,14 +374,16 @@ async function predictLoop() {
     if (video.readyState >= 2) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (currentFacingMode === 'user') {
-            ctx.save();
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            ctx.restore();
-        } else {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        if (!isUploadedVideo) {
+            if (currentFacingMode === 'user') {
+                ctx.save();
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                ctx.restore();
+            } else {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            }
         }
 
         const poses = await detector.estimatePoses(video, { maxPoses: 1, flipHorizontal: false });
@@ -624,6 +636,17 @@ videoUpload.addEventListener('change', (event) => {
         // If there was an active session, stop it.
         stopCamera();
         
+        isUploadedVideo = true;
+        currentFacingMode = 'environment';
+        
+        video.controls = true;
+        video.style.opacity = '1';
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.style.position = 'absolute';
+        video.style.zIndex = '1';
+        video.style.pointerEvents = 'auto';
+
         const objUrl = URL.createObjectURL(file);
         video.srcObject = null;
         video.src = objUrl;

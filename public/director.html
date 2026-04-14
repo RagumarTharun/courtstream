@@ -2028,9 +2028,12 @@
         const dash = document.getElementById("transferModal");
         if (dash) dash.style.display = "flex";
 
-        // 4. SIGNAL SAVE TO CAMERAS (Triggers P2P Hold)
+        // 4. SIGNAL SAVE TO CAMERAS AND REQUEST TRANSFERS IMMEDIATELY
         Object.keys(peers).forEach(id => {
           socket.emit("control", { to: id, data: { type: "stop-iso", save: "hold" } });
+          setTimeout(() => {
+             socket.emit("control", { to: id, data: { type: "request-transfer" } });
+          }, 1000);
         });
 
         // 5. WAIT FOR TRANSFERS BEFORE SHOWING OPTIONS

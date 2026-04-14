@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>CourtStream – Creator Hub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #161922;
+            --border: #262b3d;
+            --text: #e6e6eb;
+            --muted: #9aa0b4;
+            --blue: #3b82f6;
+            --red: #ef4444;
+            --green: #22c55e;
+            --purple: #8b5cf6;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* HEADER */
+        header {
+            height: 64px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .brand {
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .brand-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        button {
+            cursor: pointer;
+            border: none;
+            background: var(--border);
+            color: var(--text);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #333;
+        }
+
+        button.primary {
+            background: var(--purple);
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            padding: 10px 20px;
+        }
+
+        button.primary:hover {
+            background: #7c3aed;
+        }
+
+        button.danger {
+            background: var(--red);
+            color: white;
+        }
+
+        button.danger:hover {
+            background: #dc2626;
+        }
+
+        /* CONTAINER */
+        .container {
+            width: 100%;
+            flex: 1;
+            display: flex;
+            height: calc(100vh - 64px);
+            overflow: hidden;
+        }
+
+        .video-section {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+
+        #video {
+            /* Keep hidden but decodable */
+            opacity: 0.01;
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* Render Canvas (Where Video + AI are drawn together) */
+        #renderCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            z-index: 2;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: 380px;
+            background: var(--panel);
+            border-left: 1px solid var(--border);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .card h2 {
+            margin: 0 0 16px;
+            font-size: 16px;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toggle-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .toggle-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .toggle-label {
+            font-weight: 500;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Checkbox Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .switch input { 
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--border);
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--purple);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
+        /* UPLOAD STATE */
+        .upload-zone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(255,255,255,0.02);
+            position: absolute;
+            z-index: 10;
+        }
+        
+        .upload-zone:hover {
+            border-color: var(--purple);
+            background: rgba(139, 92, 246, 0.05);
+        }
+
+        .loader-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(15, 17, 21, 0.9);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text);
+        }
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--purple);
+            border-radius: 50%;
+            animation: spin 1s infinite linear;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Export Progress */
+        #exportProgressPanel {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 320px;
+            background: var(--panel);
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid var(--purple);
+            z-index: 200;
+            flex-direction: column;
+            gap: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        
+        .export-fill {
+            width: 0%;
+            height: 100%;
+            background: var(--purple);
+            transition: width 0.1s linear;
+        }
+
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <a href="index.html" class="brand">
+            <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="var(--purple)" />
+            </svg>
+            Creator Hub
+        </a>
+        <div style="display:flex; gap:12px;">
+            <button onclick="document.getElementById('videoUpload').click()">Choose Video</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="loader" class="loader-overlay">
+            <div class="spinner"></div>
+            <h2 id="loaderText">Loading Engine...</h2>
+            <p style="color: var(--muted); margin-top:10px;">Please wait</p>
+        </div>
+
+        <div class="video-section">
+            <div id="uploadPrompt" class="upload-zone" onclick="document.getElementById('videoUpload').click()">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                <h3 style="margin: 0 0 8px; color: white;">Drag & Drop Video</h3>
+                <p style="margin: 0; color: var(--muted); font-size: 14px;">or click to browse from your computer</p>
+            </div>
+            
+            <input type="file" id="videoUpload" accept="video/*" style="display: none;">
+            <video id="video" playsinline></video>
+            <canvas id="renderCanvas" style="display: none;"></canvas>
+        </div>
+
+        <div class="sidebar">
+            <div class="card">
+                <h2>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    Settings
+                </h2>
+                <p style="font-size: 13px; color: var(--muted); margin-top: 0;">Upload a video to activate AI overlays. These settings control what is drawn on the final export.</p>
+            </div>
+
+            <div class="card" id="settingsCard" style="opacity: 0.5; pointer-events: none;">
+                <h2>AI Overlays</h2>
+                
+                <div class="toggle-row">
+                    <span class="toggle-label">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                        Posture Skeleton
+                    </span>
+                    <label class="switch">
+                        <input type="checkbox" id="toggleSkeleton" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-row">
+                    <span class="toggle-label">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m-8-8h16"/></svg>
+                        Joint Angles
+                    </span>
+                    <label class="switch">
+                        <input type="checkbox" id="toggleAngles" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-row">
+                    <span class="toggle-label">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M5.4 5.4l13.2 13.2M18.6 5.4L5.4 18.6"/></svg>
+                        Ball Tracking Trails
+                    </span>
+                    <label class="switch">
+                        <input type="checkbox" id="toggleBall" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div style="flex:1;"></div>
+
+            <button id="exportBtn" class="primary" style="justify-content: center; opacity: 0.5; pointer-events: none;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                Export to Editor (MP4)
+            </button>
+        </div>
+    </div>
+
+    <!-- Export Progress -->
+    <div id="exportProgressPanel">
+        <div style="font-size:13px; font-weight:600; color:#fff;" id="exportStatusText">Rendering Composite...</div>
+        <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden; margin-top: 4px;">
+            <div id="exportProgressFill" class="export-fill"></div>
+        </div>
+        <button id="cancelExportBtn" class="danger" style="margin-top: 8px; font-size: 11px; padding: 4px;">Cancel</button>
+    </div>
+
+    <!-- Load TensorFlow.js and Pose Detection Models -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+    <script src="creator.js?v=1"></script>
+
+</body>
+
+</html>

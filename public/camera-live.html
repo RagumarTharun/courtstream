@@ -802,11 +802,15 @@
       let isoRecorder = null;
       let currentIsoSessionId = null;
       let segmentCounter = 0;
+      let heldIsoBlob = null;
+      let fullRecordingChunks = [];
 
       socket.on("start-iso", async ({ sessionId }) => {
         console.log("🎥 Starting Segmented ISO Recording for Session:", sessionId);
         currentIsoSessionId = sessionId;
         segmentCounter = 0;
+        heldIsoBlob = null;
+        fullRecordingChunks = [];
         if (!mediaStream) return;
 
         try {
@@ -816,6 +820,7 @@
           isoRecorder = new MediaRecorder(mediaStream, options);
           isoRecorder.ondataavailable = async (e) => {
             if (e.data && e.data.size > 1000) { // Essential check for valid blobs
+              fullRecordingChunks.push(e.data); // Keep in memory for WebRTC DataChannel transfer
               const segId = segmentCounter++;
               console.log(`💾 Saving Segment ${segId} (${(e.data.size / 1024).toFixed(1)} KB)`);
               await segmentDB.saveSegment({
@@ -914,6 +919,14 @@
         console.log("🛑 Stopping ISO Recording. Options:", options);
         if (isoRecorder) {
           isoRecorder.stop();
+          
+          setTimeout(() => {
+              if (fullRecordingChunks.length > 0) {
+                  heldIsoBlob = new Blob(fullRecordingChunks, { type: "video/webm" });
+                  console.log("✅ Compiled heldIsoBlob for WebRTC transfer, size:", heldIsoBlob.size);
+              }
+          }, 500);
+
           liveBadge.textContent = "STOPPED";
           setTimeout(() => liveBadge.style.display = "none", 3000);
         }
