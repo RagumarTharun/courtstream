@@ -28,10 +28,112 @@ let renderingLoopId = null;
 let mediaRecorder = null;
 let exportChunks = [];
 
-// Overlay Toggles
+// Overlay Toggles & Configs
 const toggleSkeleton = document.getElementById("toggleSkeleton");
+const skeletonColor = document.getElementById("skeletonColor");
+const skeletonThickness = document.getElementById("skeletonThickness");
+
 const toggleAngles = document.getElementById("toggleAngles");
+const angleRightElbow = document.getElementById("angleRightElbow");
+const angleLeftElbow = document.getElementById("angleLeftElbow");
+const angleRightKnee = document.getElementById("angleRightKnee");
+const angleLeftKnee = document.getElementById("angleLeftKnee");
+const angleTextColor = document.getElementById("angleTextColor");
+const angleTextSize = document.getElementById("angleTextSize");
+
 const toggleBall = document.getElementById("toggleBall");
+const ballTrailFrames = document.getElementById("ballTrailFrames");
+
+// Keyframes
+const keyframeCard = document.getElementById("keyframeCard");
+const addKeyframeBtn = document.getElementById("addKeyframeBtn");
+const keyframesList = document.getElementById("keyframesList");
+let keyframes = []; // Array of { time, settings }
+
+function getCurrentSettings() {
+    return {
+        skeleton: {
+            enabled: toggleSkeleton.checked,
+            color: skeletonColor.value,
+            thickness: parseInt(skeletonThickness.value, 10)
+        },
+        angles: {
+            enabled: toggleAngles.checked,
+            rElbow: angleRightElbow.checked,
+            lElbow: angleLeftElbow.checked,
+            rKnee: angleRightKnee.checked,
+            lKnee: angleLeftKnee.checked,
+            color: angleTextColor.value,
+            size: parseInt(angleTextSize.value, 10)
+        },
+        ball: {
+            enabled: toggleBall.checked,
+            trailFrames: parseInt(ballTrailFrames.value, 10)
+        }
+    };
+}
+
+function getActiveSettings() {
+    if (keyframes.length === 0) return getCurrentSettings();
+    
+    const t = video.currentTime;
+    let closest = null;
+    
+    // keyframes is sorted by time
+    for (let i = 0; i < keyframes.length; i++) {
+        if (keyframes[i].time <= t + 0.05) { // Small buffer
+            closest = keyframes[i];
+        } else {
+            break;
+        }
+    }
+    
+    return closest ? closest.settings : getCurrentSettings();
+}
+
+function renderKeyframesUI() {
+    keyframesList.innerHTML = "";
+    keyframes.sort((a, b) => a.time - b.time);
+    
+    keyframes.forEach((kf, idx) => {
+        const div = document.createElement("div");
+        div.style.display = "flex";
+        div.style.justifyContent = "space-between";
+        div.style.alignItems = "center";
+        div.style.background = "var(--border)";
+        div.style.padding = "8px 12px";
+        div.style.borderRadius = "6px";
+        
+        const timestamp = document.createElement("span");
+        timestamp.style.fontSize = "13px";
+        timestamp.style.fontWeight = "bold";
+        timestamp.innerText = "Snap at " + kf.time.toFixed(2) + "s";
+        
+        const removeBtn = document.createElement("button");
+        removeBtn.innerText = "X";
+        removeBtn.style.padding = "2px 6px";
+        removeBtn.style.background = "transparent";
+        removeBtn.style.color = "#ef4444";
+        removeBtn.style.border = "1px solid #ef4444";
+        removeBtn.onclick = () => {
+             keyframes.splice(idx, 1);
+             renderKeyframesUI();
+        };
+        
+        div.appendChild(timestamp);
+        div.appendChild(removeBtn);
+        keyframesList.appendChild(div);
+    });
+}
+
+addKeyframeBtn.addEventListener("click", () => {
+    const t = video.currentTime;
+    // Remove if there's very close one
+    keyframes = keyframes.filter(kf => Math.abs(kf.time - t) > 0.05);
+    
+    keyframes.push({ time: t, settings: getCurrentSettings() });
+    renderKeyframesUI();
+});
 
 async function initModels() {
     try {
@@ -104,6 +206,9 @@ videoUpload.addEventListener("change", (e) => {
     exportBtn.style.opacity = "1";
     exportBtn.style.pointerEvents = "auto";
     
+    keyframeCard.style.opacity = "1";
+    keyframeCard.style.pointerEvents = "auto";
+    
     playbar.style.display = "flex";
     
     renderCanvas.style.display = "block";
@@ -156,6 +261,8 @@ function startRenderLoop() {
         if (video.readyState >= 2) {
             // 1. Draw Video Base Layer
             ctx.drawImage(video, 0, 0, renderCanvas.width, renderCanvas.height);
+            
+            const activeSettings = getActiveSettings();
 
             // 2. Perform AI Inferences
             if (isModelsLoaded) {
@@ -164,17 +271,17 @@ function startRenderLoop() {
                 // So no bounding box scaling needed! Points are 1:1 with canvas.
                 
                 // POSTURE & ANGLES
-                if (toggleSkeleton.checked || toggleAngles.checked) {
+                if (activeSettings.skeleton.enabled || activeSettings.angles.enabled) {
                     const poses = await detector.estimatePoses(video);
                     if (poses.length > 0) {
                         const kp = poses[0].keypoints;
-                        if (toggleSkeleton.checked) drawSkeleton(kp);
-                        if (toggleAngles.checked) drawAngles(kp);
+                        if (activeSettings.skeleton.enabled) drawSkeleton(kp, activeSettings.skeleton);
+                        if (activeSettings.angles.enabled) drawAngles(kp, activeSettings.angles);
                     }
                 }
 
                 // BALL TRACKING
-                if (toggleBall.checked) {
+                if (activeSettings.ball.enabled) {
                     const predictions = await objectDetector.detect(video);
                     const ball = predictions.find(p => p.class === "sports ball");
                     
@@ -198,7 +305,9 @@ function startRenderLoop() {
                             }
                         }
 
-                        if (ballPositions.length > 30) ballPositions.shift(); // Trail length
+                        if (ballPositions.length > activeSettings.ball.trailFrames) {
+                            ballPositions = ballPositions.slice(-activeSettings.ball.trailFrames);
+                        }
                     }
                     drawBallTrail();
                     drawWaves();
@@ -216,11 +325,11 @@ function startRenderLoop() {
 }
 
 /* --- DRAWING HELPERS --- */
-function drawSkeleton(keypoints) {
+function drawSkeleton(keypoints, settings) {
     const adjacentKeyPoints = poseDetection.util.getAdjacentPairs(poseDetection.SupportedModels.MoveNet);
     
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(139, 92, 246, 0.8)"; // Purple
+    ctx.lineWidth = settings.thickness;
+    ctx.strokeStyle = settings.color;
     
     adjacentKeyPoints.forEach(([i, j]) => {
         const kp1 = keypoints[i];
@@ -237,7 +346,7 @@ function drawSkeleton(keypoints) {
     keypoints.forEach(kp => {
         if (kp.score > 0.3) {
             ctx.beginPath();
-            ctx.arc(kp.x, kp.y, 6, 0, 2 * Math.PI);
+            ctx.arc(kp.x, kp.y, settings.thickness * 1.5, 0, 2 * Math.PI);
             ctx.fill();
         }
     });
@@ -250,28 +359,38 @@ function calculateAngle(A, B, C) {
     return Math.round(angle);
 }
 
-function drawAngles(keypoints) {
+function drawAngles(keypoints, settings) {
     const getKeypoint = name => keypoints.find(k => k.name === name);
     const rShoulder = getKeypoint("right_shoulder");
     const rElbow = getKeypoint("right_elbow");
     const rWrist = getKeypoint("right_wrist");
+    const lShoulder = getKeypoint("left_shoulder");
+    const lElbow = getKeypoint("left_elbow");
+    const lWrist = getKeypoint("left_wrist");
     const rHip = getKeypoint("right_hip");
     const rKnee = getKeypoint("right_knee");
     const rAnkle = getKeypoint("right_ankle");
+    const lHip = getKeypoint("left_hip");
+    const lKnee = getKeypoint("left_knee");
+    const lAnkle = getKeypoint("left_ankle");
 
-    ctx.font = "bold 24px Arial";
-    ctx.fillStyle = "#22c55e"; // Green text for angles
+    ctx.font = `bold ${settings.size}px Arial`;
+    ctx.fillStyle = settings.color;
 
-    // Elbow Angle
-    if (rShoulder && rElbow && rWrist && rShoulder.score > 0.3 && rElbow.score > 0.3 && rWrist.score > 0.3) {
-        const angle = calculateAngle(rShoulder, rElbow, rWrist);
-        ctx.fillText(`${angle}°`, rElbow.x + 15, rElbow.y);
+    if (settings.rElbow && rShoulder && rElbow && rWrist && rShoulder.score > 0.3 && rElbow.score > 0.3 && rWrist.score > 0.3) {
+        ctx.fillText(`${calculateAngle(rShoulder, rElbow, rWrist)}°`, rElbow.x + 15, rElbow.y);
+    }
+    
+    if (settings.lElbow && lShoulder && lElbow && lWrist && lShoulder.score > 0.3 && lElbow.score > 0.3 && lWrist.score > 0.3) {
+        ctx.fillText(`${calculateAngle(lShoulder, lElbow, lWrist)}°`, lElbow.x - 45, lElbow.y);
     }
 
-    // Knee Angle
-    if (rHip && rKnee && rAnkle && rHip.score > 0.3 && rKnee.score > 0.3 && rAnkle.score > 0.3) {
-        const angle = calculateAngle(rHip, rKnee, rAnkle);
-        ctx.fillText(`${angle}°`, rKnee.x + 15, rKnee.y);
+    if (settings.rKnee && rHip && rKnee && rAnkle && rHip.score > 0.3 && rKnee.score > 0.3 && rAnkle.score > 0.3) {
+        ctx.fillText(`${calculateAngle(rHip, rKnee, rAnkle)}°`, rKnee.x + 15, rKnee.y);
+    }
+    
+    if (settings.lKnee && lHip && lKnee && lAnkle && lHip.score > 0.3 && lKnee.score > 0.3 && lAnkle.score > 0.3) {
+        ctx.fillText(`${calculateAngle(lHip, lKnee, lAnkle)}°`, lKnee.x - 45, lKnee.y);
     }
 }
 

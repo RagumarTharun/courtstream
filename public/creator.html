@@ -417,37 +417,79 @@
             <div class="card" id="settingsCard" style="opacity: 0.5; pointer-events: none;">
                 <h2>AI Overlays</h2>
                 
-                <div class="toggle-row">
-                    <span class="toggle-label">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
-                        Posture Skeleton
-                    </span>
-                    <label class="switch">
-                        <input type="checkbox" id="toggleSkeleton" checked>
-                        <span class="slider"></span>
-                    </label>
+                <div class="toggle-row" style="flex-wrap: wrap;">
+                    <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                        <span class="toggle-label">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                            Posture Skeleton
+                        </span>
+                        <label class="switch">
+                            <input type="checkbox" id="toggleSkeleton" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div style="padding-top:12px; width:100%; display:flex; gap:12px; align-items:center;" id="skeletonConfig">
+                        <input type="color" id="skeletonColor" value="#8b5cf6" style="width:32px; height:32px; border:none; padding:0; background:transparent; cursor:pointer;" title="Skeleton Color">
+                        <span style="font-size:12px; color:var(--muted);">Thickness</span>
+                        <input type="range" id="skeletonThickness" min="1" max="10" value="4" style="flex:1;" class="seekbar">
+                    </div>
                 </div>
 
-                <div class="toggle-row">
-                    <span class="toggle-label">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m-8-8h16"/></svg>
-                        Joint Angles
-                    </span>
-                    <label class="switch">
-                        <input type="checkbox" id="toggleAngles" checked>
-                        <span class="slider"></span>
-                    </label>
+                <div class="toggle-row" style="flex-wrap: wrap;">
+                    <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                        <span class="toggle-label">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m-8-8h16"/></svg>
+                            Joint Angles
+                        </span>
+                        <label class="switch">
+                            <input type="checkbox" id="toggleAngles" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div style="padding-top:12px; width:100%; display:flex; flex-direction:column; gap:12px;" id="anglesConfig">
+                        <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text);">
+                            <label style="cursor:pointer; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="angleRightElbow" checked> R-Elb</label>
+                            <label style="cursor:pointer; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="angleLeftElbow"> L-Elb</label>
+                            <label style="cursor:pointer; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="angleRightKnee" checked> R-Knee</label>
+                            <label style="cursor:pointer; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="angleLeftKnee"> L-Knee</label>
+                        </div>
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            <input type="color" id="angleTextColor" value="#22c55e" style="width:32px; height:32px; border:none; padding:0; background:transparent; cursor:pointer;" title="Text Color">
+                            <span style="font-size:12px; color:var(--muted);">Size</span>
+                            <input type="range" id="angleTextSize" min="12" max="48" value="24" style="flex:1;" class="seekbar">
+                        </div>
+                    </div>
                 </div>
 
-                <div class="toggle-row">
-                    <span class="toggle-label">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M5.4 5.4l13.2 13.2M18.6 5.4L5.4 18.6"/></svg>
-                        Ball Tracking Trails
-                    </span>
-                    <label class="switch">
-                        <input type="checkbox" id="toggleBall" checked>
-                        <span class="slider"></span>
-                    </label>
+                <div class="toggle-row" style="flex-wrap: wrap;">
+                    <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                        <span class="toggle-label">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M5.4 5.4l13.2 13.2M18.6 5.4L5.4 18.6"/></svg>
+                            Ball Tracking Trails
+                        </span>
+                        <label class="switch">
+                            <input type="checkbox" id="toggleBall" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div style="padding-top:12px; width:100%; display:flex; align-items:center; gap:12px;" id="ballConfig">
+                        <span style="font-size:12px; color:var(--muted);">Duration</span>
+                        <input type="range" id="ballTrailFrames" min="2" max="120" value="30" style="flex:1;" class="seekbar">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="keyframeCard" style="opacity: 0.5; pointer-events: none;">
+                <h2>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Keystones
+                </h2>
+                <p style="font-size: 13px; color: var(--muted); margin-top: 0; margin-bottom: 16px;">Save snapshots of these settings to automatically apply at specific timestamps.</p>
+                <button id="addKeyframeBtn" class="primary" style="width: 100%; justify-content: center; margin-bottom: 12px; font-size:13px; padding: 8px;">
+                    + Add Keystone Here
+                </button>
+                <div id="keyframesList" style="display:flex; flex-direction:column; gap:8px; max-height:180px; overflow-y:auto; overflow-x:hidden;">
+                    <!-- Keyframes will be injected here -->
                 </div>
             </div>
 
