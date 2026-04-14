@@ -9,6 +9,13 @@ const settingsCard = document.getElementById("settingsCard");
 const exportBtn = document.getElementById("exportBtn");
 const videoUpload = document.getElementById("videoUpload");
 
+const playbar = document.getElementById("playbar");
+const playPauseBtn = document.getElementById("playPauseBtn");
+const playIcon = document.getElementById("playIcon");
+const pauseIcon = document.getElementById("pauseIcon");
+const seekBar = document.getElementById("seekBar");
+const timeDisplay = document.getElementById("timeDisplay");
+
 // State
 let detector = null;
 let objectDetector = null;
@@ -48,6 +55,45 @@ async function initModels() {
 
 initModels();
 
+function formatTime(seconds) {
+    if (isNaN(seconds)) return "00:00";
+    const min = Math.floor(seconds / 60);
+    const sec = Math.floor(seconds % 60);
+    return min.toString().padStart(2, '0') + ':' + sec.toString().padStart(2, '0');
+}
+
+let isDraggingSeek = false;
+
+playPauseBtn.addEventListener("click", () => {
+    if (video.paused) video.play();
+    else video.pause();
+});
+
+seekBar.addEventListener("input", () => {
+    isDraggingSeek = true;
+    timeDisplay.innerText = formatTime(seekBar.value) + " / " + formatTime(video.duration);
+});
+
+seekBar.addEventListener("change", () => {
+    isDraggingSeek = false;
+    video.currentTime = seekBar.value;
+});
+
+video.addEventListener("timeupdate", () => {
+    if (!isDraggingSeek) {
+        seekBar.value = video.currentTime;
+        timeDisplay.innerText = formatTime(video.currentTime) + " / " + formatTime(video.duration);
+    }
+});
+
+video.addEventListener("seeked", () => {
+    if (video.paused && video.readyState >= 2) {
+        ctx.drawImage(video, 0, 0, renderCanvas.width, renderCanvas.height);
+        drawBallTrail();
+        drawWaves();
+    }
+});
+
 videoUpload.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -57,6 +103,8 @@ videoUpload.addEventListener("change", (e) => {
     settingsCard.style.pointerEvents = "auto";
     exportBtn.style.opacity = "1";
     exportBtn.style.pointerEvents = "auto";
+    
+    playbar.style.display = "flex";
     
     renderCanvas.style.display = "block";
     video.style.opacity = "0.01"; // Hidden but playing
@@ -72,15 +120,21 @@ video.addEventListener("loadedmetadata", () => {
     // Match Canvas to Video Aspect Ratio exactly for high quality stitch
     renderCanvas.width = video.videoWidth;
     renderCanvas.height = video.videoHeight;
+    seekBar.max = video.duration;
+    timeDisplay.innerText = "00:00 / " + formatTime(video.duration);
 });
 
 video.addEventListener("play", () => {
     isPlaying = true;
+    playIcon.style.display = "none";
+    pauseIcon.style.display = "block";
     startRenderLoop();
 });
 
 video.addEventListener("pause", () => {
     isPlaying = false;
+    playIcon.style.display = "block";
+    pauseIcon.style.display = "none";
 });
 
 video.addEventListener("ended", () => {
@@ -99,11 +153,12 @@ function startRenderLoop() {
     async function loop() {
         if (!isPlaying && !isExporting) return;
         
-        // 1. Draw Video Base Layer
-        ctx.drawImage(video, 0, 0, renderCanvas.width, renderCanvas.height);
+        if (video.readyState >= 2) {
+            // 1. Draw Video Base Layer
+            ctx.drawImage(video, 0, 0, renderCanvas.width, renderCanvas.height);
 
-        // 2. Perform AI Inferences
-        if (isModelsLoaded && video.readyState >= 2) {
+            // 2. Perform AI Inferences
+            if (isModelsLoaded) {
             try {
                 // Determine scale logic if we were scaling, but we matched width/height
                 // So no bounding box scaling needed! Points are 1:1 with canvas.
@@ -153,6 +208,7 @@ function startRenderLoop() {
                 console.warn("Inference error:", err);
             }
         }
+        } // Close if (video.readyState >= 2)
 
         renderingLoopId = requestAnimationFrame(loop);
     }
@@ -292,6 +348,9 @@ function startExport() {
     exportProgressPanel.style.display = "flex";
     exportProgressFill.style.width = "0%";
     
+    playbar.style.pointerEvents = "none";
+    playbar.style.opacity = "0.5";
+    
     // Create MediaRecorder from Canvas
     const stream = renderCanvas.captureStream(30); // 30 FPS
     mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" });
@@ -350,6 +409,9 @@ function resetExportUI() {
     exportBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg> Export to Editor (MP4)';
     exportBtn.style.opacity = "1";
     exportBtn.style.pointerEvents = "auto";
+    
+    playbar.style.pointerEvents = "auto";
+    playbar.style.opacity = "1";
 }
 
 document.getElementById("cancelExportBtn").addEventListener("click", () => {
