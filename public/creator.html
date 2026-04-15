@@ -437,6 +437,21 @@
             <div class="card" id="settingsCard" style="opacity: 0.5; pointer-events: none;">
                 <h2>AI Overlays</h2>
                 
+                <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 13px; font-weight: 500;">Player Tracking</span>
+                        <span id="trackingStatus" style="font-size: 11px; color: var(--purple); font-weight: 600; padding: 2px 6px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">Auto Mode</span>
+                    </div>
+                    <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px 0;">Click below then click a player on the video to lock onto them.</p>
+                    <div style="display: flex; gap: 8px;">
+                        <button id="trackPlayerBtn" class="primary" style="flex: 1; justify-content: center; font-size: 12px; padding: 6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                            Track Player
+                        </button>
+                        <button id="clearTrackBtn" style="font-size: 12px; padding: 6px; display: none;">Clear</button>
+                    </div>
+                </div>
+
                 <div class="toggle-row" style="flex-wrap: wrap;">
                     <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                         <span class="toggle-label">

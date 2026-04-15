@@ -24,6 +24,7 @@ let isModelsLoaded = false;
 let isPlaying = false;
 let isExporting = false;
 let isTrackingMode = false;
+let isWaitingForClick = false;
 let selectedPoseCenter = null;
 let ballPositions = []; // Store past {x, y} for trail
 let activeWaves = []; // Store active ripple animations
@@ -32,6 +33,10 @@ let mediaRecorder = null;
 let exportChunks = [];
 
 // Overlay Toggles & Configs
+const trackPlayerBtn = document.getElementById("trackPlayerBtn");
+const clearTrackBtn = document.getElementById("clearTrackBtn");
+const trackingStatus = document.getElementById("trackingStatus");
+
 const toggleSkeleton = document.getElementById("toggleSkeleton");
 const skeletonColor = document.getElementById("skeletonColor");
 const skeletonThickness = document.getElementById("skeletonThickness");
@@ -173,12 +178,17 @@ speedSelect.addEventListener("change", (e) => {
     video.playbackRate = parseFloat(e.target.value);
 });
 
-document.addEventListener("keydown", (e) => {
+window.addEventListener("keydown", (e) => {
     // Ignore inputs if user is typing in a text field
-    if (e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
+    const tag = document.activeElement ? document.activeElement.tagName : '';
+    if (['INPUT', 'TEXTAREA'].includes(tag) && document.activeElement.type !== 'range') return;
 
     if (e.code === "Space") {
         e.preventDefault();
+        // Prevent spacebar from clicking focused buttons accidentally
+        if (document.activeElement && tag === 'BUTTON') {
+             document.activeElement.blur();
+        }
         if (video.paused) video.play(); else video.pause();
     } else if (e.code === "ArrowRight") {
         e.preventDefault();
@@ -189,15 +199,62 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
+if (trackPlayerBtn) {
+    trackPlayerBtn.addEventListener("click", () => {
+        isWaitingForClick = true;
+        renderCanvas.style.cursor = "crosshair";
+        trackingStatus.innerText = "Click player...";
+        trackingStatus.style.color = "#ef4444";
+        trackingStatus.style.background = "rgba(239, 68, 68, 0.1)";
+    });
+
+    clearTrackBtn.addEventListener("click", () => {
+        isTrackingMode = false;
+        isWaitingForClick = false;
+        selectedPoseCenter = null;
+        renderCanvas.style.cursor = "default";
+        trackingStatus.innerText = "Auto Mode";
+        trackingStatus.style.color = "var(--purple)";
+        trackingStatus.style.background = "rgba(139, 92, 246, 0.1)";
+        clearTrackBtn.style.display = "none";
+    });
+}
+
 renderCanvas.addEventListener("click", (e) => {
-    // Calculate click position relative to canvas coordinate space
-    const rect = renderCanvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (renderCanvas.width / rect.width);
-    const y = (e.clientY - rect.top) * (renderCanvas.height / rect.height);
+    if (!isWaitingForClick) return; // Only track if button was pressed
     
-    // Set target
-    selectedPoseCenter = { x, y };
-    isTrackingMode = true;
+    // Account for letterboxing from object-fit: contain
+    const rect = renderCanvas.getBoundingClientRect();
+    const CW = rect.width;
+    const CH = rect.height;
+    const VW = renderCanvas.width;
+    const VH = renderCanvas.height;
+
+    const scale = Math.min(CW / VW, CH / VH);
+    const drawWidth = VW * scale;
+    const drawHeight = VH * scale;
+    const offsetX = (CW - drawWidth) / 2;
+    const offsetY = (CH - drawHeight) / 2;
+
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const px = (clickX - offsetX) / scale;
+    const py = (clickY - offsetY) / scale;
+
+    // Reject clicks outside the actual video content bounds
+    if (px >= 0 && px <= VW && py >= 0 && py <= VH) {
+        selectedPoseCenter = { x: px, y: py };
+        isTrackingMode = true;
+        isWaitingForClick = false;
+        renderCanvas.style.cursor = "default";
+        if (trackingStatus) {
+            trackingStatus.innerText = "Locked On";
+            trackingStatus.style.color = "var(--green)";
+            trackingStatus.style.background = "rgba(34, 197, 94, 0.1)";
+            clearTrackBtn.style.display = "block";
+        }
+    }
 });
 
 playPauseBtn.addEventListener("click", () => {
