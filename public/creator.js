@@ -15,6 +15,7 @@ const playIcon = document.getElementById("playIcon");
 const pauseIcon = document.getElementById("pauseIcon");
 const seekBar = document.getElementById("seekBar");
 const timeDisplay = document.getElementById("timeDisplay");
+const speedSelect = document.getElementById("speedSelect");
 
 // State
 let detector = null;
@@ -22,6 +23,8 @@ let objectDetector = null;
 let isModelsLoaded = false;
 let isPlaying = false;
 let isExporting = false;
+let isTrackingMode = false;
+let selectedPoseCenter = null;
 let ballPositions = []; // Store past {x, y} for trail
 let activeWaves = []; // Store active ripple animations
 let renderingLoopId = null;
@@ -139,7 +142,7 @@ async function initModels() {
     try {
         loader.style.display = "flex";
         loaderText.innerText = "Loading Pose Engine...";
-        const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER };
+        const detectorConfig = { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING };
         detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
 
         loaderText.innerText = "Loading Ball Tracker...";
@@ -165,6 +168,37 @@ function formatTime(seconds) {
 }
 
 let isDraggingSeek = false;
+
+speedSelect.addEventListener("change", (e) => {
+    video.playbackRate = parseFloat(e.target.value);
+});
+
+document.addEventListener("keydown", (e) => {
+    // Ignore inputs if user is typing in a text field
+    if (e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
+
+    if (e.code === "Space") {
+        e.preventDefault();
+        if (video.paused) video.play(); else video.pause();
+    } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        video.currentTime = Math.min(video.duration, video.currentTime + 5);
+    } else if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        video.currentTime = Math.max(0, video.currentTime - 5);
+    }
+});
+
+renderCanvas.addEventListener("click", (e) => {
+    // Calculate click position relative to canvas coordinate space
+    const rect = renderCanvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (renderCanvas.width / rect.width);
+    const y = (e.clientY - rect.top) * (renderCanvas.height / rect.height);
+    
+    // Set target
+    selectedPoseCenter = { x, y };
+    isTrackingMode = true;
+});
 
 playPauseBtn.addEventListener("click", () => {
     if (video.paused) video.play();
@@ -274,7 +308,39 @@ function startRenderLoop() {
                 if (activeSettings.skeleton.enabled || activeSettings.angles.enabled) {
                     const poses = await detector.estimatePoses(video);
                     if (poses.length > 0) {
-                        const kp = poses[0].keypoints;
+                        let targetPose = poses[0]; // fallback
+                        
+                        if (isTrackingMode && selectedPoseCenter) {
+                            let minDistance = Infinity;
+                            for (let i = 0; i < poses.length; i++) {
+                                const p = poses[i];
+                                let cx = 0, cy = 0;
+                                if (p.box) {
+                                    cx = p.box.xMin + p.box.width / 2;
+                                    cy = p.box.yMin + p.box.height / 2;
+                                } else if (p.keypoints && p.keypoints.length > 0) {
+                                    cx = p.keypoints.reduce((s, k) => s + k.x, 0) / p.keypoints.length;
+                                    cy = p.keypoints.reduce((s, k) => s + k.y, 0) / p.keypoints.length;
+                                }
+                                
+                                const dist = Math.hypot(cx - selectedPoseCenter.x, cy - selectedPoseCenter.y);
+                                if (dist < minDistance) {
+                                    minDistance = dist;
+                                    targetPose = p;
+                                }
+                            }
+                            
+                            // Update dynamic tracking center to follow them
+                            if (targetPose.box) {
+                                selectedPoseCenter.x = targetPose.box.xMin + targetPose.box.width / 2;
+                                selectedPoseCenter.y = targetPose.box.yMin + targetPose.box.height / 2;
+                            } else if (targetPose.keypoints && targetPose.keypoints.length > 0) {
+                                selectedPoseCenter.x = targetPose.keypoints.reduce((s, k) => s + k.x, 0) / targetPose.keypoints.length;
+                                selectedPoseCenter.y = targetPose.keypoints.reduce((s, k) => s + k.y, 0) / targetPose.keypoints.length;
+                            }
+                        }
+
+                        const kp = targetPose.keypoints;
                         if (activeSettings.skeleton.enabled) drawSkeleton(kp, activeSettings.skeleton);
                         if (activeSettings.angles.enabled) drawAngles(kp, activeSettings.angles);
                     }

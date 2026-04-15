@@ -309,6 +309,20 @@
             text-align: right;
         }
 
+        .speed-select {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+        }
+        .speed-select option {
+            background: var(--panel);
+        }
+
         .loader-overlay {
             position: fixed;
             top: 0; left: 0;
@@ -402,6 +416,12 @@
                 </button>
                 <input type="range" id="seekBar" class="seekbar" value="0" min="0" step="0.01">
                 <div id="timeDisplay" class="timedisplay">00:00 / 00:00</div>
+                <select id="speedSelect" class="speed-select">
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1.0x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2.0x</option>
+                </select>
             </div>
         </div>
 
