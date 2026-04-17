@@ -297,6 +297,27 @@ app.delete("/api/streams/:id", (req, res) => {
 });
 
 /* =========================
+   ISO SEGMENT UPLOAD
+========================= */
+const uploadIsoStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_ISO),
+  filename: (req, file, cb) => {
+    const { sessionId, camId, segmentIndex } = req.body;
+    if (sessionId && camId && segmentIndex !== undefined) {
+       cb(null, `${sessionId}_${camId}_${segmentIndex}.webm`);
+    } else {
+       cb(null, file.originalname || Date.now() + ".webm");
+    }
+  }
+});
+const isoUpload = multer({ storage: uploadIsoStorage });
+
+app.post("/api/upload-iso", isoUpload.single("video"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Missing video file" });
+  res.json({ success: true, filename: req.file.filename });
+});
+
+/* =========================
    FEEDBACK & ADMIN API
 ========================= */
 app.post("/api/feedback", (req, res) => {
