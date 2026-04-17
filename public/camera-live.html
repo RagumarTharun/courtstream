@@ -906,11 +906,30 @@
           const xhr = new XMLHttpRequest();
           xhr.open("POST", "/api/upload-iso", true);
 
+          const overlay = document.getElementById("uploadProgressOverlay");
+          const fill = document.getElementById("uploadProgressFill");
+          const statusText = document.getElementById("uploadStatusText");
+          const retryBtn = document.getElementById("retryUploadBtn");
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
+              overlay.style.display = "flex";
+              retryBtn.style.display = "none";
+              statusText.innerText = `Uploading Segment ${seg.segmentIndex}...`;
+              fill.style.width = percent + "%";
+            }
+          };
+
           xhr.onload = () => {
+            overlay.style.display = "none";
             if (xhr.status === 200) resolve(JSON.parse(xhr.responseText));
             else reject(new Error(`Server returned ${xhr.status}`));
           };
-          xhr.onerror = () => reject(new Error("Network Error"));
+          xhr.onerror = () => {
+            overlay.style.display = "none";
+            reject(new Error("Network Error"));
+          };
           xhr.send(formData);
         });
       }

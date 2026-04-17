@@ -2913,7 +2913,7 @@
     function waitForTransfers(requiredSet) {
       return new Promise(resolve => {
         const start = Date.now();
-        const timeout = 60000; // Increase to 60s for high-quality files
+        const timeout = 600000; // 10 minutes timeout for high-quality file transfers
         const check = setInterval(() => {
           // Check if any required cameras are missing AND NOT cancelled
           const missing = Array.from(requiredSet).filter(id => !receivedRecordings[id] && !cancelledTransfers.has(id));
@@ -2932,7 +2932,7 @@
                   if (cancelBtn) cancelBtn.style.display = "inline-flex";
                   const row = document.getElementById(`xfer_${id}`);
                   if (row) {
-                    row.querySelector(".pct").innerText = "Waiting...";
+                    row.querySelector(".pct").innerText = "Timeout / Waiting...";
                     row.querySelector(".pct").style.color = "#ea580c"; // Orange warning
                   }
                 }
