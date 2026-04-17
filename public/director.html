@@ -767,50 +767,44 @@
         Choose how you want to save this session.
       </p>
 
-      <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
-        <!-- Option 1: Render Now -->
-        <button class="ctrl-btn" onclick="handleChoice('render_now')"
-          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px; display:none;">
-          <div style="text-align:left;">
-            <div style="font-weight:600;">Render Now</div>
-            <div style="font-size:11px; color:var(--muted);">Stitch high-quality Program feed now</div>
+      <div style="display:flex; flex-direction:column; gap:10px; width:100%; text-align:left;">
+        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600; padding:12px; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:8px;">
+          <input type="checkbox" id="dlQualityFeed" checked style="accent-color:var(--blue); width:18px; height:18px;">
+          <div>
+            Quality Feed (High-res ISOs)
+            <div style="font-size:11px; color:var(--muted); font-weight:normal;">Maximum recording quality from individual cameras</div>
           </div>
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor"
-              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" />
-          </svg>
-        </button>
+        </label>
 
-        <!-- Option 2: Download Raw & Render Later -->
-        <button class="ctrl-btn" onclick="handleChoice('raw_later')"
-          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px;">
-          <div style="text-align:left;">
-            <div style="font-weight:600;">Download Raw & Render Later</div>
-            <div style="font-size:11px; color:var(--muted);">Fastest file retrieval for later editing</div>
+        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600; padding:12px; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:8px;">
+          <input type="checkbox" id="dlInstantFeed" style="accent-color:var(--blue); width:18px; height:18px;">
+          <div>
+             Instant Feed (Local / Fast)
+             <div style="font-size:11px; color:var(--muted); font-weight:normal;">Fastest retrieval, lower quality mirrored feed</div>
           </div>
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor"
-              d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" />
-          </svg>
-        </button>
+        </label>
 
-        <!-- Option 3: Instant Feed (Local) -->
-        <button class="ctrl-btn" onclick="handleChoice('instant')"
-          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px;">
-          <div style="text-align:left;">
-            <div style="font-weight:600;">Instant Feed</div>
-            <div style="font-size:11px; color:var(--muted);">Save low-quality mirror from browser</div>
-          </div>
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor" d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z" />
-          </svg>
+        <button class="btn-premium" onclick="handleDownloadSubmit()" style="margin-top:10px; width:100%; justify-content:center; padding:12px;">
+          <svg viewBox="0 0 24 24" width="20" height="20" style="margin-right:8px;"><path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" /></svg>
+          Get Downloads
         </button>
       </div>
 
       <div class="modal-actions" style="margin-top:20px;">
         <button class="ctrl-btn" onclick="closeStopModal()"
-          style="background:transparent; border:none; color:var(--muted);">Cancel</button>
+          style="background:transparent; border:none; color:var(--muted); width:100%;">Cancel</button>
       </div>
+
+      <script>
+        function handleDownloadSubmit() {
+          const q = document.getElementById('dlQualityFeed').checked;
+          const i = document.getElementById('dlInstantFeed').checked;
+          if (q && i) handleChoice('both');
+          else if (q) handleChoice('raw_later');
+          else if (i) handleChoice('instant');
+          else alert("Please select at least one feed type to download.");
+        }
+      </script>
     </div>
   </div>
 
@@ -2028,52 +2022,52 @@
         const dash = document.getElementById("transferModal");
         if (dash) dash.style.display = "flex";
 
-        // 4. SIGNAL SAVE TO CAMERAS AND REQUEST TRANSFERS IMMEDIATELY
+        // 4. SIGNAL SAVE TO CAMERAS AND REQUEST TRANSFERS (IF QUALITY FEED SELECTED)
         Object.keys(peers).forEach(id => {
           socket.emit("control", { to: id, data: { type: "stop-iso", save: "hold" } });
-          setTimeout(() => {
-             socket.emit("control", { to: id, data: { type: "request-transfer" } });
-          }, 1000);
+          if (mode === "raw_later" || mode === "both" || mode === "render_now") {
+            setTimeout(() => {
+               socket.emit("control", { to: id, data: { type: "request-transfer" } });
+            }, 1000);
+          }
         });
 
-        // 5. WAIT FOR TRANSFERS BEFORE SHOWING OPTIONS
+        // 5. SHOW PROCESSING STATUS
         const renderPanel = document.getElementById("renderPhase");
         if (renderPanel) {
           renderPanel.innerHTML = `
               <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 12px; padding: 30px; text-align: center;">
                   <div class="loader" style="margin: 0 auto 15px auto;"></div>
-                  <h3 style="color:white; margin:0;">Waiting for High-Quality Source Files...</h3>
-                  <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Receiving original recordings from cameras to ensure best quality.</p>
+                  <h3 style="color:white; margin:0;">Processing Downloads...</h3>
+                  <p style="color:#94a3b8; font-size:14px; margin-top:8px;">${mode === 'instant' ? 'Preparing instant feeds...' : 'Receiving high-quality recordings from cameras...'}</p>
               </div>
           `;
           renderPanel.style.display = "block";
         }
 
-        const camerasToTransfer = new Set(Object.keys(peers).filter(id => peers[id].stream));
-        console.log("⏳ stopAndFinalize: Waiting for transfers from:", Array.from(camerasToTransfer));
+        if (mode === "raw_later" || mode === "both" || mode === "render_now") {
+          const camerasToTransfer = new Set(Object.keys(peers).filter(id => peers[id].stream));
+          console.log("⏳ stopAndFinalize: Waiting for transfers from:", Array.from(camerasToTransfer));
 
-        // Show transfer UI and status
-        const tStatusBadge = document.getElementById("transferStatusBadge");
-        if (tStatusBadge) {
-          tStatusBadge.innerText = "TRANSFERRING";
-          tStatusBadge.className = "status-badge processing";
-        }
+          const tStatusBadge = document.getElementById("transferStatusBadge");
+          if (tStatusBadge) {
+            tStatusBadge.innerText = "TRANSFERRING";
+            tStatusBadge.className = "status-badge processing";
+          }
 
-        await waitForTransfers(camerasToTransfer);
+          await waitForTransfers(camerasToTransfer);
 
-        if (tStatusBadge) {
-          tStatusBadge.innerText = "SYNC COMPLETE";
-          tStatusBadge.className = "status-badge success";
+          if (tStatusBadge) {
+            tStatusBadge.innerText = "SYNC COMPLETE";
+            tStatusBadge.className = "status-badge success";
+          }
         }
 
         // 6. SHOW DOWNLOAD SELECTION & APPLY CHOICE
         showDownloadSelectionModal(mode);
 
-        // AUTO-EXECUTE only for Raw Later and Instant
-        // Render Now shows the selection screen first
-        if (mode === 'raw_later' || mode === 'instant') {
+        if (mode === 'raw_later' || mode === 'instant' || mode === 'both') {
           console.log("⚡ Auto-triggering process based on choice:", mode);
-          // Small delay to ensure UI updates before heavy processing
           setTimeout(() => processSelectedDownloads(mode), 500);
         }
 
@@ -2091,12 +2085,12 @@
       const renderPanel = document.getElementById("renderPhase");
       if (!renderPanel) return;
 
-      if (mode === 'raw_later' || mode === 'instant') {
+      if (mode === 'raw_later' || mode === 'instant' || mode === 'both') {
         // Skip selection UI, show simple status
         renderPanel.innerHTML = `
                 <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 12px; padding: 30px; text-align: center;">
                     <div class="loader" style="margin: 0 auto 15px auto;"></div>
-                    <h3 style="color:white; margin:0;">Processing ${mode === 'raw_later' ? 'Raw Feeds' : 'Instant Previews'}...</h3>
+                    <h3 style="color:white; margin:0;">Processing ${mode === 'both' ? 'All Feeds' : mode === 'raw_later' ? 'Raw Feeds' : 'Instant Previews'}...</h3>
                     <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Transferring and preparing your downloads.</p>
                 </div>
             `;
@@ -2602,13 +2596,18 @@
 
       if (autoMode === 'raw_later' || autoMode === 'render_now') {
         // "Raw" choice: Select all High-Quality ISOs + EDL
-        // Note: 'render_now' also starts with raw download + EDL as safety, then boots into render.html
         Object.keys(peers).forEach(id => ops.isos[id] = 'webm');
         if (autoMode === 'render_now') ops.final = 'webm';
       } else if (autoMode === 'instant') {
         // "Instant" choice: Select all Mirrors + Local Program
         ops.program = 'webm';
         Object.keys(peers).forEach(id => ops.mirrors[id] = 'webm');
+      } else if (autoMode === 'both') {
+        ops.program = 'webm';
+        Object.keys(peers).forEach(id => {
+          ops.isos[id] = 'webm';
+          ops.mirrors[id] = 'webm';
+        });
       } else {
         // MANUAL MODE: Read from checkboxes if they exist
         ops.final = document.getElementById('sel_final_mix')?.checked ?
