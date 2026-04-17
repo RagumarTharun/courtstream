@@ -934,7 +934,7 @@
         });
       }
 
-      socket.on("stop-iso", (options) => {
+      function handleStopIso(options) {
         console.log("🛑 Stopping ISO Recording. Options:", options);
         if (isoRecorder) {
           isoRecorder.stop();
@@ -949,25 +949,33 @@
           liveBadge.textContent = "STOPPED";
           setTimeout(() => liveBadge.style.display = "none", 3000);
         }
+      }
+
+      socket.on("stop-iso", (options) => {
+        handleStopIso(options);
       });
 
       // New Handlers for Delayed Workflow
       function handleTransferRequest() {
         console.log("📨 Received Transfer Request from Director");
-        if (!heldIsoBlob) {
-          console.warn("⚠️ No held recording to transfer!");
-          return;
-        }
+        
+        const tryTransfer = () => {
+          if (!heldIsoBlob) {
+            console.warn("⚠️ heldIsoBlob not ready yet... checking again in 500ms");
+            setTimeout(tryTransfer, 500);
+            return;
+          }
 
-        if (dataChannel && dataChannel.readyState === "open") {
-          liveBadge.innerHTML = "SENDING";
-          liveBadge.style.background = "#b91c1c";
-          transferRecording(heldIsoBlob);
-          // Verify if we want to clear it? Maybe keep until confirmed? 
-          // Let's keep it until discard or new session clears it.
-        } else {
-          alert("Director disconnected. Cannot transfer.");
-        }
+          if (dataChannel && dataChannel.readyState === "open") {
+            liveBadge.innerHTML = "SENDING";
+            liveBadge.style.background = "#b91c1c";
+            transferRecording(heldIsoBlob);
+          } else {
+            alert("Director disconnected. Cannot transfer.");
+          }
+        };
+        
+        tryTransfer();
       }
 
       function handleDiscardRequest() {
