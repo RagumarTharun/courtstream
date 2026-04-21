@@ -616,9 +616,17 @@
       }
 
       function handleMessage(event) {
-        const msg = JSON.parse(event.data);
+        let msg;
+        try {
+          msg = JSON.parse(event.data);
+        } catch { return; }
+        
         if (msg.type === "ack") {
           // handle flow control if needed
+        } else if (msg.type === "ping") {
+          if (dataChannel && dataChannel.readyState === "open") {
+            dataChannel.send(JSON.stringify({ type: "pong" }));
+          }
         }
       }
       initWebRTC();
@@ -1013,7 +1021,7 @@
             name: `camera_${socket.id}.webm`
           }));
 
-          const buffer = await blob.arrayBuffer();
+          const buffer = null; // Memory optimized, read chunk by chunk instead
           const updateProgress = (p) => {
             fill.style.width = p + "%";
           };
@@ -1025,7 +1033,8 @@
 
             const start = i * CHUNK_SIZE;
             const end = Math.min(start + CHUNK_SIZE, totalSize);
-            const chunk = buffer.slice(start, end);
+            const chunkBlob = blob.slice(start, end);
+            const chunk = await chunkBlob.arrayBuffer();
 
             // Increased to 2MB buffer and dropped sleep to 4ms for much faster local transfers
             while (dataChannel.bufferedAmount > 2 * 1024 * 1024) {
@@ -1034,6 +1043,7 @@
             }
 
             dataChannel.send(chunk);
+
 
             if (i % 20 === 0) {
               updateProgress(Math.floor((i / totalChunks) * 100));

@@ -1089,6 +1089,7 @@
       if (p.slot) {
         try { p.slot.remove(); } catch (e) { }
       }
+      if (p.pingInterval) clearInterval(p.pingInterval);
       delete peers[id];
       delete rotations[id];
 
@@ -1588,7 +1589,17 @@
       peers[id].fileMeta = null;
       peers[id].receivedSize = 0;
 
-      dc.onopen = () => console.log(`✅ Data Channel Open with ${id} `);
+      dc.onopen = () => {
+        console.log(`✅ Data Channel Open with ${id} `);
+        peers[id].pingInterval = setInterval(() => {
+          if (dc.readyState === "open") dc.send(JSON.stringify({ type: "ping" }));
+        }, 10000);
+      };
+      
+      dc.onclose = () => {
+        if (peers[id].pingInterval) clearInterval(peers[id].pingInterval);
+      };
+
       dc.onmessage = (event) => handleDataMessage(id, event.data);
 
       pc.createOffer()
