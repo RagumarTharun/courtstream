@@ -1210,6 +1210,15 @@
       if (v) v.style.transform = `rotate(${rotation}deg)`;
     });
 
+    /* ===== CONTROL MESSAGES (FALLBACKS) ===== */
+    socket.on("control", ({ from, data }) => {
+      if (data && data.type === "transfer-fallback") {
+        console.warn(`⚠️ Camera ${from} reported WebRTC transfer failed. Falling back / cancelling WebRTC wait.`);
+        // Mark as skipped/failed so director doesn't wait forever
+        cancelTransfer(from);
+      }
+    });
+
     /* ===== CREATE CAMERA PEER ===== */
     let cameraCount = 0;
     let turnConfig = null;
@@ -2749,7 +2758,7 @@
             if (!blob && cameraRecorders[id]?.chunks.length) {
               blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
             }
-            if (blob) {
+            if (blob && blob.size > 1000) {
               const safeCamName = sanitizeName(peers[id]?.name || id);
               const safeStreamName = sanitizeName(streamName || streamId);
               let suffix = "_raw_quality";

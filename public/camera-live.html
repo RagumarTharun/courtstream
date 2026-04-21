@@ -827,20 +827,31 @@
 
           isoRecorder = new MediaRecorder(mediaStream, options);
           isoRecorder.ondataavailable = async (e) => {
-            if (e.data && e.data.size > 1000) { // Essential check for valid blobs
+            if (e.data && e.data.size > 0) { 
               fullRecordingChunks.push(e.data); // Keep in memory for WebRTC DataChannel transfer
-              const segId = segmentCounter++;
-              console.log(`💾 Saving Segment ${segId} (${(e.data.size / 1024).toFixed(1)} KB)`);
-              await segmentDB.saveSegment({
-                sessionId: currentIsoSessionId,
-                segmentIndex: segId,
-                blob: e.data,
-                camId: socket.id,
-                timestamp: Date.now()
-              });
-              // Trigger manager immediately
-              processUploadQueue();
+              if (e.data.size > 1000) { // Essential check for valid blobs to DB
+                const segId = segmentCounter++;
+                console.log(`💾 Saving Segment ${segId} (${(e.data.size / 1024).toFixed(1)} KB)`);
+                await segmentDB.saveSegment({
+                  sessionId: currentIsoSessionId,
+                  segmentIndex: segId,
+                  blob: e.data,
+                  camId: socket.id,
+                  timestamp: Date.now()
+                });
+                // Trigger manager immediately
+                processUploadQueue();
+              }
             }
+          };
+
+          isoRecorder.onstop = () => {
+             if (fullRecordingChunks.length > 0) {
+                 heldIsoBlob = new Blob(fullRecordingChunks, { type: "video/webm" });
+                 console.log("✅ Compiled heldIsoBlob for WebRTC transfer on stop, size:", heldIsoBlob.size);
+             } else {
+                 heldIsoBlob = new Blob([], { type: "video/webm" }); 
+             }
           };
 
           // RECORD IN 60s SEGMENTS
@@ -946,16 +957,14 @@
         console.log("🛑 Stopping ISO Recording. Options:", options);
         if (isoRecorder) {
           isoRecorder.stop();
-          
-          setTimeout(() => {
-              if (fullRecordingChunks.length > 0) {
-                  heldIsoBlob = new Blob(fullRecordingChunks, { type: "video/webm" });
-                  console.log("✅ Compiled heldIsoBlob for WebRTC transfer, size:", heldIsoBlob.size);
-              }
-          }, 500);
-
           liveBadge.textContent = "STOPPED";
           setTimeout(() => liveBadge.style.display = "none", 3000);
+        } else {
+          // Camera joined late or didn't record
+          if (!heldIsoBlob) {
+            heldIsoBlob = new Blob([], { type: "video/webm" });
+            console.warn("⚠️ Camera was not recording ISO. Set empty blob.");
+          }
         }
       }
 
@@ -979,7 +988,11 @@
             liveBadge.style.background = "#b91c1c";
             transferRecording(heldIsoBlob);
           } else {
-            alert("Director disconnected. Cannot transfer.");
+            console.error("Director disconnected. Cannot transfer via WebRTC.");
+            if (directorId) {
+                socket.emit("control", { to: directorId, data: { type: "transfer-fallback" } });
+            }
+            alert("Director's direct connection lost. The files are securely uploaded via backup.");
           }
         };
         
