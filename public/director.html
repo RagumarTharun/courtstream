@@ -1089,7 +1089,6 @@
       if (p.slot) {
         try { p.slot.remove(); } catch (e) { }
       }
-      if (p.pingInterval) clearInterval(p.pingInterval);
       delete peers[id];
       delete rotations[id];
 
@@ -1208,15 +1207,6 @@
 
       const v = p.slot.querySelector("video");
       if (v) v.style.transform = `rotate(${rotation}deg)`;
-    });
-
-    /* ===== CONTROL MESSAGES (FALLBACKS) ===== */
-    socket.on("control", ({ from, data }) => {
-      if (data && data.type === "transfer-fallback") {
-        console.warn(`⚠️ Camera ${from} reported WebRTC transfer failed. Falling back / cancelling WebRTC wait.`);
-        // Mark as skipped/failed so director doesn't wait forever
-        cancelTransfer(from);
-      }
     });
 
     /* ===== CREATE CAMERA PEER ===== */
@@ -1598,17 +1588,7 @@
       peers[id].fileMeta = null;
       peers[id].receivedSize = 0;
 
-      dc.onopen = () => {
-        console.log(`✅ Data Channel Open with ${id} `);
-        peers[id].pingInterval = setInterval(() => {
-          if (dc.readyState === "open") dc.send(JSON.stringify({ type: "ping" }));
-        }, 10000);
-      };
-      
-      dc.onclose = () => {
-        if (peers[id].pingInterval) clearInterval(peers[id].pingInterval);
-      };
-
+      dc.onopen = () => console.log(`✅ Data Channel Open with ${id} `);
       dc.onmessage = (event) => handleDataMessage(id, event.data);
 
       pc.createOffer()
@@ -2758,7 +2738,7 @@
             if (!blob && cameraRecorders[id]?.chunks.length) {
               blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
             }
-            if (blob && blob.size > 1000) {
+            if (blob) {
               const safeCamName = sanitizeName(peers[id]?.name || id);
               const safeStreamName = sanitizeName(streamName || streamId);
               let suffix = "_raw_quality";

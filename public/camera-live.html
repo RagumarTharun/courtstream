@@ -616,17 +616,9 @@
       }
 
       function handleMessage(event) {
-        let msg;
-        try {
-          msg = JSON.parse(event.data);
-        } catch { return; }
-        
+        const msg = JSON.parse(event.data);
         if (msg.type === "ack") {
           // handle flow control if needed
-        } else if (msg.type === "ping") {
-          if (dataChannel && dataChannel.readyState === "open") {
-            dataChannel.send(JSON.stringify({ type: "pong" }));
-          }
         }
       }
       initWebRTC();
@@ -827,31 +819,20 @@
 
           isoRecorder = new MediaRecorder(mediaStream, options);
           isoRecorder.ondataavailable = async (e) => {
-            if (e.data && e.data.size > 0) { 
+            if (e.data && e.data.size > 1000) { // Essential check for valid blobs
               fullRecordingChunks.push(e.data); // Keep in memory for WebRTC DataChannel transfer
-              if (e.data.size > 1000) { // Essential check for valid blobs to DB
-                const segId = segmentCounter++;
-                console.log(`💾 Saving Segment ${segId} (${(e.data.size / 1024).toFixed(1)} KB)`);
-                await segmentDB.saveSegment({
-                  sessionId: currentIsoSessionId,
-                  segmentIndex: segId,
-                  blob: e.data,
-                  camId: socket.id,
-                  timestamp: Date.now()
-                });
-                // Trigger manager immediately
-                processUploadQueue();
-              }
+              const segId = segmentCounter++;
+              console.log(`💾 Saving Segment ${segId} (${(e.data.size / 1024).toFixed(1)} KB)`);
+              await segmentDB.saveSegment({
+                sessionId: currentIsoSessionId,
+                segmentIndex: segId,
+                blob: e.data,
+                camId: socket.id,
+                timestamp: Date.now()
+              });
+              // Trigger manager immediately
+              processUploadQueue();
             }
-          };
-
-          isoRecorder.onstop = () => {
-             if (fullRecordingChunks.length > 0) {
-                 heldIsoBlob = new Blob(fullRecordingChunks, { type: "video/webm" });
-                 console.log("✅ Compiled heldIsoBlob for WebRTC transfer on stop, size:", heldIsoBlob.size);
-             } else {
-                 heldIsoBlob = new Blob([], { type: "video/webm" }); 
-             }
           };
 
           // RECORD IN 60s SEGMENTS
@@ -957,14 +938,16 @@
         console.log("🛑 Stopping ISO Recording. Options:", options);
         if (isoRecorder) {
           isoRecorder.stop();
+          
+          setTimeout(() => {
+              if (fullRecordingChunks.length > 0) {
+                  heldIsoBlob = new Blob(fullRecordingChunks, { type: "video/webm" });
+                  console.log("✅ Compiled heldIsoBlob for WebRTC transfer, size:", heldIsoBlob.size);
+              }
+          }, 500);
+
           liveBadge.textContent = "STOPPED";
           setTimeout(() => liveBadge.style.display = "none", 3000);
-        } else {
-          // Camera joined late or didn't record
-          if (!heldIsoBlob) {
-            heldIsoBlob = new Blob([], { type: "video/webm" });
-            console.warn("⚠️ Camera was not recording ISO. Set empty blob.");
-          }
         }
       }
 
@@ -988,11 +971,7 @@
             liveBadge.style.background = "#b91c1c";
             transferRecording(heldIsoBlob);
           } else {
-            console.error("Director disconnected. Cannot transfer via WebRTC.");
-            if (directorId) {
-                socket.emit("control", { to: directorId, data: { type: "transfer-fallback" } });
-            }
-            alert("Director's direct connection lost. The files are securely uploaded via backup.");
+            alert("Director disconnected. Cannot transfer.");
           }
         };
         
@@ -1034,7 +1013,7 @@
             name: `camera_${socket.id}.webm`
           }));
 
-          const buffer = null; // Memory optimized, read chunk by chunk instead
+          const buffer = await blob.arrayBuffer();
           const updateProgress = (p) => {
             fill.style.width = p + "%";
           };
@@ -1046,8 +1025,7 @@
 
             const start = i * CHUNK_SIZE;
             const end = Math.min(start + CHUNK_SIZE, totalSize);
-            const chunkBlob = blob.slice(start, end);
-            const chunk = await chunkBlob.arrayBuffer();
+            const chunk = buffer.slice(start, end);
 
             // Increased to 2MB buffer and dropped sleep to 4ms for much faster local transfers
             while (dataChannel.bufferedAmount > 2 * 1024 * 1024) {
@@ -1056,7 +1034,6 @@
             }
 
             dataChannel.send(chunk);
-
 
             if (i % 20 === 0) {
               updateProgress(Math.floor((i / totalChunks) * 100));
