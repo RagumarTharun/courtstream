@@ -1114,12 +1114,18 @@
       console.log(`📡 Sending CLOSE signal to camera ${id}`);
       socket.emit("control", { to: id, data: { type: "close" } });
 
+      if (p.pingInterval) clearInterval(p.pingInterval);
+
       if (p.pc) {
         try { p.pc.close(); } catch (e) { }
       }
       if (p.slot) {
         try { p.slot.remove(); } catch (e) { }
       }
+      
+      // Safety: If this peer was in the middle of a transfer, cancel it so we don't hang
+      cancelTransfer(id);
+      
       delete peers[id];
       delete rotations[id];
 
@@ -1619,7 +1625,17 @@
       peers[id].fileMeta = null;
       peers[id].receivedSize = 0;
 
-      dc.onopen = () => console.log(`✅ Data Channel Open with ${id} `);
+      dc.onopen = () => {
+        console.log(`✅ Data Channel Open with ${id} `);
+        peers[id].pingInterval = setInterval(() => {
+          if (dc.readyState === "open") dc.send(JSON.stringify({ type: "ping" }));
+        }, 10000);
+      };
+      
+      dc.onclose = () => {
+        if (peers[id].pingInterval) clearInterval(peers[id].pingInterval);
+      };
+      
       dc.onmessage = (event) => handleDataMessage(id, event.data);
 
       pc.createOffer()

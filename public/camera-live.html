@@ -616,10 +616,14 @@
       }
 
       function handleMessage(event) {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "ack") {
-          // handle flow control if needed
-        }
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "ping") {
+            dataChannel.send(JSON.stringify({ type: "pong" }));
+          } else if (msg.type === "ack") {
+            // handle flow control if needed
+          }
+        } catch(e) {}
       }
       initWebRTC();
 
@@ -990,6 +994,13 @@
         if (isTransferring) return;
         isTransferring = true;
 
+        if (!blob || blob.size === 0) {
+            console.error("Blob is empty, cancelling transfer.");
+            if (directorId) socket.emit("control", { to: directorId, data: { type: "transfer-fallback" } });
+            isTransferring = false;
+            return;
+        }
+
         const CHUNK_SIZE = 64 * 1024; // 64KB safe chunk size for faster throughput
         const totalSize = blob.size;
         const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
@@ -1009,8 +1020,7 @@
           dataChannel.send(JSON.stringify({
             type: "meta",
             size: totalSize,
-            mime: blob.type,
-            name: `camera_${socket.id}.webm`
+            mime: blob.type
           }));
 
           const buffer = await blob.arrayBuffer();
@@ -1058,6 +1068,10 @@
           statusText.style.color = "#ef4444";
           retryBtn.style.display = "block";
           isTransferring = false;
+          
+          if (directorId) {
+             socket.emit("control", { to: directorId, data: { type: "transfer-fallback" } });
+          }
         }
       }
 
