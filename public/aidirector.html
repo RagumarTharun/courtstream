@@ -8,13 +8,22 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Orbitron:wght@500;700&display=swap');
 
         :root {
-            --bg-color: #0a0a0c;
-            --panel-bg: rgba(20, 20, 25, 0.6);
-            --panel-border: rgba(255, 255, 255, 0.1);
-            --neon-orange: #ff5e00;
-            --cyan: #00f3ff;
-            --text-main: #f0f0f0;
-            --text-muted: #888;
+            --bg: #0f1115;
+            --panel: #161922;
+            --border: #262b3d;
+            --text: #e6e6eb;
+            --muted: #9aa0b4;
+            --red: #ef4444;
+            --blue: #3b82f6;
+            --green: #22c55e;
+            
+            --bg-color: var(--bg);
+            --panel-bg: var(--panel);
+            --panel-border: var(--border);
+            --neon-orange: var(--red);
+            --cyan: var(--blue);
+            --text-main: var(--text);
+            --text-muted: var(--muted);
         }
 
         * {
@@ -24,9 +33,9 @@
         }
 
         body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: system-ui;
             height: 100vh;
             overflow: hidden;
             display: flex;
@@ -91,26 +100,56 @@
             background: #ff7522;
         }
 
-        .layout-container {
-            flex: 1;
-            display: flex;
-            padding: 16px;
-            gap: 16px;
-            height: calc(100vh - 60px);
+        .director {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 14px;
+            padding: 14px;
+            height: 100vh;
         }
 
         /* PRIMARY VIEWFINDER */
-        .main-viewfinder {
-            flex: 1;
+        .panel {
+            background: var(--panel);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .main-feed {
             position: relative;
             background: #000;
-            border-radius: 12px;
+            border-radius: 16px;
             overflow: hidden;
-            border: 1px solid var(--panel-border);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border);
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+
+        /* Top-left badge */
+        .stream-badge {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            background: rgba(15, 17, 21, .85);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Top-right controls */
+        .main-controls {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            display: flex;
+            gap: 8px;
+            z-index: 2;
         }
 
         .video-player {
@@ -283,24 +322,34 @@
         }
 
         /* MULTI-CAM SIDEBAR */
-        .multi-cam-sidebar {
-            width: 320px;
+        .side-panel {
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 14px;
+            padding: 14px;
             overflow-y: auto;
-            padding-right: 8px;
+        }
+
+        .side-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         /* Custom Scrollbar */
-        .multi-cam-sidebar::-webkit-scrollbar {
+        .side-panel::-webkit-scrollbar {
             width: 6px;
         }
-        .multi-cam-sidebar::-webkit-scrollbar-track {
+        .side-panel::-webkit-scrollbar-track {
             background: transparent;
         }
-        .multi-cam-sidebar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.1);
+        .side-panel::-webkit-scrollbar-thumb {
+            background: var(--border);
             border-radius: 10px;
         }
 
@@ -458,30 +507,28 @@
 </head>
 <body>
 
-    <header>
-        <div class="brand">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--neon-orange)" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M2.5 12h19M12 2.5a14 14 0 0 1 0 19M12 2.5a14 14 0 0 0 0 19" opacity="0.5"></path>
-            </svg>
-            CourtStream | AI Director
-        </div>
-        <div class="header-controls">
-            <input type="file" id="videoUpload" accept="video/*" style="display: none;">
-            <button class="btn" id="uploadBtn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                Upload Test Video
-            </button>
-            <button class="btn primary" id="simulateBtn">
-                ▶ Auto-Pilot Mode
-            </button>
-        </div>
-    </header>
-
-    <div class="layout-container">
+    <div class="director">
         
         <!-- MAIN VIEWFINDER -->
-        <div class="main-viewfinder">
+        <div class="panel main-feed">
+            <div class="stream-badge">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--neon-orange)" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M2.5 12h19M12 2.5a14 14 0 0 1 0 19M12 2.5a14 14 0 0 0 0 19" opacity="0.5"></path>
+                </svg>
+                AI Director
+            </div>
+            <div class="main-controls">
+                <input type="file" id="videoUpload" accept="video/*" style="display: none;">
+                <button class="btn" id="uploadBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                    Upload Video
+                </button>
+                <button class="btn primary" id="simulateBtn">
+                    ▶ Auto-Pilot
+                </button>
+            </div>
+            
             
             <div class="welcome-upload" id="welcomeBox">
                 <h2>No Signal</h2>
@@ -547,7 +594,10 @@
         </div>
 
         <!-- MULTI-CAM SIDEBAR -->
-        <div class="multi-cam-sidebar" id="camSidebar">
+        <div class="panel side-panel" id="camSidebar">
+            <div class="side-title">
+                <span>Subject Selection</span>
+            </div>
             <!-- Sidebar feeds will be injected by JS -->
         </div>
 
