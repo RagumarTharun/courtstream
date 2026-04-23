@@ -503,6 +503,64 @@
         }
         .tracker-fill { height: 100%; background: var(--neon-orange); width: 0%; border-radius: 3px; pointer-events: none; }
 
+        /* MULTI-CAM MOBILE HORIZONTAL SCROLL */
+        @media (max-width: 768px) {
+            .director {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto;
+                height: auto;
+                min-height: 100vh;
+                padding-bottom: 24px;
+            }
+
+            .main-feed {
+                min-height: 50vh;
+            }
+
+            .side-panel {
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding-bottom: 15px;
+            }
+
+            .cam-feed {
+                width: 260px;
+                height: 146px;
+                flex-shrink: 0;
+            }
+
+            .stream-badge {
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+
+            .main-controls .btn {
+                padding: 6px 10px;
+                font-size: 11px;
+            }
+            .main-controls svg {
+                display: none; /* Hide icons to save space */
+            }
+
+            .scoreboard {
+                transform: translateX(-50%) scale(0.7);
+                bottom: 80px;
+            }
+
+            .telemetry-panel {
+                transform: scale(0.75);
+                transform-origin: top left;
+                top: 54px;
+            }
+
+            .court-map {
+                transform: scale(0.75);
+                transform-origin: top right;
+                top: 54px;
+            }
+        }
+
     </style>
 </head>
 <body>
