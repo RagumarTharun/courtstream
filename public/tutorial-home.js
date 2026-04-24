@@ -12,7 +12,8 @@
     }, 200);
 
     function initHomeTutorial() {
-        if (localStorage.getItem("courtstream_home_tutorial_done")) {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (localStorage.getItem("cs_home_tour_v2") && !urlParams.has("tour")) {
             return;
         }
 
@@ -152,7 +153,7 @@
         let currentHighlight = null;
 
         function finishTutorial() {
-            localStorage.setItem("courtstream_home_tutorial_done", "true");
+            localStorage.setItem("cs_home_tour_v2", "true");
             overlay.style.opacity = "0";
             box.style.opacity = "0";
             if (currentHighlight) {

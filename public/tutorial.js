@@ -1,6 +1,7 @@
 (function() {
     // Only run if not completed
-    if (localStorage.getItem("courtstream_tutorial_done")) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (localStorage.getItem("cs_tutorial_v2") && !urlParams.has("tour")) {
         return;
     }
 
@@ -141,7 +142,7 @@
     let currentHighlight = null;
 
     function finishTutorial() {
-        localStorage.setItem("courtstream_tutorial_done", "true");
+        localStorage.setItem("cs_tutorial_v2", "true");
         overlay.style.opacity = "0";
         box.style.opacity = "0";
         if (currentHighlight) {
