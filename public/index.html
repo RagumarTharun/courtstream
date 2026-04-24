@@ -126,6 +126,33 @@
       background: #2563eb;
     }
 
+    [data-tooltip] {
+      position: relative;
+    }
+    [data-tooltip]::before {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%) translateY(4px);
+      background: #0f1115;
+      color: #e6e6eb;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.2s ease;
+      z-index: 100;
+      border: 1px solid #262b3d;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    [data-tooltip]:hover::before {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
     /* CONTAINER */
     .container {
       max-width: 1100px;
@@ -365,16 +392,16 @@
 
     <!-- Navigation Bar -->
     <div id="appsNav" style="display:flex; gap:12px; margin-bottom:24px; flex-wrap: wrap;">
-      <button onclick="location.href='index.html'" class="primary">Live</button>
-      <button onclick="location.href='playback.html'">Playback / Studio</button>
-      <button onclick="location.href='render.html'">Render Studio</button>
-      <button onclick="location.href='scorekeeper.html'">Scorekeeper (BETA)</button>
+      <button onclick="location.href='index.html'" class="primary" data-tooltip="Watch active public games">Live</button>
+      <button onclick="location.href='playback.html'" data-tooltip="Review recorded local streams">Playback / Studio</button>
+      <button onclick="location.href='render.html'" data-tooltip="Process ISO feeds into a final master video">Render Studio</button>
+      <button onclick="location.href='scorekeeper.html'" data-tooltip="Manage game clocks and points">Scorekeeper (BETA)</button>
       <button onclick="location.href='training.html'"
-        style="border: 1px solid var(--orange); color: var(--orange);">Personal Training</button>
+        style="border: 1px solid var(--orange); color: var(--orange);" data-tooltip="AI-powered shooting analytics">Personal Training</button>
       <button onclick="location.href='creator.html'"
-        style="background: rgba(139, 92, 246, 0.1); border: 1px solid #8b5cf6; color: #8b5cf6;">Creator Hub</button>
+        style="background: rgba(139, 92, 246, 0.1); border: 1px solid #8b5cf6; color: #8b5cf6;" data-tooltip="Add custom overlays & export clips">Creator Hub</button>
       <button onclick="location.href='aidirector.html'"
-        style="border: 1px solid var(--red); color: var(--red);">AI Director</button>
+        style="border: 1px solid var(--red); color: var(--red);" data-tooltip="Automated tracking multiviewer">AI Director</button>
     </div>
 
     <div style="margin-bottom: 32px;">
