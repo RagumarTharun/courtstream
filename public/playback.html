@@ -491,31 +491,96 @@
         const playBtn = document.getElementById("play");
         const speedSelect = document.getElementById("speed");
 
+        /* ===== DURATION HACK ===== */
+        const discoverDuration = (v) => new Promise(resolve => {
+            const check = () => {
+                if (v.duration && v.duration !== Infinity && !isNaN(v.duration)) {
+                    v.onseeked = null;
+                    v.onloadedmetadata = null;
+                    resolve(v.duration);
+                    return true;
+                }
+                return false;
+            };
+            if (check()) return;
+            
+            v.onloadedmetadata = () => {
+                if (check()) return;
+                v.currentTime = 1e99;
+            };
+            v.onseeked = () => {
+                const dur = v.duration;
+                v.currentTime = 0;
+                v.onseeked = null;
+                resolve(dur);
+            };
+        });
+
         /* ===== FILE LOADING ===== */
-        picker.onchange = e => {
+        picker.onchange = async e => {
             const files = [...e.target.files];
             if (!files.length) return;
 
-            // Reset
-            videos = [];
-            thumbs.innerHTML = "";
-            focusView.innerHTML = "";
-            coachList.innerHTML = "";
-            markers.innerHTML = "";
-            inPoint = null;
-            outPoint = null;
-            playing = false;
-            updatePlayIcon();
+            if (videos.length === 0) {
+                focusView.innerHTML = "";
+            }
 
-            files.forEach((f, i) => {
+            const startIndex = videos.length;
+
+            for (let i = 0; i < files.length; i++) {
+                const f = files[i];
                 const v = document.createElement("video");
                 v.src = URL.createObjectURL(f);
-                v.muted = true; // All muted by default
+                v.muted = true;
                 v.playsInline = true;
                 v.preload = "auto";
                 videos.push(v);
 
-                // Create thumb
+                // Perform the duration hack to force WebM metadata discovery
+                await discoverDuration(v);
+            }
+
+            renderThumbs();
+
+            // Set up master
+            master = videos[0];
+            duration = master.duration || 0;
+            timeline.max = duration;
+            
+            // Check for mismatches
+            const durations = videos.map(v => v.duration);
+            const mMax = Math.max(...durations);
+            const mMin = Math.min(...durations);
+            if ((mMax - mMin) > 2) {
+                alert("⚠️ Duration Mismatch Warning\n\nThe uploaded videos have different lengths (drift > 2 seconds). Synchronization timeline may become inaccurate towards the end.");
+            }
+
+            if (videos.length === files.length) {
+                // Initial load
+                timeline.value = 0;
+                updateTimeDisplay(0);
+                focus(0);
+                master.ontimeupdate = sync;
+            }
+        };
+
+        function removeVideo(e, globalIdx) {
+            e.stopPropagation();
+            if (videos.length <= 1) {
+                return location.reload(); // Reset if last video removed
+            }
+            videos.splice(globalIdx, 1);
+            master = videos[0];
+            duration = master.duration || 0;
+            timeline.max = duration;
+
+            renderThumbs();
+            focus(0);
+        }
+
+        function renderThumbs() {
+            thumbs.innerHTML = "";
+            videos.forEach((v, i) => {
                 const t = document.createElement("div");
                 t.className = "thumb";
                 t.onclick = () => focus(i);
@@ -523,42 +588,46 @@
                 const tv = document.createElement("video");
                 tv.src = v.src;
                 tv.muted = true;
+                tv.currentTime = master ? master.currentTime : 0;
 
                 const b = document.createElement("div");
                 b.className = "thumb-badge";
                 b.innerText = `CAM ${i + 1}`;
 
+                const closeBtn = document.createElement("div");
+                closeBtn.innerHTML = "×";
+                closeBtn.style.cssText = "position:absolute; top:4px; right:4px; background:rgba(239,68,68,0.8); color:white; font-size:12px; font-weight:bold; width:18px; height:18px; display:flex; align-items:center; justify-content:center; border-radius:50%; cursor:pointer; z-index:10;";
+                closeBtn.onclick = (e) => removeVideo(e, i);
+
                 t.appendChild(tv);
                 t.appendChild(b);
+                t.appendChild(closeBtn);
                 thumbs.appendChild(t);
             });
 
-            // Setup master (first video drives timing)
-            master = videos[0];
-            master.onloadedmetadata = () => {
-                duration = master.duration || 0;
-                timeline.max = duration;
-                timeline.value = 0;
-                updateTimeDisplay(0);
-                focus(0);
-
-                // Update toggle thumbnails periodically for static preview
-                // (Browsers might not autoplay them, but seek will update them)
-                videos.forEach(v => v.currentTime = 0);
-            };
-
-            master.ontimeupdate = sync;
-        };
+            // Re-append Add Button
+            const addBtn = document.createElement("div");
+            addBtn.className = "thumb";
+            addBtn.style.cssText = "display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border:1px dashed var(--muted); cursor:pointer;";
+            addBtn.innerHTML = "<div style='font-size:24px; color:var(--muted);'>+</div>";
+            addBtn.onclick = () => picker.click();
+            thumbs.appendChild(addBtn);
+            
+            if(focusedIndex >= videos.length) focusedIndex = 0;
+            Array.from(thumbs.children).forEach((el, idx) => {
+                if (idx < videos.length) el.classList.toggle("active", idx === focusedIndex);
+            });
+        }
 
         /* ===== SYNC & TIMELINE ===== */
         function sync() {
             if (!master) return;
             const t = master.currentTime;
 
-            // Sync other videos if they drift too much
+            // Sync other videos if they drift by ~0.1s
             if (playing) {
                 videos.forEach(v => {
-                    if (v !== master && Math.abs(v.currentTime - t) > 0.15) {
+                    if (v !== master && Math.abs(v.currentTime - t) > 0.1) {
                         v.currentTime = t;
                     }
                 });
@@ -566,6 +635,13 @@
 
             timeline.value = t;
             updateTimeDisplay(t);
+            
+            // Sync visible thumbs
+            document.querySelectorAll(".thumb > video").forEach((tv, i) => {
+               if(i < videos.length && i !== focusedIndex) {
+                   tv.currentTime = t;
+               }
+            });
         }
 
         timeline.oninput = e => {
@@ -573,6 +649,10 @@
             const t = parseFloat(e.target.value);
             videos.forEach(v => v.currentTime = t);
             updateTimeDisplay(t);
+            // Sync visible thumbs when scrubbed
+            document.querySelectorAll(".thumb > video").forEach((tv, i) => {
+               if(i < videos.length) tv.currentTime = t;
+            });
         };
 
         /* ===== FORMATTING ===== */
@@ -761,6 +841,7 @@
 
     </script>
     <script src="modal.js"></script>
+    <script src="tutorial-playback.js"></script>
 
 </body>
 
