@@ -385,7 +385,7 @@
         <div class="subtitle">Watch live games or start your broadcast.</div>
       </div>
 
-      <button class="primary" id="createBtn" onclick="location.href='create.html'" style="display:none">
+      <button class="primary" id="createBtn" onclick="handleCreateClick()" style="display:block">
         + Start Stream
       </button>
     </div>
@@ -457,7 +457,15 @@
       avatar.textContent = user.email.charAt(0).toUpperCase();
 
       document.getElementById("greeting").textContent = `Welcome back`;
-      document.getElementById("createBtn").style.display = "block";
+    }
+
+    function handleCreateClick() {
+      if (currentUser) {
+        location.href = 'create.html';
+      } else {
+        alert("Please Sign In or Sign Up to create a new live session.");
+        location.href = 'login.html';
+      }
     }
 
     function setupGuestUI() {
