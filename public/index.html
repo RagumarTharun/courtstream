@@ -463,8 +463,9 @@
       if (currentUser) {
         location.href = 'create.html';
       } else {
-        alert("Please Sign In or Sign Up to create a new live session.");
-        location.href = 'login.html';
+        if (confirm("Please Sign In or Sign Up to create a new live session.\n\nClick OK to go to the Sign In page.")) {
+            location.href = 'login.html';
+        }
       }
     }
 
