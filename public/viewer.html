@@ -57,6 +57,47 @@
       object-fit: contain;
     }
 
+    /* ===== STREAM TITLE ===== */
+    .stream-info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .badge {
+      background: rgba(15, 17, 21, 0.7);
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #fff;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--red);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--red);
+      animation: pulse 1.5s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
     /* ===== MOBILE RWD ===== */
     @media (max-width: 900px) {
       .viewer-layout {
@@ -66,7 +107,18 @@
       .player-container {
         flex: initial;
         width: 100%;
-        height: 100vh;
+        height: calc(100vh - env(safe-area-inset-bottom, 0));
+        max-height: 100vh;
+      }
+
+      .stream-info {
+        top: 12px;
+        left: 12px;
+      }
+
+      .badge {
+        font-size: 12px;
+        padding: 4px 10px;
       }
 
       /* Feedback Button overrides for Mobile */
