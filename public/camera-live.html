@@ -676,6 +676,8 @@
       });
 
       /* ===== ACCESS CHECK ===== */
+      let joinedPassword = null;
+      
       async function checkAccess() {
         try {
           const res = await fetch("/api/streams");
@@ -684,12 +686,16 @@
 
           if (stream && stream.camera_access === "protected") {
             console.log("🔒 Camera: Protected stream detected");
-            overlay.style.display = "flex";
-            joinBtn.onclick = () => {
-              const pass = passInput.value.trim();
-              if (!pass) return;
-              socket.emit("join", { room: streamId, role: "camera", password: pass, clientId });
-            };
+            if (joinedPassword) {
+              socket.emit("join", { room: streamId, role: "camera", password: joinedPassword, clientId });
+            } else {
+              overlay.style.display = "flex";
+              joinBtn.onclick = () => {
+                const pass = passInput.value.trim();
+                if (!pass) return;
+                socket.emit("join", { room: streamId, role: "camera", password: pass, clientId });
+              };
+            }
           } else {
             console.log("🔓 Camera: Public stream detected");
             overlay.style.display = "none";
@@ -703,6 +709,7 @@
       }
 
       socket.on("join-error", (msg) => {
+        joinedPassword = null;
         overlay.style.display = "flex";
         errorMsg.style.display = "block";
         passInput.value = "";
@@ -710,6 +717,7 @@
       });
 
       socket.on("join-success", () => {
+        joinedPassword = passInput.value.trim() || null;
         overlay.style.display = "none";
       });
 
