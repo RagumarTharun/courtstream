@@ -423,6 +423,20 @@
 
   </div>
 
+  <!-- Auth Modal -->
+  <div class="modal" id="authModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#161922;padding:24px;border-radius:14px;width:90%;max-width:320px;text-align:center;border:1px solid #262b3d;margin:auto;">
+      <h3 style="margin-top:0;margin-bottom:12px;">Sign In Required</h3>
+      <p style="color:#9aa0b4;font-size:14px;margin-bottom:24px;line-height:1.5;">
+        You must be signed in to create and host a new live session on CourtStream.
+      </p>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button style="background:transparent;border:1px solid #262b3d;color:#e6e6eb;padding:8px 16px;border-radius:8px;font-weight:600;flex:1;cursor:pointer;" onclick="document.getElementById('authModal').style.display='none'">Cancel</button>
+        <button style="background:#3b82f6;color:white;border:none;padding:8px 16px;border-radius:8px;font-weight:600;flex:1;cursor:pointer;" onclick="location.href='login.html'">Sign In</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="feedback.js"></script>
   <script>
@@ -463,9 +477,8 @@
       if (currentUser) {
         location.href = 'create.html';
       } else {
-        if (confirm("Please Sign In or Sign Up to create a new live session.\n\nClick OK to go to the Sign In page.")) {
-            location.href = 'login.html';
-        }
+        // Show the custom DOM modal instead of the browser confirm()
+        document.getElementById('authModal').style.display = 'flex';
       }
     }
 
