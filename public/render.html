@@ -747,8 +747,19 @@
                     const segName = `seg_${i}.mp4`;
                     const args = ["-ss", String(cut.timestamp / 1000), "-i", inputFile];
                     if (duration !== null) args.push("-t", String(duration));
+                    
+                    let zoomFmt = cut.zoom && cut.zoom > 1 ? `crop=iw/${cut.zoom}:ih/${cut.zoom},` : '';
+                    let flipStr = cut.flipHorizontal ? "hflip," : "";
+                    let rotStr = "";
+                    const r = Number(cut.rotation) || 0;
+                    if (r === 90) rotStr = "transpose=1,";
+                    else if (r === 270 || r === -90) rotStr = "transpose=2,";
+                    else if (r === 180) rotStr = "transpose=1,transpose=1,";
+
+                    const vfString = `${zoomFmt}${flipStr}${rotStr}scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
+
                     args.push(
-                        "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p",
+                        "-vf", vfString,
                         "-r", "30",
                         "-ar", "44100",
                         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
