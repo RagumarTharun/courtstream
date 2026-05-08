@@ -470,14 +470,15 @@
       .side-panel {
         flex: 1;
         width: 100%;
-        flex-direction: row;
-        overflow-x: auto;
-        overflow-y: hidden;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-auto-rows: 140px;
+        overflow-x: hidden;
+        overflow-y: auto;
         padding: 10px;
         gap: 10px;
         border-left: none;
         border-top: 1px solid var(--border);
-        align-items: center;
       }
 
       .side-title {
@@ -485,15 +486,18 @@
       }
 
       .camera-slot {
-        width: 160px;
-        min-width: 160px;
-        height: 90%;
+        width: 100%;
+        min-width: 0;
+        height: 100%;
         border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
       }
 
       .camera-slot video {
-        height: 100%;
-        max-height: 120px;
+        height: 100px;
+        max-height: none;
       }
 
       .modal-box {
@@ -626,6 +630,9 @@
       .dashboard-grid {
         grid-template-columns: 1fr;
         height: auto;
+      }
+      .dashboard-col {
+        min-height: auto;
       }
     }
 
@@ -2600,6 +2607,14 @@
 
     function downloadAllReadyFiles() {
       const links = document.querySelectorAll('.ready-download-link');
+      if (links.length === 0) return alert("No files ready to download.");
+      
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile && links.length > 1) {
+        alert("Multiple downloads may be blocked on mobile browsers. Please tap the individual 'Download' buttons for each file.");
+        return;
+      }
+
       let delay = 0;
       links.forEach(link => {
         setTimeout(() => {
@@ -2858,14 +2873,18 @@
 
           // Final UI Update: Hide selection, show simple status or download history
           if (isAuto) {
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
             document.getElementById("renderPhase").innerHTML = `
                         <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid #22c55e; border-radius: 12px; padding: 30px; text-align: center;">
                             <div style="font-size: 40px; margin-bottom: 10px;">✅</div>
                             <h3 style="color:white; margin:0;">Downloads Ready!</h3>
-                            <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Your browser should have started the downloads automatically.</p>
+                            <p style="color:#94a3b8; font-size:14px; margin-top:8px;">${isMobile ? "Please tap the 'Download' button next to each file below to save them." : "Your browser should start the downloads automatically. If not, click Download All below."}</p>
                             <button class="dash-btn" onclick="location.reload()" style="margin: 20px auto 0 auto; background: #334155; border:none;">New Session</button>
                         </div>
                     `;
+            if (!isMobile) {
+              setTimeout(() => downloadAllReadyFiles(), 500);
+            }
           }
           updateStatus(100, "Done!");
           document.getElementById("completePhase").style.display = "block";
