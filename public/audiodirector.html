@@ -1,0 +1,3077 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CourtStream – Audio Director</title>
+  <script src="modal.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='2'><circle cx='12' cy='12' r='10'/><path d='M9.5 8l6 4-6 4V8z' fill='white' stroke='none'/></svg>">
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161922;
+      --border: #262b3d;
+      --text: #e6e6eb;
+      --muted: #9aa0b4;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --green: #22c55e;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui;
+      height: 100vh;
+    }
+
+    /* Switch Toggle */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 34px;
+      height: 20px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      transition: .4s;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+    }
+
+    input:checked+.slider {
+      background-color: var(--blue);
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(14px);
+    }
+
+    .slider.round {
+      border-radius: 20px;
+    }
+
+    .slider.round:before {
+      border-radius: 50%;
+    }
+
+    /* LAYOUT - GRID */
+    .director {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 14px;
+      padding: 14px;
+      height: 100%;
+    }
+
+    /* ===== PANELS ===== */
+    .panel {
+      background: var(--panel);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+
+    /* ===== MAIN PREVIEW ===== */
+    .main-feed {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      overflow: hidden;
+    }
+
+    /* Fixed preview size */
+    .main-feed::before {
+      content: "";
+      display: block;
+      padding-top: 56.25%;
+    }
+
+    .main-feed video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+      transform-origin: center center;
+    }
+
+    /* Placeholder */
+    .placeholder {
+      position: absolute;
+      color: var(--muted);
+      font-size: 14px;
+      z-index: 2;
+    }
+
+    /* Top-left badge */
+    .stream-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      z-index: 2;
+    }
+
+    /* Record badge */
+    .record-bar {
+      position: absolute;
+      bottom: 14px;
+      left: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      z-index: 2;
+    }
+
+    .record-dot {
+      width: 10px;
+      height: 10px;
+      background: var(--red);
+      border-radius: 50%;
+    }
+
+    /* Top-right controls */
+    .main-controls {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      display: flex;
+      gap: 8px;
+      z-index: 2;
+    }
+
+    .ctrl-btn {
+      border: none;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      color: #fff;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .ctrl-btn:hover {
+      background: var(--border);
+    }
+
+    .ctrl-btn.active {
+      background: var(--red);
+      border-color: var(--red);
+    }
+
+    /* Top right icon-btn overrides */
+    .main-controls .icon-btn {
+      height: 40px;
+      border-radius: 20px;
+      padding: 0 12px;
+    }
+
+    .main-controls .icon-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .main-controls .icon-btn span {
+      font-size: 13px;
+    }
+
+    .main-controls .icon-btn:hover {
+      padding: 0 16px;
+    }
+
+    /* RENDER SPINNER */
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ===== RIGHT CAMERA STRIPE ===== */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px;
+      overflow-y: auto;
+    }
+
+    .side-title {
+      font-size: 13px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .camera-slot {
+      background: #000;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+      cursor: grab;
+      flex-shrink: 0;
+      padding-top: 6px;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+
+    .camera-slot.dragging {
+      opacity: 0.5;
+      cursor: grabbing;
+    }
+
+    .camera-slot.drag-over {
+      border: 2px dashed var(--blue);
+    }
+
+    .camera-slot video {
+      width: 100%;
+      height: 140px;
+      object-fit: contain;
+      background: #000;
+      transform-origin: center center;
+    }
+
+    .camera-slot span {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      font-size: 12px;
+      background: rgba(0, 0, 0, .6);
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: #fff;
+    }
+
+    .camera-name {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: #fff;
+      font-size: 12px;
+      padding: 6px 10px 4px;
+      outline: none;
+    }
+
+    .camera-actions {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      display: flex;
+      gap: 6px;
+      z-index: 2;
+    }
+
+    .mini-btn {
+      border: none;
+      background: rgba(15, 17, 21, .85);
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 4px 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 10px;
+    }
+
+    /* Expanding Icon Button */
+    .icon-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border-radius: 20px;
+      padding: 6px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+      white-space: nowrap;
+      height: 28px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .icon-btn svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      transition: transform 0.2s;
+    }
+
+    .icon-btn span {
+      font-size: 11px;
+      font-weight: 500;
+      max-width: 0;
+      opacity: 0;
+      overflow: hidden;
+      display: inline-block;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.3);
+      padding: 6px 12px;
+      gap: 6px;
+    }
+
+    .icon-btn:hover span {
+      max-width: 100px;
+      /* Adjust based on text length */
+      opacity: 1;
+    }
+
+    .icon-btn.danger:hover {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ff8a8a;
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .icon-btn.success:hover {
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    /* ===== MODALS ===== */
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .6);
+      z-index: 20;
+    }
+
+    .modal-box {
+      background: #161922;
+      border-radius: 14px;
+      padding: 20px;
+      width: 340px;
+      text-align: center;
+      border: 1px solid #262b3d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .modal-box h3 {
+      margin: 0 0 10px
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .modal video {
+      width: 100%;
+      border-radius: 10px;
+      background: #000;
+    }
+
+    /* ===== MOBILE RWD ===== */
+    @media (max-width: 900px) {
+      .director {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .panel.main-feed {
+        width: 100%;
+        aspect-ratio: 16/9;
+        flex-grow: 0;
+        flex-shrink: 0;
+        margin-bottom: 0;
+        /* Remove the top padding hack for mobile flex */
+        padding-top: 0;
+      }
+
+      .main-feed::before {
+        display: none;
+        /* Disable the aspect ratio hack since we use aspect-ratio property or rely on flex */
+      }
+
+      .main-feed video {
+        position: relative;
+        /* Normal flow */
+        width: 100%;
+        height: 100%;
+      }
+
+      .side-panel {
+        flex: 1;
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-auto-rows: 140px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding: 10px;
+        gap: 10px;
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+
+      .side-title {
+        display: none;
+      }
+
+      .camera-slot {
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
+
+      .camera-slot video {
+        height: 100px;
+        max-height: none;
+      }
+
+      .modal-box {
+        width: 90%;
+        max-width: 320px;
+      }
+    }
+
+    /* DASHBOARD OVERLAY */
+    #transferModal {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 20000;
+      /* display: flex; set by JS */
+      flex-direction: column;
+      padding: 40px;
+      overflow-y: auto;
+    }
+
+    .dashboard-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .dashboard-header h1 {
+      font-size: 24px;
+      margin: 0;
+      color: white;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      /* height: 100%; // remove height constraints for scrolling */
+    }
+
+    .dashboard-col {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      min-height: 400px;
+    }
+
+    .dashboard-col h2 {
+      font-size: 13px;
+      margin: 0 0 20px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    .status-badge {
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #334155;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    .status-badge.processing {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+
+    .status-badge.success {
+      background: rgba(34, 197, 94, 0.2);
+      color: #4ade80;
+    }
+
+    .status-badge.pending {
+      background: rgba(148, 163, 184, 0.1);
+      color: #64748b;
+    }
+
+    .status-badge.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .file-item {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      /* allow for progress bar under text */
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    .file-item>div:first-child {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+
+    .dash-progress {
+      height: 6px;
+      background: #334155;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 4px;
+      width: 100%;
+    }
+
+    .dash-fill {
+      height: 100%;
+      background: #3b82f6;
+      transition: width 0.3s ease;
+    }
+
+    /* Mobile adjustments for dashboard */
+    @media (max-width: 900px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .dashboard-col {
+        min-height: auto;
+      }
+    }
+
+    .dash-btn {
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .dash-btn:hover {
+      filter: brightness(1.1);
+      border-color: var(--blue);
+    }
+
+    .btn-premium {
+      background: var(--blue);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-premium:hover {
+      background: #2563eb;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="director">
+
+    <!-- MAIN PREVIEW -->
+    <div class="panel main-feed">
+      <video id="mainVideo" autoplay muted playsinline></video>
+      <div id="placeholder" class="placeholder">Select a camera to preview</div>
+
+      <div class="stream-badge" id="streamBadge"></div>
+
+      <div class="main-controls">
+        <!-- AUTO AUDIO TOGGLE -->
+        <button id="autoAudioBtn" class="icon-btn" title="Auto-Audio Switch" onclick="toggleAutoAudio()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v20M17 5v14M22 10v4M7 5v14M2 10v4"/>
+          </svg>
+          <span id="autoAudioBtnText">Auto: OFF</span>
+        </button>
+
+        <!-- RECORD -->
+        <button id="recordBtn" class="icon-btn" title="Record" onclick="toggleRecord()">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8" fill="white" class="rec-icon" />
+            <rect x="6" y="6" width="12" height="12" fill="white" class="stop-icon" style="display:none" />
+          </svg>
+          <span id="recordBtnText">Record</span>
+        </button>
+
+
+        <!-- QR CODE -->
+        <button id="qrBtn" class="icon-btn" title="Camera QR Code" onclick="openQr()">
+          <svg viewBox="0 0 24 24">
+            <path fill="white"
+              d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm0-2h2v2h-2v-2zm-6 4h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2z" />
+          </svg>
+          <span>QR Code</span>
+        </button>
+      </div>
+
+      <div class="record-bar" id="recordBar" style="display:none;">
+        <div class="record-dot"></div>
+        <div id="recordTimer">00:00:00</div>
+        <div id="recordStatus" style="color:var(--muted);font-size:12px;">REC</div>
+      </div>
+    </div>
+
+    <!-- RIGHT CAMERA STRIPE -->
+    <div class="panel side-panel" id="cameraStrip">
+      <div class="side-title">
+        <span>Cameras</span>
+        <div style="display:flex; gap:6px;">
+          <button class="mini-btn" onclick="calibrateMics()" title="Calibrate Mics">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M17 5v14M7 5v14"/>
+            </svg>
+            Calibrate
+          </button>
+          <button class="mini-btn" onclick="refreshCameras()" title="Refresh all cameras">
+            <svg viewBox="0 0 24 24" width="12" height="12">
+              <path fill="currentColor"
+                d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+            </svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <canvas id="programCanvas" width="1280" height="720"
+    style="position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none;"></canvas>
+
+  <!-- QR MODAL -->
+  <div class="modal" id="qrModal">
+    <div class="modal-box">
+      <h3>Scan to Join as Camera</h3>
+      <div id="qrCode" style="background:#fff;padding:10px;border-radius:8px;"></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px;word-break:break-all;" id="qrLink"></div>
+      <div class="modal-actions">
+        <button class="ctrl-btn" onclick="closeQr()"
+          style="width:auto;height:auto;padding:8px 16px;border-radius:8px;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE WARNING MODAL -->
+  <div class="modal" id="mobileWarning" style="z-index:9999;">
+    <div class="modal-box">
+      <h3>⚠️ Desktop Recommended</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">
+        The Director dashboard is optimized for larger screens. For the best experience, please use a laptop or desktop.
+      </p>
+      <div class="modal-actions">
+        <button class="ctrl-btn" onclick="document.getElementById('mobileWarning').style.display='none'">
+          Continue Anyway
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STOP RECORDING MODAL -->
+  <div class="modal" id="stopModal" style="z-index:10000;">
+    <div class="modal-box" style="width: 400px; max-width: 90%;">
+      <h3>Stop Recording</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">
+        Choose how you want to save this session.
+      </p>
+
+      <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
+        <!-- Option 1: Render Now -->
+        <button class="ctrl-btn" onclick="handleChoice('render_now')"
+          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px; display:none;">
+          <div style="text-align:left;">
+            <div style="font-weight:600;">Render Now</div>
+            <div style="font-size:11px; color:var(--muted);">Stitch high-quality Program feed now</div>
+          </div>
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor"
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" />
+          </svg>
+        </button>
+
+        <!-- Option 2: Download Raw & Render Later -->
+        <button class="ctrl-btn" onclick="handleChoice('raw_later')"
+          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px;">
+          <div style="text-align:left;">
+            <div style="font-weight:600;">Download Raw & Render Later</div>
+            <div style="font-size:11px; color:var(--muted);">Fastest file retrieval for later editing</div>
+          </div>
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor"
+              d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" />
+          </svg>
+        </button>
+
+        <!-- Option 3: Instant Feed (Local) -->
+        <button class="ctrl-btn" onclick="handleChoice('instant')"
+          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px; margin-bottom:8px;">
+          <div style="text-align:left;">
+            <div style="font-weight:600;">Instant Feed</div>
+            <div style="font-size:11px; color:var(--muted);">Save low-quality mirror from browser</div>
+          </div>
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z" />
+          </svg>
+        </button>
+
+        <!-- Option 4: Both Feeds -->
+        <button class="ctrl-btn" onclick="handleChoice('both')"
+          style="width:100%; border-radius:8px; justify-content:space-between; padding:0 16px;">
+          <div style="text-align:left;">
+            <div style="font-weight:600;">Download Both</div>
+            <div style="font-size:11px; color:var(--muted);">Instant low-res & Quality high-res for later</div>
+          </div>
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="ctrl-btn" onclick="closeStopModal()"
+          style="background:transparent; border:none; color:var(--muted);">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUALITY SUB-MODAL -->
+  <div class="modal" id="qualitySubModal" style="z-index:10001;">
+    <div class="modal-box" style="width: 360px;">
+      <h3>Quality Feed Options</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">
+        Which feeds do you want to process?
+      </p>
+
+      <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
+        <button class="ctrl-btn" onclick="handleQualitySave('quality_all')"
+          style="width:100%; border-radius:8px; padding:12px;">
+          All Camera Feeds + Program
+        </button>
+        <button class="ctrl-btn" onclick="handleQualitySave('quality_program')"
+          style="width:100%; border-radius:8px; padding:12px;">
+          Program Feed Only (Edited)
+        </button>
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="ctrl-btn" onclick="closeQualitySubModal()"
+          style="background:transparent; border:none; color:var(--muted);">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- POST-PRODUCTION DASHBOARD (FAKE REDIRECT) -->
+  <!-- POST-PRODUCTION DASHBOARD (FAKE REDIRECT) -->
+  <div id="transferModal" style="display:none; z-index: 20000;">
+    <div class="dashboard-header">
+      <h1>🎬 Post-Production Studio</h1>
+      <div style="color: #94a3b8; font-size: 14px; margin-top: 8px;">Processing your session... Do not close this tab.
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <!-- COL 1: SOURCE TRANSFERS -->
+      <div class="dashboard-col">
+        <h2>
+          <span>📡 Source Transfers</span>
+          <span id="transferStatusBadge" class="status-badge processing">ACTIVE</span>
+        </h2>
+        <div id="transferList" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Dynamic Transfer Rows -->
+        </div>
+      </div>
+
+      <!-- COL 2: FINAL RENDER / READY LIST -->
+      <div class="dashboard-col">
+        <h2>
+          <span> Download Ready</span>
+          <span id="renderStatusBadge" class="status-badge pending">WAITING</span>
+        </h2>
+
+        <!-- Active Rendering Status -->
+        <div id="renderPhase" style="display: none; margin-bottom: 20px;">
+          <div style="margin-bottom: 12px; color: #e2e8f0; font-size: 14px;" id="renderStatusText">Waiting for
+            sources...
+          </div>
+          <div class="dash-progress">
+            <div id="renderProgressFill" class="dash-fill" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div id="readyList" style="display: flex; flex-direction: column; gap: 8px; flex: 1; overflow-y: auto;">
+          <!-- Rendered files appear here -->
+        </div>
+
+        <div id="completePhase"
+          style="display: none; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
+          
+          <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+            <h4 style="color: #4ade80; margin: 0 0 8px 0; font-size: 14px;">✅ Files Downloaded Successfully!</h4>
+            <p style="margin: 0; color: #cbd5e1; font-size: 13px; line-height: 1.5;">
+              Next Step: Head over to the <strong>Render Studio</strong> page and upload your Quality Feeds alongside the JSON Tracking Data to process and render your final master broadcast video!
+            </p>
+          </div>
+
+          <div id="downloadButtons"></div>
+          <button class="dash-btn" onclick="downloadAllReadyFiles()"
+            style="width: 100%; margin-bottom: 12px; background: #10b981; border: none; font-weight: 600;">
+            Download All
+          </button>
+          <div style="display: flex; gap: 12px;">
+            <button class="dash-btn" onclick="goToRenderStudio()"
+              style="background: var(--blue); flex: 2; border: none;">Render</button>
+            <button class="dash-btn" onclick="location.reload()" style="background: #334155; flex: 1;">New
+              Session</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/lib/ffmpeg/ffmpeg.js"></script>
+  <script src="/lib/ffmpeg/ffmpeg-util.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    /* ===== STREAM INFO ===== */
+    const params = new URLSearchParams(location.search);
+    const streamId = params.get("stream");
+    let streamName = params.get("name");
+    let streamLabel = "";
+
+    // Mobile Warning Check
+    if (window.innerWidth < 900) {
+      document.getElementById("mobileWarning").style.display = "flex";
+    }
+
+    async function updateStreamBadge() {
+      let name = streamName;
+
+      if (!name && streamId) {
+        try {
+          const res = await fetch("/api/streams");
+          if (res.ok) {
+            const streams = await res.json();
+            const match = streams.find(s => s.id === streamId);
+            if (match) name = match.name;
+          }
+        } catch {
+          // fallback below
+        }
+      }
+
+      const label = name || streamId || "Unknown Stream";
+      streamLabel = label;
+      document.getElementById("streamBadge").innerText =
+        label + " • LIVE";
+    }
+    // ===== RECORD CUT (EDL) =====
+    function recordCut(camId, sourceButton = null) {
+      if (!isRecording) return;
+
+      const timeOffset = Date.now() - recordStartTime;
+      const cam = activePeers.find(p => p.id === camId);
+
+      let camName = "Auto Program";
+      let zoom = 1;
+      let rotation = 0;
+      let flip = false;
+
+      if (cam) {
+        camName = cam.name;
+        // Extract current remote view settings
+        const videoEl = document.getElementById("video_" + camId);
+        if (videoEl) {
+          const t = videoEl.style.transform || "";
+          const zoomMatch = t.match(/scale\(([^)]+)\)/);
+          if (zoomMatch) zoom = parseFloat(zoomMatch[1]);
+
+          const rotMatch = t.match(/rotate\(([^d]+)deg\)/);
+          if (rotMatch) rotation = parseInt(rotMatch[1]);
+
+          const flipMatch = t.match(/scaleX\(([^)]+)\)/);
+          if (flipMatch) flip = parseInt(flipMatch[1]) === -1;
+        }
+      }
+
+      const cut = {
+        time: timeOffset,
+        camId: camId,
+        camName: camName,
+        zoom: zoom,
+        rotation: rotation,
+        flipHorizontal: flip
+      };
+
+      currentSessionData.cuts.push(cut);
+      console.log(`🎬 CUT [${formatTime(timeOffset)}] -> ${camName} (z:${zoom}, r:${rotation}, f:${flip})`);
+
+      // UI update
+      if (sourceButton) {
+        document.querySelectorAll(".cam-btn").forEach(b => b.classList.remove("active"));
+        sourceButton.classList.add("active");
+      }
+    }
+    updateStreamBadge();
+
+    /* ===== SOCKET / STATE ===== */
+    const socket = io();
+    const mainVideo = document.getElementById("mainVideo");
+    const placeholder = document.getElementById("placeholder");
+    const strip = document.getElementById("cameraStrip");
+    const programCanvas = document.getElementById("programCanvas");
+    const programCtx = programCanvas.getContext("2d");
+
+    const peers = {};      // camera socketId -> { pc, stream, slot, name }
+    const viewers = {};    // viewer socketId -> { pc, sender }
+    const rotations = {}; // socketId -> rotation degrees
+    const zooms = {};     // socketId -> scale factor (1, 1.5, 2)
+    const flips = {};     // socketId -> boolean (flipHorizontal)
+    let activeCameraId = null; // Fix: Declare missing state variable
+    let currentLiveId = null;
+    const pendingViewers = new Set();
+
+    let programStream = programCanvas.captureStream(30);
+    mainVideo.srcObject = programStream;
+    mainVideo.onloadedmetadata = () => mainVideo.play().catch(() => { });
+
+    let selectedStream = null;
+    let drawLoopRunning = false;
+
+    /* ===== RECORDING ===== */
+    let recordingState = "idle"; // idle | recording | paused
+    let recordStartTime = 0;
+    let recordEndTime = 0;
+    let recordTimerInt = null;
+    let programRecorder = null;
+    const programChunks = [];
+    const cameraRecorders = {}; // id -> { recorder, chunks }
+
+    // Safety Lock for FFmpeg to prevent "Both" mode collision
+    let isDownloadingInstant = false;
+    let isRenderPending = false;
+
+    /* ===== EXISTING PEERS ===== */
+    socket.on("existing-peers", peersList => {
+      console.log("👥 Existing peers:", peersList);
+      if (!Array.isArray(peersList)) return;
+
+      const activeIds = new Set(peersList.map(p => p.id));
+
+      // 1. Add new peers
+      peersList.forEach(({ id, role, clientId }) => {
+        if (!id || id === socket.id) return;
+        if (role === "viewer") {
+          if (!viewers[id]) queueOrCreateViewer(id);
+          return;
+        }
+        if (role === "director") return;
+
+        // Deduplication by clientId
+        if (clientId) {
+          const oldId = Object.keys(peers).find(pid => peers[pid].clientId === clientId);
+          if (oldId && oldId !== id) {
+            console.log("♻️ Duplicate camera detected via clientId, replacing:", clientId);
+            removePeer(oldId);
+          }
+        }
+
+        if (!peers[id]) createPeer(id, clientId);
+      });
+
+      // 2. Garbage Collect Stale Peers
+      Object.keys(peers).forEach(id => {
+        if (!activeIds.has(id)) {
+          console.warn("🧹 Removing stale peer (GC):", id);
+          removePeer(id);
+        }
+      });
+    });
+
+    /* ===== PEER JOINED ===== */
+    socket.on("peer-joined", ({ id, role, clientId }) => {
+      console.log("👤 Peer joined:", id, "role:", role, "clientId:", clientId);
+      if (!id || id === socket.id) return;
+      if (role === "viewer") {
+        if (viewers[id]) return;
+        queueOrCreateViewer(id);
+        return;
+      }
+      if (role === "director") return;
+
+      // Deduplication by clientId
+      if (clientId) {
+        // Find and remove EVERY old entry with this clientId
+        Object.keys(peers).forEach(pid => {
+          if (peers[pid].clientId === clientId && pid !== id) {
+            console.log("♻️ Duplicate camera detected on join, replacing:", clientId);
+            removePeer(pid);
+          }
+        });
+      }
+
+      if (peers[id]) return;
+      createPeer(id, clientId);
+    });
+
+    /* ===== JOIN ===== */
+    socket.emit("join", { room: streamId, role: "director" });
+
+    // Proactive Discovery: Poll for peers every 5 seconds to catch missed joins
+    setInterval(() => {
+      socket.emit("join", { room: streamId, role: "director" }); // Re-emit join to trigger server-side existing-peers list
+    }, 5000);
+
+    socket.on("viewer-ready", ({ id }) => {
+      console.log("👀 Viewer ready:", id);
+      if (!id) return;
+      if (!viewers[id]) {
+        createViewerPeer(id);
+      } else {
+        console.log("👀 Viewer already exists, swapping track to current live");
+        updateViewerFeeds();
+      }
+    });
+
+    /* ===== PEER LEFT ===== */
+    function removePeer(id) {
+      const p = peers[id];
+      if (!p) return;
+
+      // Send explicit CLOSE signal so camera stops reconnecting
+      console.log(`📡 Sending CLOSE signal to camera ${id}`);
+      socket.emit("control", { to: id, data: { type: "close" } });
+
+      if (p.pingInterval) clearInterval(p.pingInterval);
+
+      if (p.pc) {
+        try { p.pc.close(); } catch (e) { }
+      }
+      if (p.slot) {
+        try { p.slot.remove(); } catch (e) { }
+      }
+      
+      // Safety: If this peer was in the middle of a transfer, cancel it so we don't hang
+      cancelTransfer(id);
+      
+      delete peers[id];
+      delete rotations[id];
+
+      if (currentLiveId === id) {
+        currentLiveId = null;
+        selectedStream = null;
+        placeholder.style.display = "block";
+        updateViewerFeeds();
+      }
+    }
+
+    function refreshCameras() {
+      console.log("🔄 Triggering remote camera refresh...");
+      socket.emit("join", { room: streamId, role: "director" });
+      // Also explicitly tell all connected peers to re-handshake if needed
+      Object.keys(peers).forEach(pid => {
+        socket.emit("control", { to: pid, data: { type: "refresh" } });
+      });
+    }
+
+    /* ===== DRAG AND DROP ===== */
+    let draggedSlot = null;
+
+    function handleDragStart(e) {
+      draggedSlot = this;
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', this.dataset.peerId);
+    }
+
+    function handleDragOver(e) {
+      if (e.preventDefault) e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      this.classList.add('drag-over');
+      return false;
+    }
+
+    function handleDragLeave(e) {
+      this.classList.remove('drag-over');
+    }
+
+    function handleDrop(e) {
+      if (e.stopPropagation) e.stopPropagation();
+      this.classList.remove('drag-over');
+
+      if (draggedSlot !== this) {
+        const rect = this.getBoundingClientRect();
+        // Check both vertical and horizontal midpoints for RWD flexibility
+        const isAfter = (e.clientY > rect.top + rect.height / 2) || (e.clientX > rect.left + rect.width / 2);
+        const next = isAfter ? this.nextSibling : this;
+        strip.insertBefore(draggedSlot, next);
+      }
+      return false;
+    }
+
+    function handleDragEnd(e) {
+      this.classList.remove('dragging');
+      document.querySelectorAll('.camera-slot').forEach(s => s.classList.remove('drag-over'));
+      draggedSlot = null;
+    }
+
+    socket.on("peer-left", ({ id }) => {
+      if (viewers[id]) {
+        const v = viewers[id];
+        v.pc.close();
+        delete viewers[id];
+        return;
+      }
+
+      const leftPeerClientId = peers[id] ? peers[id].clientId : null;
+      removePeer(id);
+
+      if (leftPeerClientId) {
+        Object.keys(peers).forEach(pid => {
+          if (peers[pid].clientId === leftPeerClientId) {
+            console.log("🧹 Sweeping duplicate phantom camera via clientId on peer-left:", leftPeerClientId);
+            removePeer(pid);
+          }
+        });
+      }
+    });
+
+    socket.on("iso-segment-uploaded", (data) => {
+      console.log("📦 Received ISO segment info:", data);
+      const dash = document.getElementById("transferModal");
+      if (dash.style.display !== "flex") dash.style.display = "flex";
+      updateTransferUI(data.from, 100, false, data);
+    });
+
+    socket.on("camera-left", ({ id }) => {
+      if (viewers[id]) {
+        const v = viewers[id];
+        v.pc.close();
+        delete viewers[id];
+        return;
+      }
+
+      const leftPeerClientId = peers[id] ? peers[id].clientId : null;
+      removePeer(id);
+
+      if (leftPeerClientId) {
+        Object.keys(peers).forEach(pid => {
+          if (peers[pid].clientId === leftPeerClientId) {
+            console.log("🧹 Sweeping duplicate phantom camera via clientId on camera-left:", leftPeerClientId);
+            removePeer(pid);
+          }
+        });
+      }
+    });
+
+    /* ===== CAMERA ROTATION (MANUAL) ===== */
+    socket.on("camera-rotate", ({ from, rotation }) => {
+      rotations[from] = rotation;
+      const p = peers[from];
+      if (!p) return;
+
+      const v = p.slot.querySelector("video");
+      if (v) v.style.transform = `rotate(${rotation}deg)`;
+    });
+
+    /* ===== CREATE CAMERA PEER ===== */
+    let cameraCount = 0;
+    let turnConfig = null;
+
+    async function getTurnConfig() {
+      if (turnConfig) return turnConfig;
+      try {
+        const res = await fetch("/api/turn-credentials");
+        turnConfig = await res.json();
+        return turnConfig;
+      } catch (e) {
+        console.error("Failed to fetch TURN config:", e);
+        return { iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] };
+      }
+    }
+
+    /* ===== FILE RECEIVER ===== */
+    const receivedRecordings = {}; // Store completed blobs by camera ID
+
+    function handleDataMessage(id, data) {
+      const p = peers[id];
+      if (!p) return;
+
+      // console.log(`📨 Msg from ${id}, type: ${typeof data}`, data);
+
+      if (typeof data === "string") {
+        try {
+          const msg = JSON.parse(data);
+          if (msg.type === "meta") {
+            console.log(`📥 Receiving file from ${id}:`, msg);
+            p.fileMeta = msg;
+            p.fileBuffer = [];
+            p.receivedSize = 0;
+
+            // Show transfer UI
+            const dash = document.getElementById("transferModal");
+            if (dash.style.display !== "flex") dash.style.display = "flex";
+
+            // Ensure Program Listing exists
+            if (!document.getElementById("xfer_program")) {
+              updateTransferUI("program", 100, true);
+              const row = document.getElementById("xfer_program");
+              if (row) row.querySelector(".name").innerText = "Director Program (Local)";
+            }
+
+            updateTransferUI(id, 0);
+          } else if (msg.type === "end") {
+            console.log(`✅ File received from ${id}. Size: ${p.receivedSize}`);
+            const blob = new Blob(p.fileBuffer, { type: p.fileMeta ? p.fileMeta.mime : "video/webm" });
+            receivedRecordings[id] = blob;
+
+            // Mark this camera as done in UI
+            updateTransferUI(id, 100, true);
+
+            // Check if all needed transfers are done
+            checkTransfersComplete();
+          }
+        } catch (e) { console.error("Error parsing DC msg:", e); }
+      } else {
+        // Binary Chunk
+        if (!p.fileMeta) console.warn("Received binary before meta from", id);
+
+        // If data is Blob (shouldn't be with binaryType=arraybuffer, but safety check)
+        if (data instanceof Blob) {
+          console.warn("Received Blob instead of ArrayBuffer, converting...");
+          // This is async, might break order. binaryType fix should prevent this.
+          // data.arrayBuffer().then(buf => ... ) 
+          // For now assume ArrayBuffer due to explicit setting
+        }
+
+        p.fileBuffer.push(data);
+        p.receivedSize += data.byteLength || data.size || 0;
+
+        if (p.fileMeta && p.fileMeta.size > 0) {
+          const pct = Math.round((p.receivedSize / p.fileMeta.size) * 100);
+          if (pct % 5 === 0 || pct === 100) updateTransferUI(id, pct);
+        }
+      }
+    }
+
+    const cancelledTransfers = new Set();
+
+    function retryTransfer(id) {
+      console.log(`🔄 Requesting transfer retry for camera ${id}`);
+      socket.emit("control", { to: id, data: { type: "retry-transfer" } });
+
+      const row = document.getElementById(`xfer_${id}`);
+      if (row) {
+        row.querySelector(".pct").innerText = "Retrying...";
+        row.querySelector(".pct").style.color = "var(--blue)";
+      }
+    }
+
+    function cancelTransfer(id) {
+      console.log(`⏭️ Skipping transfer for camera ${id}`);
+      cancelledTransfers.add(id);
+
+      const row = document.getElementById(`xfer_${id}`);
+      if (row) {
+        row.querySelector(".pct").innerText = "Skipped";
+        row.querySelector(".pct").style.color = "var(--red)";
+        const fill = row.querySelector(".progress-fill");
+        if (fill) {
+          fill.style.width = "100%";
+          fill.style.background = "var(--red)";
+        }
+
+        // Hide buttons
+        const retryBtn = document.getElementById(`retry_${id}`);
+        const cancelBtn = document.getElementById(`cancel_${id}`);
+        if (retryBtn) retryBtn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "none";
+      }
+    }
+
+    const camSegments = {}; // Track segments per camera
+
+    function updateTransferUI(id, percent, done = false, segmentData = null) {
+      if (segmentData) {
+        if (!camSegments[id]) camSegments[id] = new Set();
+        camSegments[id].add(segmentData.segmentIndex);
+      }
+
+      let row = document.getElementById(`xfer_${id}`);
+      if (!row) {
+        const list = document.getElementById("transferList");
+        row = document.createElement("div");
+        row.id = `xfer_${id}`;
+        row.className = "file-item";
+        row.style.display = "block";
+
+        const displayName = peers[id]?.name || `Camera ${id.substring(0, 4)}`;
+        row.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span class="name" style="font-weight: 500;">${displayName}</span>
+                    <span class="pct" style="color: #94a3b8; font-variant-numeric: tabular-nums; font-size: 12px;">0%</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="dash-progress" style="flex: 1; margin: 0;">
+                        <div class="progress-fill dash-fill"></div>
+                    </div>
+                    <div class="action-buttons" style="display: flex; gap: 6px;">
+                        <button id="retry_${id}" class="icon-btn" style="display:none;" onclick="retryTransfer('${id}')" title="Retry">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            <span>Retry</span>
+                        </button>
+                        <button id="cancel_${id}" class="icon-btn danger" style="display:none;" onclick="cancelTransfer('${id}')" title="Skip">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                            <span>Skip</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="seg-info" style="font-size: 10px; color: var(--muted); margin-top: 4px;"></div>
+            `;
+        list.appendChild(row);
+      }
+
+      const fill = row.querySelector(".progress-fill");
+      if (fill) fill.style.width = percent + "%";
+
+      const pctDisplay = row.querySelector(".pct");
+      if (pctDisplay) pctDisplay.innerText = percent + "%";
+
+      if (segmentData) {
+        const segInfo = row.querySelector(".seg-info");
+        if (segInfo) segInfo.innerText = `Uploaded: ${camSegments[id].size} segments`;
+      }
+
+      if (done) {
+        const retryBtn = document.getElementById(`retry_${id}`);
+        const cancelBtn = document.getElementById(`cancel_${id}`);
+        if (retryBtn) retryBtn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "none";
+        if (fill) {
+          fill.classList.add("done");
+          fill.style.background = "#10b981";
+        }
+        if (pctDisplay) {
+          pctDisplay.innerText = "Ready";
+          pctDisplay.style.color = "#10b981";
+        }
+
+        // Add immediate download option while others might still transfer
+        if (receivedRecordings[id] && !document.getElementById(`dl_btn_${id}`)) {
+          const dlBtn = document.createElement("a");
+          dlBtn.id = `dl_btn_${id}`;
+          dlBtn.className = "icon-btn success";
+          dlBtn.href = URL.createObjectURL(receivedRecordings[id]);
+          const displayName = peers[id]?.name || `Camera_${id.substring(0, 4)}`;
+          dlBtn.download = `${sanitizeName(displayName)}_raw.webm`;
+          dlBtn.title = "Download Local File";
+          dlBtn.style.textDecoration = "none";
+
+          dlBtn.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+              <span>Download</span>
+          `;
+
+          const actionContainer = row.querySelector(".action-buttons");
+          if (actionContainer) {
+            actionContainer.appendChild(dlBtn);
+          }
+        }
+      }
+    }
+
+    function retryTransfer(id) {
+      if (id === 'program') return;
+      console.log(`🔄 Retrying transfer for: ${id}`);
+      const row = document.getElementById(`xfer_${id}`);
+      if (row) {
+        row.querySelector(".pct").innerText = "Retrying...";
+        row.querySelector(".pct").style.color = "var(--muted)";
+        const retryBtn = document.getElementById(`retry_${id}`);
+        const cancelBtn = document.getElementById(`cancel_${id}`);
+        if (retryBtn) retryBtn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "inline-block";
+      }
+      socket.emit("control", { to: id, data: { type: "request-transfer" } });
+    }
+
+    async function checkTransfersComplete() {
+      const activePeers = Object.keys(peers).filter(pid => peers[pid].stream);
+      const missing = activePeers.filter(pid => !receivedRecordings[pid]);
+      const allReceived = missing.length === 0;
+
+      console.log(`Checking Transfers: Active = ${activePeers.length}, Received = ${Object.keys(receivedRecordings).length}, Missing = [${missing.join(', ')}]`);
+    }
+
+    async function createPeer(id, clientId = null) {
+      console.log("📡 Director: Creating peer for", id, "ClientId:", clientId);
+
+      const defaultName = clientId ? `Camera ${clientId.replace('cam_', '').substring(0, 4)}` : `Camera ${id.substring(0, 4)}`;
+      peers[id] = { pc: null, stream: null, slot: null, name: defaultName, clientId, pending: true };
+
+      const config = await getTurnConfig();
+      if (!peers[id]) return; // Peer was removed while waiting for TURN config
+
+      const pc = new RTCPeerConnection(config);
+
+      pc.addTransceiver("video", { direction: "recvonly" });
+      pc.addTransceiver("audio", { direction: "recvonly" });
+
+      peers[id].pc = pc;
+      peers[id].pending = false;
+
+      const slot = document.createElement("div");
+      slot.className = "camera-slot";
+      slot.draggable = true;
+      slot.dataset.peerId = id;
+      if (clientId) slot.dataset.clientId = clientId;
+
+      // Drag events
+      slot.addEventListener('dragstart', handleDragStart);
+      slot.addEventListener('dragover', handleDragOver);
+      slot.addEventListener('dragleave', handleDragLeave);
+      slot.addEventListener('drop', handleDrop);
+      slot.addEventListener('dragend', handleDragEnd);
+
+      const nameInput = document.createElement("input");
+      nameInput.className = "camera-name";
+      nameInput.value = peers[id].name;
+
+      const actions = document.createElement("div");
+      actions.className = "camera-actions";
+
+      // Zoom In Button
+      const zoomBtn = document.createElement("button");
+      zoomBtn.className = "icon-btn";
+      zoomBtn.title = "Zoom In";
+      zoomBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg><span>Zoom In</span>`;
+      zoomBtn.onclick = (e) => {
+        e.stopPropagation();
+        const currentZoom = zooms[id] || 1;
+        const zoomLevels = [1, 1.5, 2, 2.5, 3, 4, 5];
+        const nextIdx = (zoomLevels.indexOf(currentZoom) + 1) % zoomLevels.length;
+        zooms[id] = zoomLevels[nextIdx];
+        updateCameraTransform(id, slot);
+      };
+      actions.appendChild(zoomBtn);
+
+      // Zoom Out Button
+      const zoomOutBtn = document.createElement("button");
+      zoomOutBtn.className = "icon-btn";
+      zoomOutBtn.title = "Zoom Out";
+      zoomOutBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg><span>Zoom Out</span>`;
+      zoomOutBtn.onclick = (e) => {
+        e.stopPropagation();
+        const currentZoom = zooms[id] || 1;
+        const zoomLevels = [1, 1.5, 2, 2.5, 3, 4, 5];
+        let nextIdx = zoomLevels.indexOf(currentZoom) - 1;
+        if (nextIdx < 0) nextIdx = zoomLevels.length - 1;
+        zooms[id] = zoomLevels[nextIdx];
+        updateCameraTransform(id, slot);
+      };
+      actions.appendChild(zoomOutBtn);
+
+      // Flip Button
+      const flipBtn = document.createElement("button");
+      flipBtn.className = "icon-btn";
+      flipBtn.title = "Flip Horizontal";
+      flipBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 3 21 7 17 11"/><polyline points="7 13 3 17 7 21"/><line x1="21" y1="7" x2="9" y2="7"/><line x1="3" y1="17" x2="15" y2="17"/></svg><span>Flip</span>`;
+      flipBtn.onclick = (e) => {
+        e.stopPropagation();
+        flips[id] = !flips[id];
+        updateCameraTransform(id, slot);
+      };
+      actions.appendChild(flipBtn);
+
+      // Rotate Button
+      const rotateBtn = document.createElement("button");
+      rotateBtn.className = "icon-btn";
+      rotateBtn.title = "Rotate";
+      rotateBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-8.4l1.25 1.25"/></svg><span>Rotate</span>`;
+      rotateBtn.onclick = (e) => {
+        e.stopPropagation();
+        rotations[id] = ((rotations[id] || 0) + 90) % 360;
+        updateCameraTransform(id, slot);
+      };
+      actions.appendChild(rotateBtn);
+
+      // Close Button
+      const stopBtn = document.createElement("button");
+      stopBtn.className = "icon-btn danger";
+      stopBtn.title = "Close Camera";
+      stopBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close</span>`;
+      stopBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm(`Remove ${peers[id].name}?`)) {
+          removePeer(id);
+        }
+      };
+      actions.appendChild(stopBtn);
+
+      slot.appendChild(actions);
+      slot.appendChild(nameInput);
+
+      strip.appendChild(slot);
+
+      peers[id].slot = slot;
+      peers[id].name = nameInput.value;
+
+      nameInput.oninput = (e) => {
+        e.stopPropagation();
+        peers[id].name = nameInput.value.trim() || `Camera ${cameraCount} `;
+      };
+
+      // Prevent drag when interacting with input
+      nameInput.onmousedown = (e) => e.stopPropagation();
+
+      pc.ontrack = e => {
+        console.log("🎥 Received track from:", id);
+        if (peers[id].stream) return;
+
+        const stream = e.streams[0] || new MediaStream([e.track]);
+        peers[id].stream = stream;
+
+        const v = document.createElement("video");
+        v.autoplay = true;
+        v.muted = true;
+        v.playsInline = true;
+        v.srcObject = stream;
+        const rot = rotations[id] || 0;
+        const zoom = zooms[id] || 1;
+        const flip = flips[id] ? -1 : 1;
+        v.style.transform = `scale(${zoom}) scaleX(${flip}) rotate(${rot}deg)`;
+
+        v.onloadedmetadata = () => {
+          console.log("🎬 Video metadata loaded for:", id);
+          v.play().catch(err => console.error("Video play error:", err));
+        };
+
+        slot.appendChild(v);
+        slot.onclick = () => setLiveCamera(id);
+
+        if (recordingState !== "idle") {
+          startCameraRecorder(id, stream);
+        }
+      };
+
+      pc.onicecandidate = e => {
+        if (e.candidate) {
+          socket.emit("signal", { to: id, data: e.candidate });
+        }
+      };
+
+      // Create Data Channel for File Transfer
+      const dc = pc.createDataChannel("fileTransfer");
+      dc.binaryType = "arraybuffer"; // Ensure we get ArrayBuffers, not Blobs
+
+      peers[id].dc = dc;
+      peers[id].fileBuffer = [];
+      peers[id].fileMeta = null;
+      peers[id].receivedSize = 0;
+
+      dc.onopen = () => {
+        console.log(`✅ Data Channel Open with ${id} `);
+        peers[id].pingInterval = setInterval(() => {
+          if (dc.readyState === "open") dc.send(JSON.stringify({ type: "ping" }));
+        }, 10000);
+      };
+      
+      dc.onclose = () => {
+        if (peers[id].pingInterval) clearInterval(peers[id].pingInterval);
+      };
+      
+      dc.onmessage = (event) => handleDataMessage(id, event.data);
+
+      pc.createOffer()
+        .then(o => pc.setLocalDescription(o))
+        .then(() => {
+          console.log("📡 Director: Sending offer to camera", id);
+          socket.emit("signal", { to: id, data: pc.localDescription });
+        })
+        .catch(err => console.error("Offer error:", err));
+    }
+
+    function setLiveCamera(id) {
+      if (!id || !peers[id] || !peers[id].stream) {
+        console.warn("⚠️ Cannot set live: No stream for", id);
+        return;
+      }
+      activeCameraId = id; // Unify state
+      currentLiveId = id;
+      selectedStream = peers[id].stream;
+
+      // Update EDL if recording ISO
+      if (recordingState === "recording") {
+        const shortId = peers[id].clientId ? peers[id].clientId.replace('cam_', '').substring(0, 4) : id.substring(0, 4);
+        isoEdl.push({
+          timestamp: Date.now() - recordStartTime,
+          camId: shortId
+        });
+      }
+
+      document.querySelectorAll(".camera-slot").forEach(s => s.classList.remove("active", "live"));
+      if (peers[id].slot) peers[id].slot.classList.add("live", "active");
+
+      Object.keys(peers).forEach(peerId => {
+        socket.emit("control", {
+          to: peerId,
+          data: {
+            type: "live",
+            on: peerId === id,
+            name: peers[peerId] ? peers[peerId].name : "Camera"
+          }
+        });
+      });
+
+      if (placeholder) placeholder.style.setProperty("display", "none", "important");
+      updateViewerFeeds();
+      startDrawLoop();
+    }
+
+    /* ===== VIEWERS ===== */
+    async function createViewerPeer(id) {
+      console.log("📡 Director: Creating peer for viewer", id);
+      const track = getViewerTrack();
+      if (!track) {
+        console.warn("⚠️ Director: No track available for viewer!");
+        return;
+      }
+
+      const config = await getTurnConfig();
+      const pc = new RTCPeerConnection(config);
+
+      const stream = new MediaStream([track]);
+      const sender = pc.addTrack(track, stream);
+      viewers[id] = { pc, sender };
+
+      pc.onicecandidate = e => {
+        if (e.candidate) {
+          socket.emit("signal", { to: id, data: e.candidate });
+        }
+      };
+
+      pc.createOffer()
+        .then(o => pc.setLocalDescription(o))
+        .then(() => {
+          console.log("📡 Director: Sending offer to viewer", id);
+          socket.emit("signal", { to: id, data: pc.localDescription });
+        })
+        .catch(err => console.error("Offer error:", err));
+    }
+
+    function queueOrCreateViewer(id) {
+      createViewerPeer(id);
+    }
+
+    function flushPendingViewers() {
+      // No-op now as we always have a program track
+    }
+
+    function updateViewerFeeds() {
+      const track = getViewerTrack();
+      if (!track) return;
+      Object.values(viewers).forEach(v => {
+        if (v.sender) {
+          v.sender.replaceTrack(track).catch(err => console.error("replaceTrack error:", err));
+        }
+      });
+    }
+
+    function getViewerTrack() {
+      // ALWAYS use programStream (canvas) for viewers for maximum stability.
+      // This ensures viewers don't experience disconnects when cameras swap.
+      return programStream.getVideoTracks()[0];
+    }
+
+    /* ===== CAMERA TRANSFORM LOGIC ===== */
+    function updateCameraTransform(id, slot) {
+      const rot = rotations[id] || 0;
+      const zoom = zooms[id] || 1;
+      const flip = flips[id] ? -1 : 1;
+
+      // Update local preview
+      const v = slot.querySelector("video");
+      if (v) {
+        v.style.transform = `scale(${zoom}) scaleX(${flip}) rotate(${rot}deg)`;
+      }
+
+      // Sync state to Camera App
+      socket.emit("control", {
+        to: id,
+        data: {
+          type: "set-transform",
+          rotation: rot,
+          zoom: zoom,
+          flipHorizontal: flips[id] || false
+        }
+      });
+      
+      // If this camera is currently LIVE, record a telemetry cut so Render Studio applies the effect mid-clip!
+      if (id === currentLiveId && isRecording) {
+        recordCut(id);
+      }
+    }
+
+    /* ===== PROGRAM CANVAS DRAW ===== */
+    function startDrawLoop() {
+      if (drawLoopRunning) return;
+      drawLoopRunning = true;
+
+      const draw = () => {
+        const w = programCanvas.width;
+        const h = programCanvas.height;
+
+        programCtx.fillStyle = "#000";
+        programCtx.fillRect(0, 0, w, h);
+
+        if (currentLiveId && peers[currentLiveId]) {
+          const videoEl = peers[currentLiveId].slot.querySelector("video");
+
+          if (videoEl && videoEl.readyState >= 2) {
+            const vw = videoEl.videoWidth;
+            const vh = videoEl.videoHeight;
+
+            if (vw > 0 && vh > 0) {
+              const rot = rotations[currentLiveId] || 0;
+              const zoom = zooms[currentLiveId] || 1;
+              const flip = flips[currentLiveId] ? -1 : 1;
+              const isVertical = rot === 90 || rot === -90 || rot === 270 || rot === -270;
+
+              // If rotated 90 or 270, the "width" of the video becomes its height in the container's context.
+              const effectVw = isVertical ? vh : vw;
+              const effectVh = isVertical ? vw : vh;
+
+              const scale = Math.min(w / effectVw, h / effectVh);
+              const dw = vw * scale;
+              const dh = vh * scale;
+
+              programCtx.save();
+              programCtx.translate(w / 2, h / 2);
+
+              // Apply Zoom and Flip
+              programCtx.scale(zoom, zoom);
+              programCtx.scale(flip, 1);
+
+              // Apply Rotation
+              programCtx.rotate((rot * Math.PI) / 180);
+
+              programCtx.drawImage(videoEl, -dw / 2, -dh / 2, dw, dh);
+              programCtx.restore();
+            }
+          }
+        }
+
+        // Use requestAnimationFrame for smoothness, 
+        // but also a setTimeout fallback so it keeps ticking in background tabs
+        if (document.hidden) {
+          setTimeout(draw, 100); // Lower rate when hidden to save CPU but stay "alive"
+        } else {
+          requestAnimationFrame(draw);
+        }
+      };
+
+      requestAnimationFrame(draw);
+    }
+    startDrawLoop();
+
+    /* ===== RECORDING UI ===== */
+    // ISO STATE
+    let isoSessionId = null;
+    let isoEdl = []; // [{ timestamp, camId }]
+    /* uploadedCameras removed - moved to downloads.html */
+
+    const recordBar = document.getElementById("recordBar");
+    const recordTimer = document.getElementById("recordTimer");
+    const recordStatus = document.getElementById("recordStatus");
+    const recordBtn = document.getElementById("recordBtn");
+    const recIcon = document.querySelector(".rec-icon");
+    const stopIcon = document.querySelector(".stop-icon");
+    // const isoToggle = document.getElementById("isoToggle"); // REMOVED
+    const qrBtn = document.getElementById("qrBtn");
+
+    // ISO Toggle logic removed
+
+    function toggleRecord() {
+      try {
+        console.log("Record button clicked. State:", recordingState);
+        if (recordingState === "idle") startRecording();
+        else stopRecordingRequest(); // Changed to Request
+      } catch (e) {
+        console.error("Critical error in toggleRecord:", e);
+        window.alert("An unexpected error occurred: " + e.message);
+      }
+    }
+
+    /* ===== ISO UPLOAD HANDLER REMOVED - MOVED TO downloads.html ===== */
+
+    socket.on("render-progress", ({ progress, status }) => {
+      // Keep legacy progress panel for non-ISO tasks if needed, 
+      // but ISO progress is now in downloads.html
+      const bar = document.getElementById("renderProgressPanel");
+      const fill = document.getElementById("renderProgressFill");
+      const text = document.getElementById("renderStatusText");
+      if (!bar) return;
+
+      if (progress < 0) {
+        if (text) text.innerText = "Error: " + status;
+        if (fill) fill.style.background = "#ef4444";
+        setTimeout(() => { bar.style.display = "none"; }, 5000);
+        return;
+      }
+
+      bar.style.display = "flex";
+      if (fill) fill.style.width = progress + "%";
+      if (text) text.innerText = status + " (" + progress + "%)";
+
+      if (progress >= 100) {
+        setTimeout(() => { bar.style.display = "none"; }, 3000);
+      }
+    });
+
+    // switchCamera removed - using setLiveCamera directly
+
+    function startRecording() {
+      console.log("Attempting to start recording (Dual Mode)...");
+
+      const hasCameras = Object.keys(peers).length > 0;
+      const vidElem = document.getElementById("mainVideo");
+      // const hasStream = vidElem && !!vidElem.srcObject; // Checking stream not strictly required for ISO start
+
+      recordingState = "recording";
+      recordBtn.classList.add("active");
+      recIcon.style.display = "none";
+      stopIcon.style.display = "block";
+      document.getElementById("recordBtnText").innerText = "Stop";
+      recordBar.style.display = "flex";
+      recordStatus.textContent = "REC";
+      recordStartTime = Date.now();
+
+      // 1. START ISO (Server-Side)
+      isoSessionId = `session_${Date.now()}`;
+      isoEdl = [];
+
+      // Log initial camera or First available if none selected
+      if (activeCameraId) {
+        const p = peers[activeCameraId];
+        const shortId = p?.clientId ? p.clientId.replace('cam_', '').substring(0, 4) : activeCameraId.substring(0, 4);
+        isoEdl.push({ timestamp: 0, camId: shortId });
+      } else if (hasCameras) {
+        // Auto-select first camera for EDL reference
+        const firstCam = Object.keys(peers)[0];
+        setLiveCamera(firstCam); // Fix: use unified state setter
+        const p = peers[firstCam];
+        const shortId = p?.clientId ? p.clientId.replace('cam_', '').substring(0, 4) : firstCam.substring(0, 4);
+        isoEdl.push({ timestamp: 0, camId: shortId });
+      }
+
+      socket.emit("start-iso", { room: streamId, sessionId: isoSessionId });
+
+      // 2. START LOCAL (Browser-Side)
+      const stream = vidElem.srcObject;
+
+      // Fix: Reset programRecorder completely
+      if (programRecorder) {
+        try { programRecorder.stop(); } catch (e) { }
+        programRecorder = null;
+      }
+
+      programChunks.length = 0; // Clear global array
+      programRecorder = createRecorder(stream, programChunks);
+      programRecorder.chunks = programChunks;
+      programRecorder.start();
+
+      // Fix: Clear and restart camera recorders
+      Object.keys(cameraRecorders).forEach(id => {
+        try { cameraRecorders[id].recorder.stop(); } catch (e) { }
+        delete cameraRecorders[id];
+      });
+
+      Object.keys(peers).forEach(id => {
+        if (peers[id].stream) startCameraRecorder(id, peers[id].stream);
+      });
+
+      // Clear previous recordings
+      Object.keys(receivedRecordings).forEach(key => delete receivedRecordings[key]);
+
+      tickTimer();
+    }
+
+    // PAUSE/RESUME REMOVED - STRICT START/STOP
+    function pauseRecording() { }
+    function resumeRecording() { }
+
+    async function stopRecordingRequest() {
+      if (recordingState === "idle") return;
+      // Show choice modal before finalization
+      document.getElementById("stopModal").style.display = "flex";
+    }
+
+    function closeStopModal() {
+      document.getElementById("stopModal").style.display = "none";
+    }
+
+    function showQualityOptions() {
+      closeStopModal();
+      document.getElementById("qualitySubModal").style.display = "flex";
+    }
+
+    function closeQualitySubModal() {
+      document.getElementById("qualitySubModal").style.display = "none";
+      document.getElementById("stopModal").style.display = "flex";
+    }
+
+    function handleChoice(choice) {
+      console.log("👉 User choice:", choice);
+      closeStopModal();
+      stopAndFinalize(choice);
+    }
+
+    async function handleQualitySave(mode) {
+      document.getElementById("qualitySubModal").style.display = "none";
+      await stopAndFinalize(mode); // 'all' or 'program'
+    }
+
+    async function confirmInstantSave() {
+      closeStopModal();
+      await stopAndFinalize("instant");
+    }
+
+    async function confirmBothSave() {
+      closeStopModal();
+      await stopAndFinalize("both");
+    }
+
+    async function stopAndFinalize(mode) {
+      console.log(`Finalizing Recording (Mode: ${mode})...`);
+
+      try {
+        console.log("🛑 Stopping session...");
+
+        // 1. STOP RECORDING STATE (Local)
+        recordingState = "idle";
+        recordEndTime = Date.now();
+        clearInterval(recordTimerInt);
+        const recBtn = document.getElementById("recordBtn");
+        if (recBtn) recBtn.classList.remove("active");
+        if (document.getElementById("recordBtnText")) document.getElementById("recordBtnText").innerText = "Record";
+
+        // Update Icons
+        document.querySelector(".rec-icon").style.display = "block";
+        document.querySelector(".stop-icon").style.display = "none";
+        if (document.getElementById("recordBar")) document.getElementById("recordBar").style.display = "none";
+        if (document.getElementById("recordTimer")) document.getElementById("recordTimer").innerText = "00:00:00";
+
+        // 2. STOP LOCAL RECORDER INSTANCES
+        const stopPromises = [];
+        if (programRecorder) stopPromises.push(stopRecorder(programRecorder));
+        Object.values(cameraRecorders).forEach(r => stopPromises.push(stopRecorder(r.recorder)));
+
+        await Promise.all(stopPromises);
+
+        // ------------- LOCAL INSTANT FEEDS TO TRANSFER UI ------------- //
+        if (programChunks.length > 0) {
+          const blob = new Blob(programChunks, { type: "video/webm" });
+          receivedRecordings["program"] = blob;
+          peers["program"] = { name: "Director Program (Local)" };
+          updateTransferUI("program", 100, true);
+        }
+
+        Object.keys(cameraRecorders).forEach(id => {
+          const rec = cameraRecorders[id];
+          if (rec && rec.chunks.length > 0) {
+            const blob = new Blob(rec.chunks, { type: "video/webm" });
+            const instantId = "instant_" + id;
+            receivedRecordings[instantId] = blob;
+            const camName = peers[id] ? peers[id].name : `Camera ${id.substring(0, 4)}`;
+            peers[instantId] = { name: `${camName} (Instant Feed)` };
+            updateTransferUI(instantId, 100, true);
+          }
+        });
+        // ------------------------------------------------------------- //
+
+        // 3. SHOW DASHBOARD
+        const dash = document.getElementById("transferModal");
+        if (dash) dash.style.display = "flex";
+
+        // 4. SIGNAL SAVE TO CAMERAS AND REQUEST TRANSFERS IMMEDIATELY
+        Object.keys(peers).forEach(id => {
+          socket.emit("control", { to: id, data: { type: "stop-iso", save: "hold" } });
+          setTimeout(() => {
+             socket.emit("control", { to: id, data: { type: "request-transfer" } });
+          }, 1000);
+        });
+
+        // 5. WAIT FOR TRANSFERS BEFORE SHOWING OPTIONS
+        const renderPanel = document.getElementById("renderPhase");
+        if (renderPanel) {
+          renderPanel.innerHTML = `
+              <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 12px; padding: 30px; text-align: center;">
+                  <div class="loader" style="margin: 0 auto 15px auto;"></div>
+                  <h3 style="color:white; margin:0;">Waiting for High-Quality Source Files...</h3>
+                  <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Receiving original recordings from cameras to ensure best quality.</p>
+              </div>
+          `;
+          renderPanel.style.display = "block";
+        }
+
+        const camerasToTransfer = new Set(Object.keys(peers).filter(id => peers[id].stream));
+        console.log("⏳ stopAndFinalize: Waiting for transfers from:", Array.from(camerasToTransfer));
+
+        // Show transfer UI and status
+        const tStatusBadge = document.getElementById("transferStatusBadge");
+        if (tStatusBadge) {
+          tStatusBadge.innerText = "TRANSFERRING";
+          tStatusBadge.className = "status-badge processing";
+        }
+
+        await waitForTransfers(camerasToTransfer);
+
+        if (tStatusBadge) {
+          tStatusBadge.innerText = "SYNC COMPLETE";
+          tStatusBadge.className = "status-badge success";
+        }
+
+        // 6. SHOW DOWNLOAD SELECTION & APPLY CHOICE
+        showDownloadSelectionModal(mode);
+
+        // AUTO-EXECUTE only for Raw Later and Instant
+        // Render Now shows the selection screen first
+        if (mode === 'raw_later' || mode === 'instant') {
+          console.log("⚡ Auto-triggering process based on choice:", mode);
+          // Small delay to ensure UI updates before heavy processing
+          setTimeout(() => processSelectedDownloads(mode), 500);
+        }
+
+      } catch (e) {
+        console.error("CRITICAL ERROR in stopAndFinalize:", e);
+        alert("Error finalizing session: " + e.message);
+      }
+    }
+
+
+    function showDownloadSelectionModal(mode = 'all') {
+      const dash = document.getElementById("transferModal");
+      if (dash) dash.style.display = "flex";
+
+      const renderPanel = document.getElementById("renderPhase");
+      if (!renderPanel) return;
+
+      if (mode === 'raw_later' || mode === 'instant') {
+        // Skip selection UI, show simple status
+        renderPanel.innerHTML = `
+                <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 12px; padding: 30px; text-align: center;">
+                    <div class="loader" style="margin: 0 auto 15px auto;"></div>
+                    <h3 style="color:white; margin:0;">Processing ${mode === 'raw_later' ? 'Raw Feeds' : 'Instant Previews'}...</h3>
+                    <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Transferring and preparing your downloads.</p>
+                </div>
+            `;
+        renderPanel.style.display = "block";
+        return;
+      }
+
+      // Inject Selection UI for Manual/Render Mode
+      const timestamp = formatDate(Date.now());
+      let html = `
+            <div style="max-width: 600px; margin: 0 auto; background: #161922; border: 1px solid #262b3d; border-radius: 12px; padding: 24px;">
+                <h2 style="margin-top:0; color:white; display:flex; align-items:center; gap:10px;">
+                    Download Selection
+                    <span style="font-size:12px; background:#334155; padding:2px 8px; border-radius:12px; color:#cbd5e1;">${timestamp}</span>
+                </h2>
+                <p style="color:#94a3b8; font-size:14px; margin-bottom:20px;">Select the files you want to process and download.</p>
+                
+                <div id="selectionList" style="display:flex; flex-direction:column; gap:12px; max-height:400px; overflow-y:auto; margin-bottom:24px;">
+                    
+                    <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
+                        <label style="display:flex; align-items:center; cursor:pointer; font-weight:600;">
+                            <input type="checkbox" id="sel_final_mix" ${mode === 'render_now' ? 'checked' : ''} style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
+                            Final Mix (Stitched Program)
+                        </label>
+                        <div style="margin-top:8px; margin-left:30px; display:flex; gap:15px; font-size:13px; color:#cbd5e1;">
+                            <label><input type="radio" name="fmt_final_mix" value="mp4"> MP4 (Compatibility)</label>
+                            <label><input type="radio" name="fmt_final_mix" value="webm" checked> WebM (Fast)</label>
+                        </div>
+                    </div>
+
+                    <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
+                        <label style="display:flex; align-items:center; cursor:pointer;">
+                            <input type="checkbox" id="sel_program" style="accent-color:#3b82f6; width:18px; height:18px; margin-right:12px;">
+                            Director Program (Local Mirror)
+                        </label>
+                         <div style="margin-top:8px; margin-left:30px; display:flex; gap:15px; font-size:13px; color:#cbd5e1;">
+                            <label><input type="radio" name="fmt_program" value="mp4"> MP4</label>
+                            <label><input type="radio" name="fmt_program" value="webm" checked> WebM (Instant)</label>
+                        </div>
+                    </div>
+        `;
+
+      Object.keys(peers).forEach(id => {
+        const name = peers[id].name || `Camera ${id.substring(0, 4)}`;
+        html += `
+                    <div class="selection-item" style="background:#0f1115; padding:12px; border-radius:8px; border:1px solid #334155;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span style="color:white; font-weight:500;">${name}</span>
+                            <div style="display:flex; gap:8px;">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
+                                    <input type="checkbox" id="sel_iso_${id}" style="accent-color:#3b82f6;"> ISO Source
+                                </label>
+                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#94a3b8;">
+                                    <input type="checkbox" id="sel_mirror_${id}" style="accent-color:#3b82f6;"> Mirror
+                                </label>
+                            </div>
+                        </div>
+                        <div style="margin-left:0; display:flex; gap:15px; font-size:12px; color:#cbd5e1; border-top:1px solid #262b3d; padding-top:8px;">
+                            <span style="color:#64748b;">Format:</span>
+                            <label><input type="radio" name="fmt_iso_${id}" value="mp4"> MP4 (Quality)</label>
+                            <label><input type="radio" name="fmt_iso_${id}" value="webm" checked> WebM (Fast/Raw)</label>
+                        </div>
+                    </div>
+                `;
+      });
+
+      html += `
+                </div>
+                <div id="downloadButtons" style="display:flex; flex-direction:column; gap:12px;">
+                    <button class="btn-premium" onclick="processSelectedDownloads()" style="width:100%; height:48px; font-size:16px; justify-content:center;">
+                        Start Processing & Download
+                    </button>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                        <button class="dash-btn" onclick="downloadRawOnly()" style="border-color:#334155; color:#cbd5e1;">
+                            Download Raw Only
+                        </button>
+                        <button class="dash-btn" onclick="deferSession()" style="border-color:#334155; color:#cbd5e1;">
+                            Defer Rendering
+                        </button>
+                    </div>
+                    <button class="dash-btn" onclick="location.reload()" style="width:100%; border-color:#334155; color:#94a3b8; font-size:12px; margin-top:8px;">
+                        Discard & New Session
+                    </button>
+                </div>
+            </div>
+        `;
+
+      renderPanel.innerHTML = html;
+      renderPanel.style.display = "block";
+      // Hide complete phase if returning
+      document.getElementById("completePhase").style.display = "none";
+    }
+
+    function addToInstantList(name, status, id = null) {
+      const list = document.getElementById("readyList");
+      const div = document.createElement("div");
+      div.className = "file-item";
+      if (id) div.id = id;
+
+      div.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span class="name">${name}</span> 
+                    <div style="display:flex; align-items:center;">
+                        <span class="status-badge processing">${status}</span>
+                    </div>
+                </div>
+                <div class="dash-progress" style="display:none;">
+                    <div class="dash-fill" style="width: 0%"></div>
+                </div>
+            `;
+      list.prepend(div);
+    }
+
+    function updateInstantStatus(id, text, type = "success", blob = null) {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      const badge = el.querySelector(".status-badge");
+      if (badge) {
+        badge.innerText = text;
+        badge.className = `status-badge ${type}`;
+      }
+
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const nameEl = el.querySelector(".name");
+        const name = nameEl ? nameEl.innerText : "File";
+        el.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; width:100%;">
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                    <span class="name" style="font-weight:600; color:#4ade80;">${name}</span>
+                    <span style="font-size:10px; color:#64748b;">${(blob.size / 1024 / 1024).toFixed(1)} MB</span>
+                </div>
+                <a href="${url}" download="${name}.webm" class="dash-btn" style="padding:4px 12px; font-size:11px; background:#10b981; border:none; height:auto;">
+                    Download
+                </a>
+            </div>
+          `;
+      }
+    }
+
+    function markInstantComplete() {
+      // Done via updateInstantStatus
+    }
+
+
+    function tickTimer() {
+      clearInterval(recordTimerInt);
+      recordTimerInt = setInterval(() => {
+        const elapsed = Math.max(0, Date.now() - recordStartTime);
+        recordTimer.textContent = formatTime(elapsed / 1000);
+      }, 500);
+    }
+
+    function createRecorder(stream, chunks) {
+      const type = getSupportedMime();
+      const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      rec.ondataavailable = e => {
+        if (e.data && e.data.size > 0) {
+          chunks.push(e.data);
+          // console.log(`Captured chunk: ${ e.data.size } bytes`);
+        }
+      };
+      return rec;
+    }
+
+    function stopRecorder(rec) {
+      return new Promise(resolve => {
+        if (!rec || rec.state === "inactive") return resolve();
+        let timeout = setTimeout(() => {
+          console.warn("Stop recorder timed out");
+          resolve();
+        }, 1000);
+        rec.onstop = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        try {
+          rec.stop();
+        } catch (e) {
+          console.warn("Error stopping recorder:", e);
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    }
+
+    function getSupportedMime() {
+      const types = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm"
+      ];
+      return types.find(t => MediaRecorder.isTypeSupported(t));
+    }
+
+    function startCameraRecorder(id, stream) {
+      if (cameraRecorders[id]) return;
+      const chunks = [];
+      const rec = createRecorder(stream, chunks);
+      cameraRecorders[id] = { recorder: rec, chunks };
+      rec.start();
+    }
+
+    function sanitizeName(str) {
+      return (str || "").toString().trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_\-]/g, "");
+    }
+
+    function formatDate(ts) {
+      const d = new Date(ts);
+      const pad = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+    }
+
+    function formatTime(sec) {
+      const s = Math.floor(sec);
+      const h = String(Math.floor(s / 3600)).padStart(2, "0");
+      const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+      const r = String(s % 60).padStart(2, "0");
+      return `${h}:${m}:${r}`;
+    }
+
+    function parseTime(t) {
+      const [h, m, s] = t.split(":").map(Number);
+      return h * 3600 + m * 60 + s;
+    }
+
+    /* ===== MP4 CONVERSION ===== */
+    let ffmpegInstance = null;
+    let ffmpegRef = null; // Store the ffmpeg object
+    let fetchFileRef = null;
+
+    async function ensureFFmpeg() {
+      if (ffmpegInstance) return { ffmpeg: ffmpegRef, fetchFile: fetchFileRef };
+
+      console.log("Loading FFmpeg.wasm v0.12...");
+      const { FFmpeg } = window.FFmpegWASM;
+      const { fetchFile } = window.FFmpegUtil;
+
+      const ffmpeg = new FFmpeg();
+
+      ffmpeg.on("log", ({ message }) => {
+        // console.log("FFmpeg Log:", message);
+      });
+
+      // Load with local files
+      await ffmpeg.load({
+        coreURL: '/lib/ffmpeg/ffmpeg-core.js',
+        wasmURL: '/lib/ffmpeg/ffmpeg-core.wasm',
+        workerLoadURL: '/lib/ffmpeg/814.ffmpeg.js' // Explicitly load the worker chunk from valid origin
+      });
+
+      ffmpegRef = ffmpeg;
+      fetchFileRef = fetchFile;
+      ffmpegInstance = true;
+      return { ffmpeg, fetchFile };
+    }
+
+    async function convertToMp4(blob, baseName) {
+      // This legacy function might not be used in the new flow but updating just in case
+      const { ffmpeg, fetchFile } = await ensureFFmpeg();
+      const input = `${baseName}.webm`;
+      const output = `${baseName}.mp4`;
+
+      await ffmpeg.writeFile(input, await fetchFile(blob));
+      await ffmpeg.exec(["-i", input, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", output]);
+      const data = await ffmpeg.readFile(output);
+
+      // Cleanup not strictly necessary here if we do it in batch, but good practice
+      await ffmpeg.deleteFile(input);
+      await ffmpeg.deleteFile(output);
+
+      return new Blob([data.buffer], { type: "video/mp4" });
+    }
+
+
+
+    function enableInstantDownload(id, blob, filename) {
+      const el = document.getElementById(id);
+      const badge = el.querySelector(".status-badge");
+      if (badge) {
+        badge.className = "status-badge success";
+        badge.innerText = "READY";
+      }
+
+      // Remove existing button if any
+      const existingBtn = el.querySelector(".instant-dl-btn");
+      if (existingBtn) existingBtn.remove();
+
+      const btn = document.createElement("a");
+      btn.className = "instant-dl-btn";
+      btn.innerText = "Download";
+      btn.style.marginLeft = "10px";
+      btn.style.background = "#3b82f6";
+      btn.style.color = "white";
+      btn.style.padding = "4px 10px";
+      btn.style.borderRadius = "4px";
+      btn.style.textDecoration = "none";
+      btn.style.fontSize = "12px";
+      btn.style.cursor = "pointer";
+      btn.style.fontWeight = "600";
+
+      const url = URL.createObjectURL(blob);
+      btn.href = url;
+      btn.download = filename;
+
+      // Append to the inner wrapper (where status badge is)
+      const wrapper = el.querySelector("div > div");
+      if (wrapper) wrapper.appendChild(btn);
+    }
+
+
+
+    /* ===== QR ===== */
+    function openQr() {
+      const modal = document.getElementById("qrModal");
+      const box = document.getElementById("qrCode");
+      const linkBox = document.getElementById("qrLink");
+      box.innerHTML = "";
+
+      const url = `https://courtstream.live/camera-live.html?stream=${encodeURIComponent(streamId)}&name=${encodeURIComponent(streamLabel || "")}`;
+      new QRCode(box, {
+        text: url,
+        width: 200,
+        height: 200,
+        colorDark: "#ffffff",
+        colorLight: "#161922"
+      });
+      linkBox.textContent = url;
+      modal.style.display = "flex";
+    }
+
+    function closeQr() {
+      document.getElementById("qrModal").style.display = "none";
+    }
+
+    async function goToPlayback() {
+      if (recordingState !== "idle") {
+        if (await confirm("Recording in progress. Stop and save to Downloads before going to Playback?")) {
+          try {
+            await stopAndFinalize('all');
+            // Allow time for downloads to initiate
+            setTimeout(() => location.href = "playback.html", 1500);
+          } catch (e) {
+            console.error(e);
+            alert("Error stopping recording: " + e);
+          }
+        }
+      } else {
+        location.href = "playback.html";
+      }
+    }
+
+    // Alias for compatibility
+    async function stopRecording() {
+      return stopRecordingRequest();
+    }
+
+    /* ===== SIGNAL ===== */
+    socket.on("signal", async ({ from, data }) => {
+      const p = peers[from];
+      const v = viewers[from];
+      if (!p && !v) {
+        console.log("📡 Director: Signal from unknown peer", from);
+        return;
+      }
+
+      try {
+        if (data.type) {
+          console.log(`📡 Director: Received ${data.type} from`, from);
+          if (p) await p.pc.setRemoteDescription(new RTCSessionDescription(data));
+          if (v) await v.pc.setRemoteDescription(new RTCSessionDescription(data));
+        } else {
+          // Robust candidate handling
+          let cand = null;
+          if (data.candidate !== undefined && typeof data.candidate === 'string') {
+            cand = data;
+          } else if (data.candidate && data.candidate.candidate !== undefined) {
+            cand = data.candidate;
+          } else if (data.sdpMid !== undefined) {
+            cand = data;
+          }
+
+          if (cand) {
+            console.log("✅ Director: Adding ICE candidate from", from);
+            if (p) await p.pc.addIceCandidate(new RTCIceCandidate(cand));
+            if (v) await v.pc.addIceCandidate(new RTCIceCandidate(cand));
+          }
+        }
+      } catch (e) {
+        console.warn("Signal error:", e);
+      }
+    });
+    function downloadBlob(blob, filename) {
+      const list = document.getElementById("readyList");
+      const url = URL.createObjectURL(blob);
+
+      let category = "Other Downloads";
+      if (filename.endsWith('.json')) category = "Session Data (JSON)";
+      else if (filename.includes('_raw_quality')) category = "High-Quality Raw (ISO)";
+      else if (filename.includes('_instant')) category = "Instant Feeds (Fast)";
+      else if (filename.includes('final_mix')) category = "Final Rendered Mix";
+
+      let catDiv = document.getElementById("cat_" + category.replace(/[^a-zA-Z]/g, ''));
+      if (!catDiv) {
+        catDiv = document.createElement("div");
+        catDiv.id = "cat_" + category.replace(/[^a-zA-Z]/g, '');
+        catDiv.style.marginBottom = "14px";
+        catDiv.innerHTML = `
+              <div style="font-size:11px; font-weight:700; color:#cbd5e1; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid #334155;">
+                  ${category}
+              </div>
+              <div class="cat-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+          `;
+        list.appendChild(catDiv);
+      }
+
+      const div = document.createElement("div");
+      div.className = "file-item ready-download-item";
+      div.style.background = "rgba(16, 185, 129, 0.05)";
+      div.style.border = "1px solid rgba(16, 185, 129, 0.15)";
+
+      div.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display:flex; flex-direction:column; gap:2px;">
+                <span class="name" style="font-weight:600; color:#4ade80;">${filename}</span>
+                <span style="font-size:10px; color:#64748b;">${(blob.size / 1024 / 1024).toFixed(1)} MB</span>
+            </div>
+            <a href="${url}" download="${filename}" class="dash-btn ready-download-link" style="padding:4px 12px; font-size:11px; background:#10b981; border:none; height:auto;">
+                Download
+            </a>
+        </div>
+      `;
+
+      catDiv.querySelector(".cat-list").prepend(div);
+
+      // Update badge
+      const badge = document.getElementById("renderStatusBadge");
+      if (badge) {
+        badge.className = "status-badge success";
+        badge.innerText = "FILES READY";
+      }
+    }
+
+    function downloadAllReadyFiles() {
+      const links = document.querySelectorAll('.ready-download-link');
+      if (links.length === 0) return alert("No files ready to download.");
+      
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile && links.length > 1) {
+        alert("Multiple downloads may be blocked on mobile browsers. Please tap the individual 'Download' buttons for each file.");
+        return;
+      }
+
+      let delay = 0;
+      links.forEach(link => {
+        setTimeout(() => {
+          link.click();
+        }, delay);
+        delay += 500; // stagger downloads slightly
+      });
+    }
+
+    function goToRenderStudio() {
+      if (confirm("Proceed to Render Studio?\n\nPlease ensure you have downloaded all your necessary files (including raw videos and the JSON cuts file). Leaving this page will clear your current session's downloads.")) {
+        window.location.href = 'render.html';
+      }
+    }
+
+    function downloadRawOnly() {
+      if (confirm("Download all individual raw camera recordings? This will skip stitching the final video.")) {
+        processSelectedDownloads('raw_later');
+      }
+    }
+
+    function deferSession() {
+      if (confirm("Save recording data and defer rendering? You will be able to download/render these files later as long as this session ID remains valid on the server.")) {
+        // For now, we just tell the user where to find them or hide the modal
+        alert("Session Deferred. Your recordings are safe on the server and in the cameras. You can revisit this dashboard by stopping the recording again or using the download history (coming soon).");
+        document.getElementById("transferModal").style.display = "none";
+        // Reset state so they can continue or start new
+        recordingState = "idle";
+      }
+    }
+
+    async function processSelectedDownloads(autoMode = null) {
+      if (!autoMode) {
+        // If coming from manual selection, replace the UI with a processing indicator inside the panel
+        const renderPanel = document.getElementById("renderPhase");
+        if (renderPanel) {
+          renderPanel.innerHTML = `
+                <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 12px; padding: 30px; text-align: center;">
+                    <div class="loader" style="margin: 0 auto 15px auto;"></div>
+                    <h3 style="color:white; margin:0;">Processing Render Job...</h3>
+                    <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Preparing your final mix and selected files.</p>
+                </div>
+            `;
+        }
+      }
+
+      const btn = document.querySelector("#renderPhase button") || { disabled: false, innerText: "" };
+      if (btn && btn.disabled === false) { btn.disabled = true; btn.innerText = "Initializing..."; }
+
+      // 1. GATHER SELECTIONS (Special logic for Auto-Modes)
+      let ops = {
+        final: null,
+        program: null,
+        isos: {},
+        mirrors: {}
+      };
+
+      if (autoMode === 'raw_later' || autoMode === 'render_now') {
+        // "Raw" choice: Select all High-Quality ISOs + EDL
+        // Note: 'render_now' also starts with raw download + EDL as safety, then boots into render.html
+        Object.keys(peers).forEach(id => ops.isos[id] = 'webm');
+        if (autoMode === 'render_now') ops.final = 'webm';
+      } else if (autoMode === 'instant') {
+        // "Instant" choice: Select all Mirrors + Local Program
+        ops.program = 'webm';
+        Object.keys(peers).forEach(id => ops.mirrors[id] = 'webm');
+      } else if (autoMode === 'both') {
+        // "Both" choice: Select all Mirrors + All High-Quality ISOs + Local Program + EDL
+        ops.program = 'webm';
+        Object.keys(peers).forEach(id => {
+            ops.mirrors[id] = 'webm';
+            ops.isos[id] = 'webm';
+        });
+      } else {
+        // MANUAL MODE: Read from checkboxes if they exist
+        ops.final = document.getElementById('sel_final_mix')?.checked ?
+          document.querySelector('input[name="fmt_final_mix"]:checked')?.value : null;
+        ops.program = document.getElementById('sel_program')?.checked ?
+          document.querySelector('input[name="fmt_program"]:checked')?.value : null;
+
+        Object.keys(peers).forEach(id => {
+          if (document.getElementById(`sel_iso_${id}`)?.checked) {
+            ops.isos[id] = document.querySelector(`input[name="fmt_iso_${id}"]:checked`)?.value || 'webm';
+          }
+          if (document.getElementById(`sel_mirror_${id}`)?.checked) {
+            ops.mirrors[id] = document.querySelector(`input[name="fmt_mirror_${id}"]:checked`)?.value || 'webm';
+          }
+        });
+      }
+
+      const activeCamIds = Object.keys(peers);
+      const camerasToTransfer = new Set();
+      if (ops.final) activeCamIds.forEach(id => camerasToTransfer.add(id));
+      Object.keys(ops.isos).forEach(id => camerasToTransfer.add(id));
+
+      const isAuto = autoMode === 'raw_later' || autoMode === 'instant' || autoMode === 'both';
+
+      // 2. REQUEST TRANSFERS
+      const missing = Array.from(camerasToTransfer).filter(id => !receivedRecordings[id]);
+      if (missing.length > 0) {
+        console.log("Requesting transfers for:", missing);
+        const tList = document.getElementById("transferList");
+        if (tList) {
+          tList.innerHTML = "";
+          missing.forEach(id => {
+            const name = peers[id]?.name || `Camera ${id.substring(0, 4)}`;
+            const row = document.createElement("div");
+            row.id = `xfer_${id}`;
+            row.className = "file-item";
+            row.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span class="name" style="font-weight: 500;">${name}</span>
+                    <span class="pct" style="color: #94a3b8; font-variant-numeric: tabular-nums; font-size: 12px;">0%</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="dash-progress" style="flex: 1; margin: 0;">
+                        <div class="progress-fill dash-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="action-buttons" style="display: flex; gap: 6px;"></div>
+                </div>
+            `;
+            tList.appendChild(row);
+          });
+        }
+        missing.forEach(id => socket.emit("control", { to: id, data: { type: "request-transfer" } }));
+        if (btn) btn.innerText = "Waiting for Camera Files...";
+        await waitForTransfers(camerasToTransfer);
+      }
+
+      // UI Helpers
+      const updateStatus = (pct, msg) => {
+        if (btn) btn.innerText = `${msg} (${pct}%)`;
+        const renderStatusDiv = document.getElementById("renderStatusText");
+        const renderFillDiv = document.getElementById("renderProgressFill");
+        const pPanel = document.getElementById("renderProgressPanel");
+        if (renderStatusDiv) renderStatusDiv.innerText = msg;
+        if (renderFillDiv) renderFillDiv.style.width = `${pct}%`;
+        if (pPanel) pPanel.style.display = pct < 100 ? "flex" : "none";
+      };
+
+      try {
+        updateStatus(0, "Loading Engine");
+        const { ffmpeg, fetchFile } = await ensureFFmpeg();
+        let lastProgressTime = Date.now();
+        ffmpeg.on("log", () => lastProgressTime = Date.now());
+
+        const memFiles = {};
+
+        // INTERCEPT 'render_now' FOR AUTOLOAD
+        if (autoMode === 'render_now') {
+          updateStatus(10, "Preparing Render Data...");
+          try {
+            const dbReq = indexedDB.open("CourtStreamRenderDB", 1);
+            dbReq.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains("renderFiles")) {
+                db.createObjectStore("renderFiles");
+              }
+            };
+
+            await new Promise((resolve, reject) => {
+              dbReq.onsuccess = async (e) => {
+                const db = e.target.result;
+                const tx = db.transaction("renderFiles", "readwrite");
+                const store = tx.objectStore("renderFiles");
+
+                store.put(isoEdl, "edl");
+
+                const videoFiles = [];
+                for (const id of Array.from(camerasToTransfer)) {
+                  let blob = receivedRecordings[id];
+                  if (!blob && cameraRecorders[id]?.chunks.length) {
+                    blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+                  }
+                  if (blob) {
+                    const safeCamName = sanitizeName(peers[id]?.name || id);
+                    const safeStreamName = sanitizeName(streamName || streamId);
+                    let suffix = "_raw_quality";
+                    if (id.startsWith('instant_')) suffix = "_instant_feed";
+                    
+                    const fName = `${safeStreamName}_${safeCamName}${suffix}.webm`;
+                    // Add standard file object
+                    videoFiles.push({
+                      name: fName,
+                      blob: blob,
+                      camId: id.replace('instant_', '') // map to original camera ID 
+                    });
+                  }
+                }
+
+                store.put(videoFiles, "videos");
+
+                tx.oncomplete = () => {
+                  updateStatus(100, "Transferring to Render Studio...");
+                  setTimeout(() => {
+                    window.location.href = "render.html";
+                  }, 500);
+                  resolve();
+                };
+                tx.onerror = () => reject(tx.error);
+              };
+              dbReq.onerror = () => reject(dbReq.error);
+            });
+            return;
+          } catch (err) {
+            console.error("IndexedDB Error:", err);
+            updateStatus(-1, "Auto-transfer failed. Please manually save your files.");
+          }
+        }
+
+        // EDL DOWNLOAD (Fallback / Other modes)
+        if (autoMode === 'raw_later' || ops.final) {
+          try {
+            const cutData = JSON.stringify(isoEdl, null, 2);
+            downloadBlob(new Blob([cutData], { type: 'application/json' }), `session_cuts_${formatDate(Date.now())}.json`);
+          } catch (e) { console.error("EDL Download failed:", e); }
+        }
+
+        // OPTIMIZED RAW DOWNLOAD (Instant/Raw Later)
+        const onlyRaw = !ops.final && !Object.values(ops.isos).includes('mp4') && !Object.values(ops.mirrors).includes('mp4') && (!ops.program || ops.program === 'webm');
+
+        if (onlyRaw) {
+          updateStatus(90, "Preparing Files...");
+          Object.keys(ops.isos).forEach(id => {
+            let blob = receivedRecordings[id];
+            if (!blob && cameraRecorders[id]?.chunks.length) {
+              blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+            }
+            if (blob) {
+              const safeCamName = sanitizeName(peers[id]?.name || id);
+              const safeStreamName = sanitizeName(streamName || streamId);
+              let suffix = "_raw_quality";
+              if (id.startsWith('instant_')) suffix = "_instant_feed";
+              downloadBlob(blob, `${safeStreamName}_${safeCamName}${suffix}.webm`);
+            }
+          });
+          if (ops.program === 'webm') {
+            let pBlob = receivedRecordings['program'];
+            if (!pBlob && programChunks.length) {
+              pBlob = new Blob(programChunks, { type: "video/webm" });
+            }
+            if (pBlob) {
+              const safeStreamName = sanitizeName(streamName || streamId);
+              downloadBlob(pBlob, `${safeStreamName}_program_local_instant.webm`);
+            }
+          }
+          // Mirrors
+          Object.keys(ops.mirrors).forEach(id => {
+            const rec = cameraRecorders[id];
+            if (rec && rec.chunks.length) {
+              const safeCamName = sanitizeName(peers[id]?.name || id);
+              const safeStreamName = sanitizeName(streamName || streamId);
+              downloadBlob(new Blob(rec.chunks, { type: "video/webm" }), `${safeStreamName}_${safeCamName}_mirror_instant.webm`);
+            }
+          });
+
+          // Final UI Update: Hide selection, show simple status or download history
+          if (isAuto) {
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            document.getElementById("renderPhase").innerHTML = `
+                        <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid #22c55e; border-radius: 12px; padding: 30px; text-align: center;">
+                            <div style="font-size: 40px; margin-bottom: 10px;">✅</div>
+                            <h3 style="color:white; margin:0;">Downloads Ready!</h3>
+                            <p style="color:#94a3b8; font-size:14px; margin-top:8px;">${isMobile ? "Please tap the 'Download' button next to each file below to save them." : "Your browser should start the downloads automatically. If not, click Download All below."}</p>
+                            <button class="dash-btn" onclick="location.reload()" style="margin: 20px auto 0 auto; background: #334155; border:none;">New Session</button>
+                        </div>
+                    `;
+            if (!isMobile) {
+              setTimeout(() => downloadAllReadyFiles(), 500);
+            }
+          }
+          updateStatus(100, "Done!");
+          document.getElementById("completePhase").style.display = "block";
+          return;
+        }
+
+        // HEAVY PROCESSING (MP4 / STITCHING)
+        let usedFallback = false;
+        const needsIsoInMem = ops.final || Object.values(ops.isos).includes('mp4');
+
+        if (needsIsoInMem) {
+          updateStatus(10, "Loading Memory...");
+          for (const id of Array.from(camerasToTransfer)) {
+            let blob = receivedRecordings[id];
+            if (!blob && cameraRecorders[id]?.chunks.length) {
+              blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+              usedFallback = true;
+            }
+            if (blob) {
+              const name = `iso_${id}.webm`;
+              await ffmpeg.writeFile(name, await fetchFile(blob));
+              memFiles[`iso_${id}_webm`] = name;
+            }
+          }
+        }
+
+        if (ops.final) {
+          // If Manual 'Final Mix' was selected but autoMode was not 'render_now'
+          // We can just dump the files to IndexedDB and redirect anyway since server is deprecated.
+          updateStatus(10, "Preparing Render Data...");
+          try {
+            const dbReq = indexedDB.open("CourtStreamRenderDB", 1);
+            dbReq.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains("renderFiles")) {
+                db.createObjectStore("renderFiles");
+              }
+            };
+            await new Promise((resolve, reject) => {
+              dbReq.onsuccess = async (e) => {
+                const db = e.target.result;
+                const tx = db.transaction("renderFiles", "readwrite");
+                const store = tx.objectStore("renderFiles");
+
+                store.put(isoEdl, "edl");
+
+                const videoFiles = [];
+                for (const id of Array.from(camerasToTransfer)) {
+                  let blob = receivedRecordings[id];
+                  if (!blob && cameraRecorders[id]?.chunks.length) {
+                    blob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+                  }
+                  if (blob) {
+                    const safeCamName = sanitizeName(peers[id]?.name || id);
+                    const safeStreamName = sanitizeName(streamName || streamId);
+                    let suffix = "_raw_quality";
+                    if (id.startsWith('instant_')) suffix = "_instant_feed";
+                    videoFiles.push({
+                      name: `${safeStreamName}_${safeCamName}${suffix}.webm`,
+                      blob: blob,
+                      camId: id.replace('instant_', '') 
+                    });
+                  }
+                }
+                store.put(videoFiles, "videos");
+
+                tx.oncomplete = () => {
+                  updateStatus(100, "Transferring to Render Studio...");
+                  setTimeout(() => {
+                    window.location.href = "render.html";
+                  }, 500);
+                  resolve();
+                };
+                tx.onerror = () => reject(tx.error);
+              };
+              dbReq.onerror = () => reject(dbReq.error);
+            });
+            return;
+          } catch (err) {
+             console.error("IndexedDB Error", err);
+          }
+        }
+
+        // INDIVIDUAL CONVERSIONS
+        for (const id of Object.keys(ops.isos)) {
+          if (ops.isos[id] === 'mp4') {
+            updateStatus(90, `Converting ${peers[id]?.name || id} to MP4`);
+            if (!memFiles[`iso_${id}_webm`] && receivedRecordings[id]) await ffmpeg.writeFile(`iso_${id}.webm`, await fetchFile(receivedRecordings[id]));
+            await ffmpeg.exec(["-i", `iso_${id}.webm`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", `iso_${id}.mp4`]);
+            const safeCamName = sanitizeName(peers[id]?.name || id);
+            let suffix = "_raw_quality";
+            if (id.startsWith('instant_')) suffix = "_instant_feed";
+            else if (id === 'program') suffix = "_local_program";
+            downloadBlob(new Blob([(await ffmpeg.readFile(`iso_${id}.mp4`)).buffer], { type: 'video/mp4' }), `${safeStreamName}_${safeCamName}${suffix}.mp4`);
+          }
+        }
+
+        updateStatus(100, "Finished!");
+        document.getElementById("completePhase").style.display = "block";
+        if (btn) btn.innerText = "Processing Complete";
+
+      } catch (e) {
+        console.error("Processing Error:", e);
+        updateStatus(-1, "Error: " + e.message);
+        alert("Processing Failed: " + e.message);
+      }
+    }
+
+    function waitForTransfers(requiredSet) {
+      return new Promise(resolve => {
+        const start = Date.now();
+        const timeout = 600000; // 10 minutes timeout for high-quality file transfers
+        const check = setInterval(() => {
+          // Check if any required cameras are missing AND NOT cancelled
+          const missing = Array.from(requiredSet).filter(id => !receivedRecordings[id] && !cancelledTransfers.has(id));
+          const elapsed = Date.now() - start;
+
+          if (missing.length === 0 || elapsed > timeout) {
+            clearInterval(check);
+            if (missing.length > 0) {
+              console.warn("⚠️ waitForTransfers timed out or finished with missing:", missing);
+              missing.forEach(id => {
+                // If it's missing and we haven't manually cancelled it
+                if (!receivedRecordings[id] && !cancelledTransfers.has(id)) {
+                  const retryBtn = document.getElementById(`retry_${id}`);
+                  const cancelBtn = document.getElementById(`cancel_${id}`);
+                  if (retryBtn) retryBtn.style.display = "inline-flex";
+                  if (cancelBtn) cancelBtn.style.display = "inline-flex";
+                  const row = document.getElementById(`xfer_${id}`);
+                  if (row) {
+                    row.querySelector(".pct").innerText = "Timeout / Waiting...";
+                    row.querySelector(".pct").style.color = "#ea580c"; // Orange warning
+                  }
+                }
+              });
+            }
+            resolve();
+          } else {
+            // After 5s, show "Skip/Fallback" buttons so user can proceed if they want
+            if (elapsed > 5000) {
+              missing.forEach(id => {
+                const cancelBtn = document.getElementById(`cancel_${id}`);
+                const retryBtn = document.getElementById(`retry_${id}`);
+                if (cancelBtn) cancelBtn.style.display = "inline-flex";
+                if (retryBtn) retryBtn.style.display = "inline-flex";
+              });
+            }
+          }
+        }, 500);
+      });
+    }
+
+    // Safety Warning
+    window.addEventListener("beforeunload", (e) => {
+      const transferModal = document.getElementById("transferModal");
+      if (isRecording || (transferModal && transferModal.style.display === "flex")) {
+        e.preventDefault();
+        e.returnValue = "You have an active recording or transfer in progress. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    });
+
+  </script>
+  <script src="feedback.js"></script>
+  <div id="renderProgressPanel"
+    style="display:none; position:fixed; bottom:100px; left:50%; transform:translateX(-50%); width:320px; background:rgba(0,0,0,0.8); padding:16px; border-radius:12px; border:1px solid var(--border); z-index:200; flex-direction:column; gap:8px;">
+    <div style="font-size:12px; font-weight:600; color:#94a3b8;" id="renderStatusText">Rendering Video...</div>
+    <div style="height:8px; background:#1e293b; border-radius:4px; overflow:hidden;">
+      <div id="renderProgressFill" style="width:0%; height:100%; background:#3b82f6; transition: width 0.3s ease;">
+      </div>
+    </div>
+  </div>
+  <script src="tutorial.js"></script>
+  <script src="audiodirector.js"></script>
+</body>
+
+</html>
