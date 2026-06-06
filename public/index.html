@@ -341,6 +341,11 @@
       border-color: var(--red);
     }
 
+    .audio-direct-btn:hover {
+      background: var(--green);
+      border-color: var(--green);
+    }
+
     /* EMPTY STATE */
     .empty-state {
       text-align: center;
@@ -547,6 +552,10 @@
                     <button class="icon-btn direct-btn" onclick="location.href='director.html?stream=${s.id}&name=${encodeURIComponent(s.name)}'" title="Direct">
                       <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
                       <span>Direct</span>
+                    </button>
+                    <button class="icon-btn audio-direct-btn" onclick="location.href='audiodirector.html?stream=${s.id}&name=${encodeURIComponent(s.name)}'" title="Audio Direct">
+                      <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                      <span>Audio Direct</span>
                     </button>` : ''}
                 </div>
             </div>
