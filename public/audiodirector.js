@@ -7,6 +7,11 @@ let isCalibrating = false;
 let lastSwitchTime = 0;
 const SWITCH_DEBOUNCE_MS = 1000;
 
+// Confidence Accumulator
+let accumulationWindowTimer = null;
+const ACCUMULATOR_MS = 150;
+let confidenceScores = {}; // id -> score
+
 function toggleAutoAudio() {
   autoAudioEnabled = !autoAudioEnabled;
   const btn = document.getElementById("autoAudioBtn");
@@ -43,7 +48,7 @@ function calibrateMics() {
     return;
   }
   
-  alert("Calibrating mics... Please remain quiet for 5 seconds.");
+  alert("Calibrating mics... Stand in the center of the court and bounce the ball once loudly during the next 5 seconds.");
   isCalibrating = true;
   
   // Reset existing baseline data
@@ -57,11 +62,12 @@ function calibrateMics() {
     Object.keys(audioAnalyzers).forEach(id => {
       const a = audioAnalyzers[id];
       if (a.calibrationSamples && a.calibrationSamples.length > 0) {
-        const sum = a.calibrationSamples.reduce((acc, val) => acc + val, 0);
-        a.baseline = sum / a.calibrationSamples.length;
-        // Normalize: target a baseline of 5.
-        a.gainMultiplier = Math.min(5, Math.max(0.1, 5 / Math.max(1, a.baseline)));
-        report += `${peers[id]?.name || id}: Base ${a.baseline.toFixed(1)}, Multiplier ${a.gainMultiplier.toFixed(2)}\n`;
+        // Impact Impulse Peak: Find the absolute maximum peak
+        const peak = Math.max(...a.calibrationSamples, 0.1); 
+        a.baseline = peak;
+        // Normalize: target a peak of 100
+        a.gainMultiplier = 100 / peak;
+        report += `${peers[id]?.name || id}: Peak ${peak.toFixed(1)}, Multiplier ${a.gainMultiplier.toFixed(2)}\n`;
       }
     });
     console.log(report);
@@ -111,10 +117,19 @@ function analyzeAudioLoop() {
           // In WebRTC, the MediaStream might only have video tracks initially. Check for audio.
           if (p.stream.getAudioTracks().length > 0) {
             const source = audioCtx.createMediaStreamSource(p.stream);
+            
+            // BiquadFilterNode for 120Hz bandpass, Q = 2.0
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = "bandpass";
+            filter.frequency.value = 120;
+            filter.Q.value = 2.0;
+            
             const analyser = audioCtx.createAnalyser();
             analyser.fftSize = 256;
             analyser.smoothingTimeConstant = 0.5; // lower smoothing for faster transient detection
-            source.connect(analyser);
+            
+            source.connect(filter);
+            filter.connect(analyser);
             
             audioAnalyzers[id] = {
               analyser: analyser,
@@ -134,8 +149,6 @@ function analyzeAudioLoop() {
   }
   
   // 2. Process audio levels
-  let maxTransientLevel = 0;
-  let loudestCameraId = null;
   const now = Date.now();
   
   Object.keys(audioAnalyzers).forEach(id => {
@@ -148,14 +161,9 @@ function analyzeAudioLoop() {
     const a = audioAnalyzers[id];
     a.analyser.getByteFrequencyData(a.dataArray);
     
-    // Calculate energy in lower-mid frequencies (e.g. basketball dribble "thud")
-    // For 48kHz sample rate, fftSize 256, each bin is ~187Hz. 
-    // Bins 1 to 5 cover ~187Hz to ~900Hz.
-    let energy = 0;
-    for(let i = 1; i <= 5; i++) {
-      energy += a.dataArray[i];
-    }
-    energy = energy / 5;
+    // With a 120Hz bandpass filter, the target energy will be primarily in the lowest bins.
+    // For 48kHz, fftSize=256, bin 0 is 0-93Hz, bin 1 is 93-281Hz (perfect for 120Hz).
+    let energy = Math.max(a.dataArray[0], a.dataArray[1]);
     
     if (isCalibrating) {
       a.calibrationSamples.push(energy);
@@ -181,41 +189,54 @@ function analyzeAudioLoop() {
     // Transient threshold: spike is significantly higher than rolling average and absolute minimum
     if (autoAudioEnabled && !isCalibrating) {
       if (adjustedEnergy > a.rollingAvg + 30 && adjustedEnergy > 40) {
-        if (adjustedEnergy > maxTransientLevel) {
-          maxTransientLevel = adjustedEnergy;
-          loudestCameraId = id;
+        // Accumulate confidence instead of switching immediately
+        if (!confidenceScores[id]) confidenceScores[id] = 0;
+        confidenceScores[id] += adjustedEnergy;
+        
+        if (!accumulationWindowTimer) {
+          accumulationWindowTimer = setTimeout(() => {
+            // Find highest confidence score
+            let bestId = null;
+            let maxScore = 0;
+            Object.keys(confidenceScores).forEach(cid => {
+              if (confidenceScores[cid] > maxScore) {
+                maxScore = confidenceScores[cid];
+                bestId = cid;
+              }
+            });
+            
+            // Auto Switch Logic
+            if (bestId && (Date.now() - lastSwitchTime > SWITCH_DEBOUNCE_MS)) {
+              if (typeof currentLiveId !== 'undefined' && currentLiveId !== bestId) {
+                console.log(`🎤 Transient detected! Confidence switch to ${bestId}. Score: ${maxScore.toFixed(1)}`);
+                
+                if (typeof setLiveCamera === 'function') {
+                  setLiveCamera(bestId);
+                }
+                lastSwitchTime = Date.now();
+                
+                // Visual indicator
+                const streamBadge = document.getElementById('streamBadge');
+                if (streamBadge) {
+                  const originalHtml = streamBadge.innerHTML;
+                  streamBadge.innerHTML = `<span style="color:var(--red);">🎙️ SWITCHED TO ${peers[bestId]?.name || 'CAMERA'}</span>`;
+                  streamBadge.style.borderColor = "var(--red)";
+                  setTimeout(() => {
+                    streamBadge.innerHTML = originalHtml;
+                    streamBadge.style.borderColor = "";
+                  }, 1500);
+                }
+              }
+            }
+            
+            // Reset accumulator
+            confidenceScores = {};
+            accumulationWindowTimer = null;
+          }, ACCUMULATOR_MS);
         }
       }
     }
   });
-  
-  // 3. Auto Switch Logic
-  if (autoAudioEnabled && !isCalibrating && loudestCameraId) {
-    if (now - lastSwitchTime > SWITCH_DEBOUNCE_MS) {
-      // Check if currentLiveId exists and differs
-      if (typeof currentLiveId !== 'undefined' && currentLiveId !== loudestCameraId) {
-        console.log(`🎤 Transient detected! Switching to ${loudestCameraId}. Level: ${maxTransientLevel.toFixed(1)}`);
-        
-        // Trigger the switch
-        if (typeof setLiveCamera === 'function') {
-          setLiveCamera(loudestCameraId);
-        }
-        lastSwitchTime = now;
-        
-        // Visual indicator
-        const streamBadge = document.getElementById('streamBadge');
-        if (streamBadge) {
-          const originalHtml = streamBadge.innerHTML;
-          streamBadge.innerHTML = `<span style="color:var(--red);">🎙️ SWITCHED TO ${peers[loudestCameraId]?.name || 'CAMERA'}</span>`;
-          streamBadge.style.borderColor = "var(--red)";
-          setTimeout(() => {
-            streamBadge.innerHTML = originalHtml;
-            streamBadge.style.borderColor = "";
-          }, 1500);
-        }
-      }
-    }
-  }
 }
 
 // Start the loop
