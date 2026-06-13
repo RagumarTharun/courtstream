@@ -70,8 +70,14 @@ app.get('/api/stream/:taskId', (req, res) => {
             res.write(`data: ${JSON.stringify({ type: 'complete', url: currentTask.downloadUrl })}\n\n`);
             clearInterval(interval);
             res.end();
+        } else if (currentTask.status === 'error') {
+            clearInterval(interval);
+            res.end();
+        } else {
+            // Heartbeat to keep the connection alive
+            res.write(`:\n\n`);
         }
-    }, 500);
+    }, 1000);
 
     // Attach stream to task to push live updates
     task.stream = res;
@@ -141,7 +147,16 @@ async function processDocument(taskId, file) {
         const pdfPath = path.join(DOWNLOADS_DIR, `Ally_Solution_${taskId}.pdf`);
         
         // Use md-to-pdf to generate the PDF
-        await mdToPdf({ content: markdownText }, { dest: pdfPath });
+        await mdToPdf(
+            { content: markdownText }, 
+            { 
+                dest: pdfPath,
+                launch_options: { 
+                    executablePath: '/snap/bin/chromium',
+                    args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+                }
+            }
+        );
 
         log(`[ALLY] PDF generation complete. Isolating binary data stream...`);
         
