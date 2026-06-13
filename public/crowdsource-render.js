@@ -280,17 +280,19 @@ renderBtn.onclick = async () => {
                 outputFile
             ];
 
-            await ffmpeg.exec(args);
+            const result = await ffmpeg.exec(args);
+            if (result !== 0) throw new Error(`Segment ${i} failed to render.`);
             segmentFiles.push(outputFile);
         }
 
         // Stitching
         progressText.innerText = "Stitching Final Master Cut...";
-        const listContent = segmentFiles.map(s => `file '${s}'`).join("\\n");
+        const listContent = segmentFiles.map(s => `file '${s}'`).join("\n");
         await ffmpeg.writeFile("list.txt", listContent);
         
         const finalName = `master_render.mp4`;
-        await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", finalName]);
+        const concatResult = await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", finalName]);
+        if (concatResult !== 0) throw new Error("Concat stitching failed.");
 
         // Download
         progressText.innerText = "Finishing...";
