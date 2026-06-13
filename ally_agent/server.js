@@ -114,9 +114,9 @@ async function processDocument(taskId, file) {
         const systemPrompt = fs.readFileSync(path.join(__dirname, 'system_prompt.txt'), 'utf8');
         const finalPrompt = systemPrompt + "\n\nCRITICAL INSTRUCTION FOR OUTPUT: Analyze the attached document and provide the complete solution. Format your response strictly in beautifully structured Markdown. Do not output code blocks unless it is actual code to display. Provide clear headings, bullet points, and math formulas if applicable.";
         
-        log(`[SANDBOX] EXEC> Processing via gemini-2.5-flash...`);
+        log(`[SANDBOX] EXEC> Processing via gemini-1.5-flash...`);
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash',
             contents: [
                 { fileData: { fileUri: uploadResult.uri, mimeType: uploadResult.mimeType } },
                 finalPrompt
