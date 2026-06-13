@@ -4,9 +4,10 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const markdownpdf = require('markdown-pdf');
-const { GoogleGenAI } = require('@google/genai');
-
-const ai = new GoogleGenAI({});
+let ai;
+import('@google/genai').then(({ GoogleGenAI }) => {
+    ai = new GoogleGenAI({});
+}).catch(err => console.error("Failed to load GoogleGenAI:", err));
 
 
 const app = express();
@@ -102,7 +103,10 @@ async function processDocument(taskId, file) {
         }
 
         log(`[ALLY] Uploading document to secure Gemini sandbox...`);
-        const uploadResult = await ai.files.upload({ file: file.path, mimeType: file.mimetype });
+        const uploadResult = await ai.files.upload({ 
+            file: file.path, 
+            config: { mimeType: file.mimetype } 
+        });
         
         log(`[ALLY] Document uploaded successfully. Initiating analysis...`);
         const systemPrompt = fs.readFileSync(path.join(__dirname, 'system_prompt.txt'), 'utf8');
