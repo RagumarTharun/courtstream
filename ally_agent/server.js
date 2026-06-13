@@ -117,7 +117,10 @@ async function processDocument(taskId, file) {
         log(`[SANDBOX] EXEC> Processing via gemini-2.5-flash...`);
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: [uploadResult, finalPrompt]
+            contents: [
+                { fileData: { fileUri: uploadResult.uri, mimeType: uploadResult.mimeType } },
+                finalPrompt
+            ]
         });
 
         const markdownText = response.text;
