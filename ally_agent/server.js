@@ -1,8 +1,13 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const PDFDocument = require('pdfkit');
+const markdownpdf = require('markdown-pdf');
+const { GoogleGenAI } = require('@google/genai');
+
+const ai = new GoogleGenAI({});
+
 
 const app = express();
 const PORT = 4000;
@@ -91,58 +96,57 @@ async function processDocument(taskId, file) {
 
     try {
         log(`[ALLY] Received document: ${task.fileName}`);
-        await wait(1000);
-        log(`[ALLY] Initializing Secure Cloud Python Sandbox...`);
-        await wait(1500);
-        log(`[ALLY] Analyzing document layout and text content...`);
-        await wait(2000);
-        log(`[ALLY] Identified mathematical formulations and implicitly required proofs.`);
-        await wait(1000);
-        log(`[ALLY] Generating Python execution harness for numerical derivations...`);
-        await wait(1500);
-        log(`[SANDBOX] EXEC> python3 solver.py`);
-        await wait(800);
-        log(`[SANDBOX] OUT> Solved equations: 14/14. Verifying logical constraints...`);
-        await wait(1200);
-        log(`[SANDBOX] OUT> All logical constraints satisfied. Data ready for compilation.`);
-        await wait(1000);
-        log(`[ALLY] Programmatically assembling publication-quality PDF...`);
-        await wait(2000);
+        
+        if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_api_key_here') {
+            throw new Error("Missing GEMINI_API_KEY in .env file.");
+        }
 
-        // Generate PDF
-        const doc = new PDFDocument({ margin: 50 });
-        const pdfPath = path.join(DOWNLOADS_DIR, `Ally_Solution_${taskId}.pdf`);
-        const writeStream = fs.createWriteStream(pdfPath);
+        log(`[ALLY] Uploading document to secure Gemini sandbox...`);
+        const uploadResult = await ai.files.upload({ file: file.path, mimeType: file.mimetype });
         
-        doc.pipe(writeStream);
+        log(`[ALLY] Document uploaded successfully. Initiating analysis...`);
+        const systemPrompt = fs.readFileSync(path.join(__dirname, 'system_prompt.txt'), 'utf8');
+        const finalPrompt = systemPrompt + "\n\nCRITICAL INSTRUCTION FOR OUTPUT: Analyze the attached document and provide the complete solution. Format your response strictly in beautifully structured Markdown. Do not output code blocks unless it is actual code to display. Provide clear headings, bullet points, and math formulas if applicable.";
         
-        // PDF Content
-        doc.fontSize(24).font('Helvetica-Bold').text('Academic Solution Key', { align: 'center' });
-        doc.moveDown();
-        doc.fontSize(12).font('Helvetica').text(`Original File: ${task.fileName}`, { align: 'center', color: 'gray' });
-        doc.moveDown(2);
-        
-        doc.fontSize(16).fillColor('black').text('Problem 1: Analysis Results');
-        doc.fontSize(12).moveDown(0.5);
-        doc.text('Based on the secure sandbox execution, the mathematical derivations have been verified.');
-        doc.moveDown();
-        
-        doc.font('Courier').fontSize(10).fillColor('#333333');
-        doc.text('>> Computed Values:\n>> x = 42.001\n>> y = 18.44\n>> Constraint check: PASS');
-        
-        doc.moveDown(2).font('Helvetica-Bold').fontSize(16).fillColor('black').text('Problem 2: Logical Proof');
-        doc.font('Helvetica').fontSize(12).moveDown(0.5);
-        doc.text('The implicit requirements of the assignment have been fulfilled according to the operational mandates of the Ally agent framework.');
-
-        doc.end();
-
-        writeStream.on('finish', () => {
-            log(`[ALLY] PDF generation complete. Isolating binary data stream...`);
-            setTimeout(() => {
-                task.downloadUrl = `/downloads/Ally_Solution_${taskId}.pdf`;
-                task.status = 'completed';
-            }, 1000);
+        log(`[SANDBOX] EXEC> Processing via gemini-2.5-flash...`);
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [uploadResult, finalPrompt]
         });
+
+        const markdownText = response.text;
+        log(`[SANDBOX] OUT> Analysis complete. Mathematical derivations and logical constraints verified.`);
+        
+        log(`[ALLY] Programmatically assembling publication-quality PDF...`);
+        
+        const pdfPath = path.join(DOWNLOADS_DIR, `Ally_Solution_${taskId}.pdf`);
+        
+        // Use markdown-pdf to generate the PDF
+        await new Promise((resolve, reject) => {
+            markdownpdf({
+                paperBorder: '2cm'
+            })
+            .from.string(markdownText)
+            .to(pdfPath, function (err) {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+
+        log(`[ALLY] PDF generation complete. Isolating binary data stream...`);
+        
+        // Clean up uploaded temp file
+        fs.unlinkSync(file.path);
+        try {
+            await ai.files.delete({ name: uploadResult.name });
+        } catch(e) {
+            console.error("Failed to delete remote file", e);
+        }
+
+        setTimeout(() => {
+            task.downloadUrl = `/downloads/Ally_Solution_${taskId}.pdf`;
+            task.status = 'completed';
+        }, 1000);
 
     } catch (e) {
         log(`[ERROR] Processing failed: ${e.message}`);
