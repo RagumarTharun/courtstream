@@ -143,7 +143,7 @@ function toggleGoodView() {
     }
 }
 
-function exportFiles() {
+async function exportFiles() {
     // If recording ended while good view was still on, close the event
     if (isGoodView) {
         metadata.events.push({
@@ -155,33 +155,34 @@ function exportFiles() {
     const timestampStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0,19);
     const baseFilename = `crowdcam_${metadata.camId}_${timestampStr}`;
 
-    // Export Video
-    const videoBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
-    const videoUrl = URL.createObjectURL(videoBlob);
-    const videoExt = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
-    
-    const vA = document.createElement('a');
-    vA.href = videoUrl;
-    vA.download = `${baseFilename}.${videoExt}`;
-    vA.click();
+    statusText.textContent = "Zipping...";
 
-    // Export Metadata
+    // Create blobs
+    const videoBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+    const videoExt = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
     const jsonStr = JSON.stringify(metadata, null, 2);
-    const jsonBlob = new Blob([jsonStr], { type: 'application/json' });
-    const jsonUrl = URL.createObjectURL(jsonBlob);
-    
-    setTimeout(() => {
-        const jA = document.createElement('a');
-        jA.href = jsonUrl;
-        jA.download = `${baseFilename}.json`;
-        jA.click();
-    }, 500); // slight delay to allow first download prompt to appear
-    
-    // Cleanup memory
-    setTimeout(() => {
-        URL.revokeObjectURL(videoUrl);
-        URL.revokeObjectURL(jsonUrl);
-    }, 10000);
+
+    // Bundle into ZIP
+    const zip = new JSZip();
+    zip.file(`${baseFilename}.${videoExt}`, videoBlob);
+    zip.file(`${baseFilename}.json`, jsonStr);
+
+    try {
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const zipUrl = URL.createObjectURL(zipBlob);
+        
+        const a = document.createElement('a');
+        a.href = zipUrl;
+        a.download = `${baseFilename}.zip`;
+        a.click();
+
+        setTimeout(() => URL.revokeObjectURL(zipUrl), 10000);
+        statusText.textContent = "Saved!";
+        setTimeout(() => { if(!isRecording) statusText.textContent = "Ready"; }, 2000);
+    } catch (e) {
+        console.error("Failed to create ZIP:", e);
+        statusText.textContent = "Save Failed";
+    }
 }
 
 // Event Listeners

@@ -31,31 +31,59 @@ clearBtn.onclick = () => {
 
 async function handleFiles(files) {
     for (const file of Array.from(files)) {
-        // Try to extract camId from filename (e.g., crowdcam_A1B2_2026...)
-        const match = file.name.match(/crowdcam_([A-Z0-9]+)_/);
-        let camId = match ? match[1] : null;
-
-        if (file.name.endsWith('.json')) {
+        if (file.name.endsWith('.zip')) {
             try {
-                const text = await file.text();
-                const meta = JSON.parse(text);
-                if (meta.camId) {
-                    camId = meta.camId;
+                const zip = await JSZip.loadAsync(file);
+                for (const filename of Object.keys(zip.files)) {
+                    const zipEntry = zip.files[filename];
+                    if (zipEntry.dir) continue;
+                    
+                    const match = filename.match(/crowdcam_([A-Z0-9]+)_/);
+                    let camId = match ? match[1] : filename.split('.')[0];
                     if (!cameras[camId]) cameras[camId] = {};
-                    cameras[camId].metaFile = file;
-                    cameras[camId].metadata = meta;
+
+                    if (filename.endsWith('.json')) {
+                        const text = await zipEntry.async("text");
+                        try {
+                            const meta = JSON.parse(text);
+                            if (meta.camId) {
+                                camId = meta.camId;
+                                if (!cameras[camId]) cameras[camId] = {};
+                            }
+                            cameras[camId].metaFile = file; // placeholder
+                            cameras[camId].metadata = meta;
+                        } catch(e) {}
+                    } else if (filename.match(/\.(webm|mp4)$/i)) {
+                        const blob = await zipEntry.async("blob");
+                        const videoFile = new File([blob], filename, { type: filename.endsWith('.mp4') ? 'video/mp4' : 'video/webm' });
+                        cameras[camId].videoFile = videoFile;
+                    }
                 }
             } catch(e) {
-                console.error("Invalid JSON", file.name);
+                console.error("Failed to unzip", e);
             }
-        } else if (file.type.startsWith('video/')) {
-            // If we couldn't parse camId from name, we might just use the raw filename
-            if (!camId) {
-                // Try to infer from a generic format if it doesn't match our exact pattern
-                camId = file.name.split('.')[0]; 
+        } else {
+            const match = file.name.match(/crowdcam_([A-Z0-9]+)_/);
+            let camId = match ? match[1] : null;
+
+            if (file.name.endsWith('.json')) {
+                try {
+                    const text = await file.text();
+                    const meta = JSON.parse(text);
+                    if (meta.camId) {
+                        camId = meta.camId;
+                        if (!cameras[camId]) cameras[camId] = {};
+                        cameras[camId].metaFile = file;
+                        cameras[camId].metadata = meta;
+                    }
+                } catch(e) {
+                    console.error("Invalid JSON", file.name);
+                }
+            } else if (file.type.startsWith('video/')) {
+                if (!camId) camId = file.name.split('.')[0]; 
+                if (!cameras[camId]) cameras[camId] = {};
+                cameras[camId].videoFile = file;
             }
-            if (!cameras[camId]) cameras[camId] = {};
-            cameras[camId].videoFile = file;
         }
     }
     updateUI();
