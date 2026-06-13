@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CourtStream - Crowd Render</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2'><rect x='2' y='2' width='20' height='20' rx='5' ry='5'/><path d='M10 8l6 4-6 4V8z' fill='white' stroke='none'/></svg>">
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #161922;
+            --border: #262b3d;
+            --text: #e6e6eb;
+            --muted: #9aa0b4;
+            --blue: #3b82f6;
+            --orange: #f59e0b;
+            --green: #10b981;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--panel);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.02);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--orange);
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        .drop-zone h3 { margin: 0 0 10px 0; color: #fff; }
+        .drop-zone p { margin: 0; color: var(--muted); font-size: 14px; }
+
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .cam-group {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cam-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .cam-id { font-weight: bold; color: var(--orange); }
+        
+        .file-badges {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        
+        .badge {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #334155;
+            color: #cbd5e1;
+        }
+        
+        .badge.found {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status { font-size: 13px; font-weight: 600; }
+        .status.ready { color: var(--green); }
+        .status.waiting { color: #f59e0b; }
+
+        .action-bar {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .btn {
+            background: var(--orange);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0.5;
+            pointer-events: none;
+            transition: all 0.2s;
+        }
+
+        .btn.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .btn:hover { filter: brightness(1.1); }
+
+        .dash-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        
+        .dash-btn:hover { border-color: var(--text); color: var(--text); }
+        
+        /* Progress Modal */
+        #progressPanel {
+            display: none;
+            background: rgba(0,0,0,0.8);
+            position: fixed;
+            top:0; left:0; width:100%; height:100%;
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .progress-box {
+            background: var(--panel);
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid var(--orange);
+            width: 400px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>
+            <a href="/" style="color:inherit; text-decoration:none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 18l-6-6 6-6"/>
+                </svg>
+            </a>
+            Crowd Render Studio
+        </h1>
+    </div>
+
+    <div class="container">
+        <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); padding:16px; border-radius:8px; font-size:13px; color:#fcd34d;">
+            <strong>Instructions:</strong> Drag & Drop all the video files (.webm/.mp4) AND metadata files (.json) generated by the Crowd Record app here.
+        </div>
+
+        <div class="drop-zone" id="dropZone">
+            <h3>Drag Files Here</h3>
+            <p>Drop Video and JSON metadata files together</p>
+            <input type="file" id="fileInput" multiple style="display:none" accept=".json,video/*">
+        </div>
+
+        <div class="file-list" id="fileList">
+            <!-- Cam groups appear here -->
+        </div>
+
+        <div class="action-bar">
+            <button id="clearBtn" class="dash-btn">Clear All</button>
+            <button id="renderBtn" class="btn">Render Master Cut</button>
+        </div>
+    </div>
+    
+    <div id="progressPanel">
+        <div class="progress-box">
+            <h3 id="progressTitle" style="margin-top:0; color:white;">Processing</h3>
+            <p id="progressText" style="color:var(--muted); font-size:14px;">Initializing engine...</p>
+        </div>
+    </div>
+
+    <!-- Need to load standard ffmpeg -->
+    <script src="/lib/ffmpeg/ffmpeg.js"></script>
+    <script src="/lib/ffmpeg/ffmpeg-util.js"></script>
+    
+    <script src="crowdsource-render.js"></script>
+</body>
+</html>
