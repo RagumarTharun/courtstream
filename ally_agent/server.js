@@ -4,9 +4,9 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const markdownpdf = require('markdown-pdf');
-let ai;
-import('@google/genai').then(({ GoogleGenAI }) => {
-    ai = new GoogleGenAI({});
+let GoogleGenAI;
+import('@google/genai').then((mod) => {
+    GoogleGenAI = mod.GoogleGenAI;
 }).catch(err => console.error("Failed to load GoogleGenAI:", err));
 
 
@@ -101,6 +101,8 @@ async function processDocument(taskId, file) {
         if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_api_key_here') {
             throw new Error("Missing GEMINI_API_KEY in .env file.");
         }
+
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
         log(`[ALLY] Uploading document to secure Gemini sandbox...`);
         const uploadResult = await ai.files.upload({ 
