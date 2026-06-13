@@ -3,7 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const markdownpdf = require('markdown-pdf');
+const { mdToPdf } = require('md-to-pdf');
 let GoogleGenAI;
 import('@google/genai').then((mod) => {
     GoogleGenAI = mod.GoogleGenAI;
@@ -105,18 +105,28 @@ async function processDocument(taskId, file) {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
         log(`[ALLY] Uploading document to secure Gemini sandbox...`);
-        const uploadResult = await ai.files.upload({ 
+        let uploadResult = await ai.files.upload({ 
             file: file.path, 
             config: { mimeType: file.mimetype } 
         });
+
+        while (uploadResult.state === 'PROCESSING') {
+            log(`[SANDBOX] Processing file on Gemini servers...`);
+            await new Promise(r => setTimeout(r, 2000));
+            uploadResult = await ai.files.get({ name: uploadResult.name });
+        }
+
+        if (uploadResult.state === 'FAILED') {
+            throw new Error("Gemini failed to process the uploaded document.");
+        }
         
-        log(`[ALLY] Document uploaded successfully. Initiating analysis...`);
+        log(`[ALLY] Document uploaded and active. Initiating analysis...`);
         const systemPrompt = fs.readFileSync(path.join(__dirname, 'system_prompt.txt'), 'utf8');
         const finalPrompt = systemPrompt + "\n\nCRITICAL INSTRUCTION FOR OUTPUT: Analyze the attached document and provide the complete solution. Format your response strictly in beautifully structured Markdown. Do not output code blocks unless it is actual code to display. Provide clear headings, bullet points, and math formulas if applicable.";
         
-        log(`[SANDBOX] EXEC> Processing via gemini-1.5-flash...`);
+        log(`[SANDBOX] EXEC> Processing via gemini-2.5-flash...`);
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.5-flash',
             contents: [
                 { fileData: { fileUri: uploadResult.uri, mimeType: uploadResult.mimeType } },
                 finalPrompt
@@ -130,17 +140,8 @@ async function processDocument(taskId, file) {
         
         const pdfPath = path.join(DOWNLOADS_DIR, `Ally_Solution_${taskId}.pdf`);
         
-        // Use markdown-pdf to generate the PDF
-        await new Promise((resolve, reject) => {
-            markdownpdf({
-                paperBorder: '2cm'
-            })
-            .from.string(markdownText)
-            .to(pdfPath, function (err) {
-                if (err) reject(err);
-                else resolve();
-            });
-        });
+        // Use md-to-pdf to generate the PDF
+        await mdToPdf({ content: markdownText }, { dest: pdfPath });
 
         log(`[ALLY] PDF generation complete. Isolating binary data stream...`);
         
