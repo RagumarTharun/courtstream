@@ -382,19 +382,26 @@
       }
 
       async function getStreamWithFallback() {
-        const constraintsByPriority = [];
+        const constraintsByPriority = [
+          // 1. Try requested facingMode first (essential for switching front vs back camera)
+          {
+            video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+            audio: true
+          },
+          {
+            video: { facingMode: { exact: facing } },
+            audio: true
+          }
+        ];
 
-        if (videoDevices.length) {
+        if (videoDevices.length && videoDevices[currentDeviceIndex]) {
           constraintsByPriority.push({
             video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } },
             audio: true
           });
         }
 
-        constraintsByPriority.push({
-          video: { facingMode: { exact: facing } },
-          audio: true
-        });
+        constraintsByPriority.push({ video: true, audio: true });
 
         let lastError;
         for (const constraints of constraintsByPriority) {
@@ -458,16 +465,43 @@
       async function switchCameraDirection() {
         if (!mediaStream) return;
         const btn = document.getElementById("switchCamBtn");
-        btn.style.opacity = "0.5";
-        btn.disabled = true;
+        if (btn) {
+          btn.style.opacity = "0.5";
+          btn.disabled = true;
+        }
 
-        // Toggle facing mode string
-        facing = facing === "environment" ? "user" : "environment";
+        try {
+          // Toggle facing mode string
+          facing = facing === "environment" ? "user" : "environment";
 
-        await startCamera(true);
+          // Find matching device index if video input devices are enumerated
+          if (videoDevices.length > 0) {
+            const targetFacing = facing;
+            const matchIndex = videoDevices.findIndex(d => {
+              const label = (d.label || "").toLowerCase();
+              if (targetFacing === "user") {
+                return label.includes("front") || label.includes("user") || label.includes("selfie");
+              } else {
+                return label.includes("back") || label.includes("rear") || label.includes("environment");
+              }
+            });
 
-        btn.style.opacity = "1";
-        btn.disabled = false;
+            if (matchIndex >= 0) {
+              currentDeviceIndex = matchIndex;
+            } else if (videoDevices.length > 1) {
+              currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+            }
+          }
+
+          await startCamera(true);
+        } catch (err) {
+          console.error("Error switching camera:", err);
+        } finally {
+          if (btn) {
+            btn.style.opacity = "1";
+            btn.disabled = false;
+          }
+        }
       }
 
       let assignedRotation = 0;

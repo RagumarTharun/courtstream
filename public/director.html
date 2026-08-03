@@ -2839,15 +2839,14 @@
           }
         }
 
-        // EDL DOWNLOAD (Fallback / Other modes)
-        if (autoMode === 'raw_later' || ops.final) {
-          try {
-            const cutData = JSON.stringify(isoEdl, null, 2);
-            downloadBlob(new Blob([cutData], { type: 'application/json' }), `session_cuts_${formatDate(Date.now())}.json`);
-          } catch (e) { console.error("EDL Download failed:", e); }
-        }
+        // ALWAYS GENERATE EDL JSON TRACKING DATA FILE
+        try {
+          const cutData = JSON.stringify(isoEdl, null, 2);
+          const safeStreamName = sanitizeName(streamName || streamId || "session");
+          downloadBlob(new Blob([cutData], { type: 'application/json' }), `${safeStreamName}_session_cuts_${formatDate(Date.now())}.json`);
+        } catch (e) { console.error("EDL Download failed:", e); }
 
-        // OPTIMIZED RAW DOWNLOAD (Instant/Raw Later)
+        // OPTIMIZED RAW DOWNLOAD (Instant/Raw Later/Both)
         const onlyRaw = !ops.final && !Object.values(ops.isos).includes('mp4') && !Object.values(ops.mirrors).includes('mp4') && (!ops.program || ops.program === 'webm');
 
         if (onlyRaw) {
@@ -2888,14 +2887,7 @@
             }
           });
 
-          // Final UI Update: Hide selection, show simple status or download history
-          if (isAuto) {
-            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            document.getElementById("renderPhase").style.display = "none";
-            if (!isMobile) {
-              setTimeout(() => downloadAllReadyFiles(), 500);
-            }
-          }
+          // Final UI Update: Show download list without triggering auto-download
           updateStatus(100, "Done!");
           document.getElementById("renderPhase").style.display = "none";
           document.getElementById("completePhase").style.display = "block";
