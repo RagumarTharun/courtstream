@@ -2133,9 +2133,8 @@
         // 6. SHOW DOWNLOAD SELECTION & APPLY CHOICE
         showDownloadSelectionModal(mode);
 
-        // AUTO-EXECUTE only for Raw Later and Instant
-        // Render Now shows the selection screen first
-        if (mode === 'raw_later' || mode === 'instant') {
+        // AUTO-EXECUTE for Raw Later, Instant, and Both modes
+        if (mode === 'raw_later' || mode === 'instant' || mode === 'both') {
           console.log("⚡ Auto-triggering process based on choice:", mode);
           // Small delay to ensure UI updates before heavy processing
           setTimeout(() => processSelectedDownloads(mode), 500);
@@ -2155,12 +2154,13 @@
       const renderPanel = document.getElementById("renderPhase");
       if (!renderPanel) return;
 
-      if (mode === 'raw_later' || mode === 'instant') {
+      if (mode === 'raw_later' || mode === 'instant' || mode === 'both') {
         // Skip selection UI, show simple status
+        const modeTitle = mode === 'both' ? 'Quality & Instant Feeds' : mode === 'raw_later' ? 'Raw Feeds' : 'Instant Previews';
         renderPanel.innerHTML = `
                 <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 12px; padding: 30px; text-align: center;">
                     <div class="loader" style="margin: 0 auto 15px auto;"></div>
-                    <h3 style="color:white; margin:0;">Processing ${mode === 'raw_later' ? 'Raw Feeds' : 'Instant Previews'}...</h3>
+                    <h3 style="color:white; margin:0;">Processing ${modeTitle}...</h3>
                     <p style="color:#94a3b8; font-size:14px; margin-top:8px;">Transferring and preparing your downloads.</p>
                 </div>
             `;
@@ -2863,30 +2863,27 @@
           }
           // Mirrors
           Object.keys(ops.mirrors).forEach(id => {
-            const rec = cameraRecorders[id];
-            if (rec && rec.chunks.length) {
-              const safeCamName = sanitizeName(peers[id]?.name || id);
+            let mBlob = receivedRecordings["instant_" + id];
+            if (!mBlob && cameraRecorders[id]?.chunks?.length) {
+              mBlob = new Blob(cameraRecorders[id].chunks, { type: "video/webm" });
+            }
+            if (mBlob) {
+              const safeCamName = sanitizeName(peers[id]?.name || peers["instant_" + id]?.name || id);
               const safeStreamName = sanitizeName(streamName || streamId);
-              downloadBlob(new Blob(rec.chunks, { type: "video/webm" }), `${safeStreamName}_${safeCamName}_mirror_instant.webm`);
+              downloadBlob(mBlob, `${safeStreamName}_${safeCamName}_mirror_instant.webm`);
             }
           });
 
           // Final UI Update: Hide selection, show simple status or download history
           if (isAuto) {
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            document.getElementById("renderPhase").innerHTML = `
-                        <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid #22c55e; border-radius: 12px; padding: 30px; text-align: center;">
-                            <div style="font-size: 40px; margin-bottom: 10px;">✅</div>
-                            <h3 style="color:white; margin:0;">Downloads Ready!</h3>
-                            <p style="color:#94a3b8; font-size:14px; margin-top:8px;">${isMobile ? "Please tap the 'Download' button next to each file below to save them." : "Your browser should start the downloads automatically. If not, click Download All below."}</p>
-                            <button class="dash-btn" onclick="location.reload()" style="margin: 20px auto 0 auto; background: #334155; border:none;">New Session</button>
-                        </div>
-                    `;
+            document.getElementById("renderPhase").style.display = "none";
             if (!isMobile) {
               setTimeout(() => downloadAllReadyFiles(), 500);
             }
           }
           updateStatus(100, "Done!");
+          document.getElementById("renderPhase").style.display = "none";
           document.getElementById("completePhase").style.display = "block";
           return;
         }
