@@ -918,16 +918,16 @@
           style="display: none; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
           
           <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
-            <h4 style="color: #4ade80; margin: 0 0 8px 0; font-size: 14px;">✅ Files Downloaded Successfully!</h4>
+            <h4 style="color: #4ade80; margin: 0 0 8px 0; font-size: 14px;">✅ Files Ready for Download!</h4>
             <p style="margin: 0; color: #cbd5e1; font-size: 13px; line-height: 1.5;">
-              Next Step: Head over to the <strong>Render Studio</strong> page and upload your Quality Feeds alongside the JSON Tracking Data to process and render your final master broadcast video!
+              Select the files you wish to save using the checkboxes below, then click <strong>Download Selected</strong>. Next Step: Upload your Quality Feeds alongside the JSON Tracking Data into <strong>Render Studio</strong> to produce your final master broadcast video!
             </p>
           </div>
 
           <div id="downloadButtons"></div>
-          <button class="dash-btn" onclick="downloadAllReadyFiles()"
+          <button class="dash-btn" onclick="downloadSelectedReadyFiles()"
             style="width: 100%; margin-bottom: 12px; background: #10b981; border: none; font-weight: 600;">
-            Download All
+            Download Selected
           </button>
           <div style="display: flex; gap: 12px;">
             <button class="dash-btn" onclick="goToRenderStudio()"
@@ -2598,9 +2598,12 @@
 
       div.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="display:flex; flex-direction:column; gap:2px;">
-                <span class="name" style="font-weight:600; color:#4ade80;">${filename}</span>
-                <span style="font-size:10px; color:#64748b;">${(blob.size / 1024 / 1024).toFixed(1)} MB</span>
+            <div style="display:flex; align-items:center; gap:12px;">
+                <input type="checkbox" class="ready-file-checkbox" checked style="width:16px; height:16px; accent-color:#10b981; cursor:pointer;" onclick="event.stopPropagation();">
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                    <span class="name" style="font-weight:600; color:#4ade80;">${filename}</span>
+                    <span style="font-size:10px; color:#64748b;">${(blob.size / 1024 / 1024).toFixed(1)} MB</span>
+                </div>
             </div>
             <a href="${url}" download="${filename}" class="dash-btn ready-download-link" style="padding:4px 12px; font-size:11px; background:#10b981; border:none; height:auto;">
                 Download
@@ -2618,24 +2621,35 @@
       }
     }
 
-    function downloadAllReadyFiles() {
-      const links = document.querySelectorAll('.ready-download-link');
-      if (links.length === 0) return alert("No files ready to download.");
-      
+    function downloadSelectedReadyFiles() {
+      const items = document.querySelectorAll('.ready-download-item');
+      const selectedLinks = [];
+
+      items.forEach(item => {
+        const checkbox = item.querySelector('.ready-file-checkbox');
+        const link = item.querySelector('.ready-download-link');
+        if (checkbox && checkbox.checked && link) {
+          selectedLinks.push(link);
+        }
+      });
+
+      if (selectedLinks.length === 0) return alert("Please check at least one file to download.");
+
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isMobile && links.length > 1) {
+      if (isMobile && selectedLinks.length > 1) {
         alert("Multiple downloads may be blocked on mobile browsers. Please tap the individual 'Download' buttons for each file.");
         return;
       }
 
       let delay = 0;
-      links.forEach(link => {
+      selectedLinks.forEach(link => {
         setTimeout(() => {
           link.click();
         }, delay);
         delay += 500; // stagger downloads slightly
       });
     }
+    const downloadAllReadyFiles = downloadSelectedReadyFiles;
 
     function goToRenderStudio() {
       if (confirm("Proceed to Render Studio?\n\nPlease ensure you have downloaded all your necessary files (including raw videos and the JSON cuts file). Leaving this page will clear your current session's downloads.")) {
