@@ -128,31 +128,15 @@ function updateUI() {
     }
 }
 
-// Generate Master Edit Decision List
+// Generate Master Edit Decision List aligned with real-time wall-clock timestamps
 function generateMasterEDL() {
     const readyCams = Object.values(cameras).filter(c => c.videoFile && c.metadata);
     if (readyCams.length === 0) return null;
 
-    // 1. Find absolute global start time (earliest recording)
-    let globalStartAbs = Infinity;
-    let globalEndAbs = 0;
-
-    readyCams.forEach(cam => {
-        if (cam.metadata.startTimeAbs < globalStartAbs) {
-            globalStartAbs = cam.metadata.startTimeAbs;
-        }
-        
-        // Find end time of this cam (start + last event, or guess based on video length if possible - for now we just use last event)
-        const lastEvent = cam.metadata.events[cam.metadata.events.length - 1];
-        if (lastEvent) {
-            const endAbs = cam.metadata.startTimeAbs + lastEvent.timestampMs;
-            if (endAbs > globalEndAbs) globalEndAbs = endAbs;
-        }
-    });
-
-    // 2. Build unified timeline of state changes
+    // 1. Collect all timeline state-change events across all cameras
     const timelineEvents = [];
     readyCams.forEach(cam => {
+        if (!cam.metadata || !Array.isArray(cam.metadata.events)) return;
         cam.metadata.events.forEach(ev => {
             timelineEvents.push({
                 camId: cam.metadata.camId,
@@ -162,71 +146,78 @@ function generateMasterEDL() {
         });
     });
 
-    // Sort by absolute time
+    if (timelineEvents.length === 0) return [];
+
+    // Sort chronologically by absolute wall-clock time
     timelineEvents.sort((a, b) => a.absTime - b.absTime);
 
-    // 3. Walk timeline and generate cuts
+    // 2. Walk timeline tracking active 'Good View' stack
     const cuts = [];
-    const activeCams = new Set();
-    let currentCutStartAbs = globalStartAbs;
-    let currentActiveCamId = null;
-
-    // Helper to pick best camera
-    const pickBestCam = () => {
-        if (activeCams.size === 0) return null; // or a default fallback
-        // Simple logic: pick the one that was most recently added, or just an arbitrary one
-        return Array.from(activeCams)[0]; 
-    };
-
-    // If no one is active at start, maybe pick the first one as a safety?
-    currentActiveCamId = readyCams[0].metadata.camId;
+    const activeCamStack = []; // Stack of active camIds ordered by activation time
+    let currentCutCamId = null;
+    let currentCutStartAbs = null;
 
     timelineEvents.forEach(ev => {
-        if (ev.state === 'on') {
-            activeCams.add(ev.camId);
-        } else {
-            activeCams.delete(ev.camId);
-        }
+        const { camId, absTime, state } = ev;
 
-        const newBestCam = pickBestCam() || readyCams[0].metadata.camId; // fallback to cam 0 if none active
-
-        if (newBestCam !== currentActiveCamId) {
-            // Cut happens!
-            if (ev.absTime > currentCutStartAbs) {
+        if (state === 'on') {
+            // Good View activated by this camera
+            if (currentCutCamId && absTime > currentCutStartAbs) {
                 cuts.push({
-                    camId: currentActiveCamId,
+                    camId: currentCutCamId,
                     startAbs: currentCutStartAbs,
-                    endAbs: ev.absTime
+                    endAbs: absTime
                 });
             }
-            currentActiveCamId = newBestCam;
-            currentCutStartAbs = ev.absTime;
+
+            if (!activeCamStack.includes(camId)) {
+                activeCamStack.push(camId);
+            }
+            currentCutCamId = camId;
+            currentCutStartAbs = absTime;
+
+        } else if (state === 'off') {
+            // Good View deactivated
+            const index = activeCamStack.indexOf(camId);
+            if (index !== -1) {
+                activeCamStack.splice(index, 1);
+            }
+
+            if (currentCutCamId === camId) {
+                if (absTime > currentCutStartAbs) {
+                    cuts.push({
+                        camId: currentCutCamId,
+                        startAbs: currentCutStartAbs,
+                        endAbs: absTime
+                    });
+                }
+
+                if (activeCamStack.length > 0) {
+                    currentCutCamId = activeCamStack[activeCamStack.length - 1];
+                    currentCutStartAbs = absTime;
+                } else {
+                    currentCutCamId = null;
+                    currentCutStartAbs = null;
+                }
+            }
         }
     });
 
-    // Add final cut segment to end
-    if (globalEndAbs > currentCutStartAbs) {
-        cuts.push({
-            camId: currentActiveCamId,
-            startAbs: currentCutStartAbs,
-            endAbs: globalEndAbs
-        });
-    }
+    console.log("Master EDL Cuts (Real-Time Aligned):", cuts);
 
-    console.log("Master EDL Cuts:", cuts);
-
-    // 4. Translate Absolute times to relative video times for FFmpeg
-    // For a cut, video timestamp = cut.startAbs - cam.startTimeAbs
+    // 3. Translate absolute real-time cuts into relative video timestamps for FFmpeg
     const ffmpegSegments = cuts.map(cut => {
         const camData = cameras[cut.camId].metadata;
+        const vidStartSec = Math.max(0, (cut.startAbs - camData.startTimeAbs) / 1000);
+        const durationSec = (cut.endAbs - cut.startAbs) / 1000;
         return {
             camId: cut.camId,
-            vidStartSec: Math.max(0, (cut.startAbs - camData.startTimeAbs) / 1000),
-            durationSec: (cut.endAbs - cut.startAbs) / 1000
+            vidStartSec: Number(vidStartSec.toFixed(3)),
+            durationSec: Number(durationSec.toFixed(3))
         };
-    }).filter(seg => seg.durationSec > 0.1); // filter out tiny segments
+    }).filter(seg => seg.durationSec >= 0.1);
 
-    console.log("FFmpeg Segments:", ffmpegSegments);
+    console.log("Final FFmpeg Segments:", ffmpegSegments);
     return ffmpegSegments;
 }
 
