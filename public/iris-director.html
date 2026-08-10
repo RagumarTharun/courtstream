@@ -792,13 +792,18 @@
 
       <div class="side-title">
         <span>Cameras</span>
-        <button class="mini-btn" onclick="refreshCameras()" title="Refresh all cameras">
-          <svg viewBox="0 0 24 24" width="12" height="12">
-            <path fill="currentColor"
-              d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-          </svg>
-          Refresh
-        </button>
+        <div style="display:flex; gap:6px;">
+          <button class="mini-btn" onclick="initDemoCameraFeeds()" title="Add simulated court camera feeds" style="background:#3b82f6; color:#fff; border:none; padding:3px 8px; border-radius:4px; font-weight:700; cursor:pointer;">
+            + Demo Feeds
+          </button>
+          <button class="mini-btn" onclick="refreshCameras()" title="Refresh all cameras">
+            <svg viewBox="0 0 24 24" width="12" height="12">
+              <path fill="currentColor"
+                d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
     </div>
 
@@ -3327,6 +3332,136 @@
       gazeCalibActive = false;
       alert(`Calibration Saved! Left: ${gazeLeftCutoff.toFixed(2)}, Right: ${gazeRightCutoff.toFixed(2)}`);
     }
+
+    /* ==========================================================================
+       DEMO CAMERA FEEDS & FALLBACK MANAGER
+       ========================================================================== */
+    function createDemoCameraSlot(id, name, canvasOrStream) {
+      if (peers[id]) return;
+
+      peers[id] = { pc: null, stream: canvasOrStream, slot: null, name: name, clientId: id, pending: false };
+
+      const slot = document.createElement("div");
+      slot.className = "camera-slot";
+      slot.draggable = true;
+      slot.dataset.peerId = id;
+      slot.dataset.clientId = id;
+
+      const nameInput = document.createElement("input");
+      nameInput.className = "camera-name";
+      nameInput.value = name;
+      nameInput.oninput = (e) => {
+        e.stopPropagation();
+        peers[id].name = nameInput.value.trim() || name;
+      };
+
+      const actions = document.createElement("div");
+      actions.className = "camera-actions";
+
+      const v = document.createElement("video");
+      v.autoplay = true;
+      v.muted = true;
+      v.playsInline = true;
+      v.srcObject = canvasOrStream;
+
+      v.onloadedmetadata = () => {
+        v.play().catch(() => {});
+      };
+
+      slot.appendChild(actions);
+      slot.appendChild(nameInput);
+      slot.appendChild(v);
+
+      slot.onclick = () => setLiveCamera(id);
+
+      const stripContainer = document.getElementById("cameraStrip");
+      if (stripContainer) stripContainer.appendChild(slot);
+      peers[id].slot = slot;
+
+      if (!currentLiveId) {
+        setLiveCamera(id);
+      }
+    }
+
+    function initDemoCameraFeeds() {
+      const feeds = [
+        { id: 'cam_left_demo', name: 'Cam 01 - Baseline Left', color: '#3b82f6', angleOffset: -35 },
+        { id: 'cam_center_demo', name: 'Cam 02 - Midcourt Main', color: '#ef4444', angleOffset: 0 },
+        { id: 'cam_right_demo', name: 'Cam 03 - Baseline Right', color: '#22c55e', angleOffset: 35 }
+      ];
+
+      let ballX = 0;
+      let ballSpeed = 2.5;
+
+      feeds.forEach(cfg => {
+        const cvs = document.createElement('canvas');
+        cvs.width = 640;
+        cvs.height = 360;
+        const ctx = cvs.getContext('2d');
+
+        function drawDemoFrame() {
+          ballX += ballSpeed;
+          if (ballX > 100 || ballX < 0) ballSpeed = -ballSpeed;
+
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, 0, 640, 360);
+
+          ctx.save();
+          ctx.translate(320, 180);
+
+          if (cfg.angleOffset < 0) ctx.transform(0.85, 0, -0.25, 0.9, -80, 0);
+          else if (cfg.angleOffset > 0) ctx.transform(0.85, 0, 0.25, 0.9, 80, 0);
+          else ctx.transform(0.95, 0, 0, 0.95, 0, 0);
+
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(-240, -120, 480, 240);
+
+          ctx.strokeStyle = cfg.color;
+          ctx.lineWidth = 4;
+          ctx.strokeRect(-240, -120, 480, 240);
+
+          ctx.beginPath();
+          ctx.moveTo(0, -120);
+          ctx.lineTo(0, 120);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(0, 0, 50, 0, Math.PI * 2);
+          ctx.stroke();
+
+          const bPos = (ballX / 100) * 380 - 190;
+          ctx.fillStyle = '#f97316';
+          ctx.beginPath();
+          ctx.arc(bPos, Math.sin(ballX * 0.1) * 15, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          ctx.restore();
+
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.fillRect(10, 10, 190, 28);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px Inter, sans-serif';
+          ctx.fillText(cfg.name, 18, 28);
+
+          requestAnimationFrame(drawDemoFrame);
+        }
+
+        drawDemoFrame();
+        const stream = cvs.captureStream(30);
+        createDemoCameraSlot(cfg.id, cfg.name, stream);
+      });
+    }
+
+    // Auto-populate camera feeds on load if no remote camera is connected
+    setTimeout(() => {
+      if (Object.keys(peers).length === 0) {
+        console.log('🎥 Initializing camera feeds...');
+        initDemoCameraFeeds();
+      }
+    }, 800);
 
     setTimeout(initGazeEngine, 1000);
 
