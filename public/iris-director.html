@@ -1008,7 +1008,15 @@
   <script>
     /* ===== STREAM INFO ===== */
     const params = new URLSearchParams(location.search);
-    const streamId = params.get("stream");
+    let streamId = params.get("stream");
+    if (!streamId) {
+      streamId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'stream_' + Math.random().toString(36).substring(2, 9);
+      try {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set("stream", streamId);
+        window.history.replaceState({}, "", newUrl);
+      } catch (e) {}
+    }
     let streamName = params.get("name");
     let streamLabel = "";
 
@@ -3454,14 +3462,6 @@
         createDemoCameraSlot(cfg.id, cfg.name, stream);
       });
     }
-
-    // Auto-populate camera feeds on load if no remote camera is connected
-    setTimeout(() => {
-      if (Object.keys(peers).length === 0) {
-        console.log('🎥 Initializing camera feeds...');
-        initDemoCameraFeeds();
-      }
-    }, 800);
 
     setTimeout(initGazeEngine, 1000);
 
