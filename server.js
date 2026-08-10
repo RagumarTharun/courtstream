@@ -227,8 +227,8 @@ app.get("/api/turn-credentials", (req, res) => {
 /* =========================
    PAGE ROUTES
 ========================= */
-app.get(["/director/iris-control", "/iris-control"], (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "iris-control.html"));
+app.get(["/director/iris-control", "/iris-control", "/director/iris-director", "/iris-director"], (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "iris-director.html"));
 });
 
 
