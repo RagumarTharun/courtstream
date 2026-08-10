@@ -1692,6 +1692,28 @@
       slot.appendChild(actions);
       slot.appendChild(nameInput);
 
+      // Position Role Assignment Bar (LEFT / CENTER / RIGHT)
+      const roleBar = document.createElement("div");
+      roleBar.className = "cam-role-bar";
+      roleBar.style.cssText = "padding:4px 8px; background:rgba(15,23,42,0.85); border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; font-size:11px;";
+
+      const currentSlotCount = document.querySelectorAll('.camera-slot').length;
+      let autoRole = "CENTER";
+      if (currentSlotCount === 0) autoRole = "LEFT";
+      else if (currentSlotCount === 1) autoRole = "CENTER";
+      else if (currentSlotCount === 2) autoRole = "RIGHT";
+
+      roleBar.innerHTML = `
+        <span style="color:#94a3b8; font-weight:700; font-size:10px;">GAZE FEED:</span>
+        <select class="cam-role-select" onclick="event.stopPropagation()" style="background:#0a0d14; color:#06b6d4; border:1px solid #3b425b; border-radius:6px; padding:2px 6px; font-size:10px; font-weight:800; cursor:pointer;">
+          <option value="LEFT" ${autoRole === 'LEFT' ? 'selected' : ''}>LEFT FEED</option>
+          <option value="CENTER" ${autoRole === 'CENTER' ? 'selected' : ''}>CENTER FEED</option>
+          <option value="RIGHT" ${autoRole === 'RIGHT' ? 'selected' : ''}>RIGHT FEED</option>
+          <option value="UNASSIGNED">UNASSIGNED</option>
+        </select>
+      `;
+      slot.appendChild(roleBar);
+
       strip.appendChild(slot);
 
       peers[id].slot = slot;
@@ -3222,7 +3244,6 @@
         gazeProgress = Math.min(1.0, elapsed / gazeDwellMs);
 
         if (gazeProgress >= 1.0 && gazeMode === 'AUTO') {
-          // Trigger camera switch based on active camera slot order in #cameraStrip!
           triggerGazeCameraSwitch(intent);
         }
       }
@@ -3234,17 +3255,26 @@
       const slots = Array.from(document.querySelectorAll('.camera-slot'));
       if (slots.length === 0) return;
 
-      let targetIndex = 1; // Default CENTER (index 1)
-      if (intent === 'LEFT') targetIndex = 0;
-      else if (intent === 'RIGHT') targetIndex = slots.length > 2 ? 2 : slots.length - 1;
+      // 1. Look for camera slot explicitly assigned to this gaze intent (LEFT / CENTER / RIGHT)
+      let targetSlot = slots.find(s => {
+        const sel = s.querySelector('.cam-role-select');
+        return sel && sel.value === intent;
+      });
 
-      if (targetIndex >= slots.length) targetIndex = slots.length - 1;
-      const targetSlot = slots[targetIndex];
+      // 2. Fallback to slot index if no explicit assignment matches
+      if (!targetSlot) {
+        let targetIndex = 1;
+        if (intent === 'LEFT') targetIndex = 0;
+        else if (intent === 'RIGHT') targetIndex = slots.length > 2 ? 2 : slots.length - 1;
+        if (targetIndex >= slots.length) targetIndex = slots.length - 1;
+        targetSlot = slots[targetIndex];
+      }
+
       if (!targetSlot) return;
 
       const peerId = targetSlot.dataset.peerId;
       if (peerId && typeof setLiveCamera === 'function' && activeCameraId !== peerId) {
-        console.log(`👁️ Gaze Auto-Switch -> Camera Slot ${targetIndex} (Peer: ${peerId})`);
+        console.log(`👁️ Gaze Auto-Switch [${intent}] -> Peer: ${peerId}`);
         setLiveCamera(peerId);
       }
     }
@@ -3378,6 +3408,27 @@
 
       slot.appendChild(actions);
       slot.appendChild(nameInput);
+
+      const currentSlotCount = document.querySelectorAll('.camera-slot').length;
+      let autoRole = "CENTER";
+      if (id.includes('left') || currentSlotCount === 0) autoRole = "LEFT";
+      else if (id.includes('center') || currentSlotCount === 1) autoRole = "CENTER";
+      else if (id.includes('right') || currentSlotCount === 2) autoRole = "RIGHT";
+
+      const roleBar = document.createElement("div");
+      roleBar.className = "cam-role-bar";
+      roleBar.style.cssText = "padding:4px 8px; background:rgba(15,23,42,0.85); border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; font-size:11px;";
+
+      roleBar.innerHTML = `
+        <span style="color:#94a3b8; font-weight:700; font-size:10px;">GAZE FEED:</span>
+        <select class="cam-role-select" onclick="event.stopPropagation()" style="background:#0a0d14; color:#06b6d4; border:1px solid #3b425b; border-radius:6px; padding:2px 6px; font-size:10px; font-weight:800; cursor:pointer;">
+          <option value="LEFT" ${autoRole === 'LEFT' ? 'selected' : ''}>LEFT FEED</option>
+          <option value="CENTER" ${autoRole === 'CENTER' ? 'selected' : ''}>CENTER FEED</option>
+          <option value="RIGHT" ${autoRole === 'RIGHT' ? 'selected' : ''}>RIGHT FEED</option>
+          <option value="UNASSIGNED">UNASSIGNED</option>
+        </select>
+      `;
+      slot.appendChild(roleBar);
       slot.appendChild(v);
 
       slot.onclick = () => setLiveCamera(id);
