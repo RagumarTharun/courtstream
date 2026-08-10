@@ -382,7 +382,10 @@ io.on("connection", socket => {
 
     // Fetch stream info to check access
     db.get("SELECT camera_access, viewer_access, password FROM streams WHERE id = ?", [room], (err, stream) => {
-      if (!stream) return;
+      if (!stream) {
+        // Fallback default stream access for ad-hoc / direct director rooms
+        stream = { camera_access: 'public', viewer_access: 'public', password: '' };
+      }
 
       const isDirector = role === "director";
       const isViewer = role === "viewer";
