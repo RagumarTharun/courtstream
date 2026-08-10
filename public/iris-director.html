@@ -765,6 +765,15 @@
           <button id="btnGazeManual" onclick="setGazeMode('MANUAL')" style="background:transparent; color:#94a3b8; border:none; padding:6px; border-radius:6px; font-size:10px; font-weight:800; cursor:pointer;">MANUAL</button>
         </div>
 
+        <!-- Gesture vs Zone Mode Toggle -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <span style="font-size:9px; font-weight:700; color:#64748b; text-transform:uppercase;">Eye Control Mode:</span>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; background:#0f1115; padding:3px; border-radius:8px;">
+            <button id="btnNavSwipe" onclick="setGazeNavLogic('SWIPE')" style="background:#8b5cf6; color:#fff; border:none; padding:5px; border-radius:6px; font-size:9px; font-weight:800; cursor:pointer;" title="Flick eyes Left/Right to step feeds; stays on feed when eyes return to center rest">👀 EYE SWIPE</button>
+            <button id="btnNavAbsolute" onclick="setGazeNavLogic('ABSOLUTE')" style="background:transparent; color:#94a3b8; border:none; padding:5px; border-radius:6px; font-size:9px; font-weight:800; cursor:pointer;" title="Direct gaze zone mapping">DIRECT ZONE</button>
+          </div>
+        </div>
+
         <!-- Live Gaze Meter -->
         <div style="display:flex; flex-direction:column; gap:4px;">
           <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8;">
@@ -3148,6 +3157,11 @@
        EYE CONTROL (GAZE DRIVEN CAMERA DIRECTION ENGINE)
        ========================================================================== */
     let gazeMode = 'AUTO'; // 'AUTO' | 'MANUAL'
+    let gazeNavLogic = 'SWIPE'; // 'SWIPE' (Eye Gesture Swipe) | 'ABSOLUTE' (Hold Zone)
+    let currentFeedRoleIndex = 1; // 0: LEFT, 1: CENTER, 2: RIGHT
+    let gazeFlickTriggered = false; // Lock to prevent continuous double-triggering until eyes return to center rest
+    const FEED_ROLES = ['LEFT', 'CENTER', 'RIGHT'];
+
     let gazeRawRatio = 0.50;
     let gazeSmoothedRatio = 0.50;
     let gazeEmaAlpha = 0.20;
@@ -3185,6 +3199,47 @@
       if (btnManual) {
         btnManual.style.background = mode === 'MANUAL' ? '#f59e0b' : 'transparent';
         btnManual.style.color = mode === 'MANUAL' ? '#000' : '#94a3b8';
+      }
+    }
+
+    function setGazeNavLogic(logic) {
+      gazeNavLogic = logic;
+      const btnSwipe = document.getElementById('btnNavSwipe');
+      const btnAbsolute = document.getElementById('btnNavAbsolute');
+      if (btnSwipe) {
+        btnSwipe.style.background = logic === 'SWIPE' ? '#8b5cf6' : 'transparent';
+        btnSwipe.style.color = logic === 'SWIPE' ? '#fff' : '#94a3b8';
+      }
+      if (btnAbsolute) {
+        btnAbsolute.style.background = logic === 'ABSOLUTE' ? '#3b82f6' : 'transparent';
+        btnAbsolute.style.color = logic === 'ABSOLUTE' ? '#fff' : '#94a3b8';
+      }
+    }
+
+    function processGazeSwipeGesture(intent) {
+      if (intent === 'CENTER') {
+        // Eyes returned to center resting position: unlock trigger for next gesture!
+        gazeFlickTriggered = false;
+        return;
+      }
+
+      if (!gazeFlickTriggered) {
+        if (intent === 'LEFT') {
+          if (currentFeedRoleIndex > 0) {
+            currentFeedRoleIndex--;
+            const newRole = FEED_ROLES[currentFeedRoleIndex];
+            console.log(`👀 Eye Swipe LEFT -> Switching feed to: ${newRole}`);
+            triggerGazeCameraSwitch(newRole);
+          }
+        } else if (intent === 'RIGHT') {
+          if (currentFeedRoleIndex < FEED_ROLES.length - 1) {
+            currentFeedRoleIndex++;
+            const newRole = FEED_ROLES[currentFeedRoleIndex];
+            console.log(`👀 Eye Swipe RIGHT -> Switching feed to: ${newRole}`);
+            triggerGazeCameraSwitch(newRole);
+          }
+        }
+        gazeFlickTriggered = true; // Lock trigger until eyes return to CENTER resting position
       }
     }
 
@@ -3244,7 +3299,11 @@
         gazeProgress = Math.min(1.0, elapsed / gazeDwellMs);
 
         if (gazeProgress >= 1.0 && gazeMode === 'AUTO') {
-          triggerGazeCameraSwitch(intent);
+          if (gazeNavLogic === 'SWIPE') {
+            processGazeSwipeGesture(intent);
+          } else {
+            triggerGazeCameraSwitch(intent);
+          }
         }
       }
 
